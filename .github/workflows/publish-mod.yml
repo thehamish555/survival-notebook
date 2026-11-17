@@ -18,11 +18,18 @@ jobs:
         id: v
         env:
           PROJECT: ${{ vars.MODRINTH_PROJECT_ID }}
+          TOKEN: ${{ secrets.MODRINTH_TOKEN }}
         run: |
           VERSION=$(grep -E '^version=' mod/gradle.properties | cut -d= -f2 | tr -d '[:space:]')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if [ -z "$PROJECT" ]; then echo "::error::Add the repository variable MODRINTH_PROJECT_ID."; exit 1; fi
-          if curl -sSf "https://api.modrinth.com/v2/project/${PROJECT}/version" | jq -e --arg v "$VERSION" 'map(select(.version_number == $v)) | length > 0' > /dev/null; then
+          # Ask with the token: a project that's still a draft or under review is invisible without it (a plain request gets 404)
+          code=$(curl -sS -o versions.json -w '%{http_code}' -A "survival-notebook-release-tools" -H "Authorization: $TOKEN" "https://api.modrinth.com/v2/project/${PROJECT}/version")
+          if [ "$code" != "200" ]; then
+            echo "::error::Modrinth answered $code for project $PROJECT. Check MODRINTH_PROJECT_ID is the project's ID (Modrinth project page, the ... menu, Copy ID) and that MODRINTH_TOKEN has the Read projects, Read versions, Create versions, Write versions and Delete versions permissions."
+            exit 1
+          fi
+          if jq -e --arg v "$VERSION" 'map(select(.version_number == $v)) | length > 0' versions.json > /dev/null; then
             echo "Version $VERSION is already on Modrinth. Bump version= in mod/gradle.properties to release a new one."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
