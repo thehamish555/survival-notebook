@@ -14,7 +14,7 @@ The Survival Notebook website. People sign in with Google here, make a notebook 
 
 ## How it's built
 
-Next.js (App Router) and React. The browser calls `/api/...` on the same site, and `next.config.mjs` forwards that to the API server named in `API_ORIGIN`. That keeps the API on plain HTTP behind an HTTPS site with no CORS setup. Live updates use an event stream with a fallback refresh.
+Next.js (App Router) and React. The browser calls `/api/...` on the same site, and `next.config.mjs` forwards that to the API server named in `API_ORIGIN`. That way there is no CORS setup. Live updates use an event stream with a fallback refresh.
 
 Item icons and sounds are extracted from your own copy of Minecraft (`npm run icons`) and committed under `public/mc/`. Pixel tab icons are generated from `shared/tab-icons.json`.
 
@@ -22,7 +22,7 @@ Item icons and sounds are extracted from your own copy of Minecraft (`npm run ic
 
 | Variable | What it does |
 |---|---|
-| `API_ORIGIN` | Where the API runs, e.g. `http://lester.serveminecraft.net:45865`. Set on Vercel. |
+| `API_ORIGIN` | Where the API runs, e.g. `https://notebook-api.hamish555.com`. Set on Vercel. |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | The Google OAuth client ID (public). Without it, local development shows a simple dev sign-in form. |
 | `NEXT_PUBLIC_SITE_URL` | The site's own address. |
 | `NEXT_PUBLIC_MODRINTH_URL` | Where the "Minecraft mod" links go. |
@@ -36,4 +36,4 @@ npm run dev        # http://localhost:3000, talks to the API on :8787
 npm test
 ```
 
-Deployed by Vercel from the repo's `main` branch with **Root Directory** set to `web`. See [docs/DEPLOY.md](../docs/DEPLOY.md).
+Deployed by Vercel from the repo's `main` branch with **Root Directory** set to `web`.

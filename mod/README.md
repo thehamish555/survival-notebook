@@ -35,7 +35,7 @@ Needs Java 25. Requires Minecraft 26.3, Fabric Loader 0.20.1+ and Fabric API.
 ./gradlew runClient    # a development client
 ```
 
-Published to Modrinth automatically from `main` when `version=` in `gradle.properties` is new (see [docs/DEPLOY.md](../docs/DEPLOY.md)). Add the release notes to `CHANGELOG.md` and the listing text lives in `MODRINTH.md`.
+Published to Modrinth automatically from `main` when `version=` in `gradle.properties` is new. Add the release notes to `CHANGELOG.md` and the listing text lives in `MODRINTH.md`.
 
 ## Code layout
 

@@ -35,4 +35,4 @@ npm run dev      # watch mode with development defaults
 npm test
 ```
 
-Production runs on a Pelican server using [`deploy/pelican-egg.json`](../deploy/pelican-egg.json). See [docs/DEPLOY.md](../docs/DEPLOY.md).
+Production runs on a Pelican server using [`deploy/pelican-egg.json`](../deploy/pelican-egg.json).

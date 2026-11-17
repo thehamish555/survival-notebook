@@ -23,7 +23,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-        env: { API_ORIGIN: "http://lester.serveminecraft.net:8787" }
+        env: { API_ORIGIN: "https://notebook-api.hamish555.com" }
   mod:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: mod } }

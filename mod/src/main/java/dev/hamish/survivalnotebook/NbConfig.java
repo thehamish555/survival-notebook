@@ -33,10 +33,9 @@ final class NbConfig {
 		try { Files.writeString(file(), GSON.toJson(get())); } catch (IOException ignored) { }
 	}
 
-	/** The hosted API. Change the port here if the server moves. */
-	static final String API_HOST = "lester.serveminecraft.net";
-	static final int API_PORT = 45865;
-	static final String OFFICIAL_API = "http://" + API_HOST + ":" + API_PORT, LOCAL_API = "http://localhost:8787";
+	/** The hosted API, served over HTTPS through a Cloudflare Tunnel. */
+	static final String OFFICIAL_API = "https://notebook-api.hamish555.com";
+	static final String LOCAL_API = "http://localhost:8787";
 	private static volatile String resolved;
 
 	boolean connected() { return token.startsWith("snp_"); }

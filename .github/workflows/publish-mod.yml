@@ -1,7 +1,7 @@
 # Publishes the mod to Modrinth when mod/ changes on main.
 # The version comes from `version=` in mod/gradle.properties. If that version is already on Modrinth the run does nothing,
 # so bump it (and add a CHANGELOG entry) when you want to release.
-# Needs repo secret MODRINTH_TOKEN and repo variable MODRINTH_PROJECT_ID (see docs/DEPLOY.md).
+# Needs repo secret MODRINTH_TOKEN and repo variable MODRINTH_PROJECT_ID.
 name: Publish mod
 on:
   push:

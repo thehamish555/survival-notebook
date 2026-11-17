@@ -1,7 +1,7 @@
 export default {
   poweredByHeader: false,
-  // The browser talks to /api on this site; Vercel forwards it to the API server (API_ORIGIN, e.g. http://lester.serveminecraft.net:PORT).
-  // That keeps the API on plain HTTP behind an HTTPS site without mixed-content errors or CORS.
+  // The browser talks to /api on this site; Vercel forwards it to the API server (API_ORIGIN, e.g. https://notebook-api.hamish555.com).
+  // That way the browser never needs CORS or the API's own address.
   async rewrites() {
     const origin = (process.env.API_ORIGIN || '').replace(/\/+$/, '')
     return origin ? [{ source: '/api/:path*', destination: `${origin}/:path*` }] : []

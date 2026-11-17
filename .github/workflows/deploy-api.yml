@@ -1,6 +1,6 @@
 # Restarts the API on your Pelican server whenever api/ changes on main.
 # The server's egg pulls the newest main when it starts, so a restart is the whole deploy.
-# Needs repo secrets: PELICAN_URL, PELICAN_API_KEY, PELICAN_SERVER_ID (see docs/DEPLOY.md).
+# Needs repo secrets: PELICAN_URL, PELICAN_API_KEY, PELICAN_SERVER_ID.
 name: Deploy API
 on:
   push:

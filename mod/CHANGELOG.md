@@ -1,3 +1,6 @@
+## 1.0.2 – Fix
+- Connects to the official server over HTTPS at notebook-api.hamish555.com, so your token is no longer sent in plain text.
+
 ## 1.0.1 – Fix
 - Anything with only two choices (Show: Mine or Everyone, Theme, Items or Book list, and so on) is now a button that swaps between them. Dropdowns are only used for three or more.
 - Farm tutorial links open the video with a click, and have a separate Edit button.

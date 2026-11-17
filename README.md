@@ -16,13 +16,13 @@ A shared journal for a Minecraft survival world. Everyone in the world keeps one
 | Folder | What it is | Where it lives |
 |---|---|---|
 | [`web/`](web) | The website: sign in, edit the notebook, invite people. Next.js. | Vercel, at notebook.hamish555.com |
-| [`api/`](api) | The server behind both the website and the mod. Hono and SQLite. | A Pelican server at lester.serveminecraft.net |
+| [`api/`](api) | The server behind both the website and the mod. Hono and SQLite. | A Pelican server, served at notebook-api.hamish555.com through a Cloudflare Tunnel |
 | [`mod/`](mod) | The Fabric mod for Minecraft 26.3: the same notebook in game. | Modrinth |
 | [`shared/`](shared) | Enchantment rules and pixel icons used by both the site and the mod. | Generated into `web/` and `mod/` |
 
 ```
 Browser ─► notebook.hamish555.com (Vercel) ── /api ──►┐
-                                                       ├─► lester.serveminecraft.net:45865  API + SQLite
+                                                       ├─► notebook-api.hamish555.com  API + SQLite
 Minecraft ─ Fabric mod ───────────────────────────────┘
 ```
 
@@ -35,8 +35,6 @@ Everything lives in this one repo, and a push to `main` does the rest:
 - **Website:** Vercel builds `web/` and deploys it.
 - **API:** GitHub tests `api/`, then restarts the Pelican server, which pulls the newest code when it starts.
 - **Mod:** GitHub builds `mod/` and publishes it to Modrinth when the version in `mod/gradle.properties` is new.
-
-Setup, tokens and every click are in [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Working on it
 
