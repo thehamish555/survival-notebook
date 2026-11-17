@@ -6,6 +6,7 @@ import { Logo } from '@/components/PixelIcon'
 import { MODRINTH_URL } from '@/lib/site'
 import { CHANGELOG, LINKS, clipWords } from '@/lib/data'
 import { getVolume, play, setSound, setVolume, soundOn } from '@/lib/sound'
+import { looksPasted, parsePaste, type Pasted } from '@/lib/coords'
 
 type Opts = { title: string; body?: string; ok?: string; danger?: boolean }
 const Ctx = createContext<(o: Opts) => Promise<boolean>>(async () => false)
@@ -182,12 +183,21 @@ export function FileCell({ r, patch }: any) {
 }
 
 const PREFIX: any = { ow: '/', nether: '/execute in minecraft:the_nether run ', end: '/execute in minecraft:the_end run ' }
-export function CoordCell({ v = '', dim, onChange }: any) {
-  const [done, setDone] = useState('')
+/** onOther: called when pasted game text names a different dimension than this column (it never goes in this one). */
+export function CoordCell({ v = '', dim, onChange, onOther }: { v?: string; dim: string; onChange: (v: string) => void; onOther?: (p: Pasted) => void }) {
+  const [done, setDone] = useState(''), toast = useToast()
+  const change = (text: string) => {
+    if (!looksPasted(text)) return onChange(text)
+    let p: Pasted | null = null
+    try { p = parsePaste(text) } catch (e: any) { toast(e.message, 'err'); return }
+    if (!p) return onChange(text)
+    if (p.dim && p.dim !== dim) return onOther ? onOther(p) : undefined
+    onChange(p.xyz)
+  }
   const ok = !v || /^-?\d+\s+-?\d+\s+-?\d+$/.test(v.trim())
   const copy = (txt: string, tag: string) => { navigator.clipboard.writeText(txt); setDone(tag); setTimeout(() => setDone(''), 1000) }
   return <div className="row" style={{ flexWrap: 'nowrap', gap: 2 }}>
-    <input className={`c-${dim} ${ok ? '' : 'bad'}`} placeholder="x y z" value={v} onChange={e => onChange(e.target.value)} />
+    <input className={`c-${dim} ${ok ? '' : 'bad'}`} placeholder="x y z" value={v} onChange={e => change(e.target.value)} title="Type x y z, or paste from F3 + C" />
     {v && ok && <>{/* spans, not buttons, so viewers can still copy */}
       <span className="x" role="button" title="Copy coordinates" onClick={() => copy(v.trim(), 'c')}>{done === 'c' ? '✓' : '⧉'}</span>
       <span className="x" role="button" title="Copy /tp command" onClick={() => copy(`${PREFIX[dim]}tp @s ${v.trim()}`, 't')}>{done === 't' ? '✓' : <TpIcon />}</span></>}

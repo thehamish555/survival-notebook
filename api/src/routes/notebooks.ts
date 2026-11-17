@@ -44,7 +44,8 @@ export const notebookRoutes = (ctx: Ctx) => {
     const rows = db.prepare("select u.id, u.name as realName, m.nick, u.email, m.role from members m join users u on u.id=m.user where m.nb=? order by case m.role when 'owner' then 0 else 1 end, lower(u.name)").all(id) as any[]
     // Only the owner (and each person themselves) sees real names and emails; everyone else sees display names/nicknames.
     const members = rows.map(m => { const see = role === 'owner' || m.id === uid; return { id: m.id, name: m.nick || m.realName, nick: m.nick, role: m.role, realName: see ? m.realName : '', email: see ? m.email : '' } })
-    return c.json({ notebook: db.prepare('select id,title,owner from notebooks where id=?').get(id), role, sections, members })
+    const mapTiles = (db.prepare('select count(*) n from map_tiles where nb=?').get(id) as { n: number }).n
+    return c.json({ notebook: db.prepare('select id,title,owner from notebooks where id=?').get(id), role, sections, members, mapTiles })
   })
 
   r.patch('/notebooks/:id', auth, async c => {
@@ -56,7 +57,7 @@ export const notebookRoutes = (ctx: Ctx) => {
 
   r.delete('/notebooks/:id', auth, c => {
     const id = c.req.param('id'); if (getRole(db, id, c.get('uid')) !== 'owner') return c.json({ error: 'forbidden' }, 403)
-    db.transaction(() => { db.prepare('delete from notebooks where id=?').run(id); for (const t of ['sections', 'members', 'files', 'activity', 'invites']) db.prepare(`delete from ${t} where nb=?`).run(id) })()
+    db.transaction(() => { db.prepare('delete from notebooks where id=?').run(id); for (const t of ['sections', 'members', 'files', 'activity', 'invites', 'map_tiles']) db.prepare(`delete from ${t} where nb=?`).run(id) })()
     return c.json({ ok: true })
   })
   return r

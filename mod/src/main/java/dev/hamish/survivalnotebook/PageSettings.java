@@ -36,7 +36,7 @@ final class PageSettings {
 		y += 28;
 		if (cat.equals("Members")) { PageMembers.build(s, y); return; }
 		int visible = Math.max(1, (s.bottom - y) / ROW);
-		int rows = switch (cat) { case "Connection" -> 5; case "Overlays" -> 4; case "Sync & privacy" -> 6; default -> 3; };
+		int rows = switch (cat) { case "Connection" -> 5; case "Overlays" -> 4; case "Sync & privacy" -> 8; default -> 3; };
 		s.setScroll(rows, visible);
 		final int base = y - NotebookScreen.scroll * ROW, first = NotebookScreen.scroll;
 		java.util.function.IntPredicate show = r -> r >= first && r < first + visible;
@@ -79,6 +79,8 @@ final class PageSettings {
 				if (show.test(3)) toggle(s, base + 3 * ROW, "Auto-recover", "Marks a death recovered when you return", c.autoRecover, () -> c.autoRecover = !c.autoRecover);
 				if (show.test(4)) toggle(s, base + 4 * ROW, "Share stats", "Your vanilla statistics only", c.shareStats, () -> c.shareStats = !c.shareStats);
 				if (show.test(5)) toggle(s, base + 5 * ROW, "Notebook per world", "Uses a notebook named after the world or server", c.worldNotebooks, () -> c.worldNotebooks = !c.worldNotebooks);
+				if (show.test(6)) toggle(s, base + 6 * ROW, "Share inventory", "For the shopping list. Includes shulker boxes and bundles", c.shareInventory, () -> c.shareInventory = !c.shareInventory);
+				if (show.test(7)) toggle(s, base + 7 * ROW, "Share map", "Draws a map of where you explore on the website", c.shareMap, () -> { c.shareMap = !c.shareMap; if (!c.shareMap) MapRecorder.reset(); });
 			}
 			default -> {
 				if (show.test(0)) s.dropdown("settings-theme", s.cx, base, 180, "Theme", List.of("Dark", "Light"), c.lightTheme ? "Light" : "Dark", p.gray, v -> { c.lightTheme = v.equals("Light"); NbConfig.save(); s.rebuild(); });

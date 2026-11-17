@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Logo } from '@/components/PixelIcon'
 import { GoogleSignIn } from '@/components/GoogleSignIn'
-import { api, getToken, setToken } from '@/lib/api'
+import { api, getToken, isOffline, readLocal, saveLocal, setToken } from '@/lib/api'
 import { TONES, VERSION } from '@/lib/data'
 import { MODRINTH_URL, TAGLINE } from '@/lib/site'
 import { timeAgo } from '@/lib/time'
@@ -23,8 +23,12 @@ export default function Home() {
   const confirm = useConfirm(), toast = useToast()
   const [authed, setAuthed] = useState<boolean | null>(null)
   const [nbs, setNbs] = useState<any[]>([]), [title, setTitle] = useState('')
-  const [err, setErr] = useState('')
-  const load = () => api('/notebooks').then(setNbs).then(() => setAuthed(true)).catch((e: any) => { if (e.status === 401 || !getToken()) { setToken(''); setAuthed(false) } else { setErr(e.message); setAuthed(false) } })
+  const [err, setErr] = useState(''), [offline, setOffline] = useState(0)
+  const load = () => api('/notebooks').then(l => { setNbs(l); setOffline(0); saveLocal('sn_nbs', l) }).then(() => setAuthed(true)).catch((e: any) => {
+    if (e.status === 401 || !getToken()) { setToken(''); setAuthed(false); return }
+    const copy = isOffline(e) ? readLocal('sn_nbs') : null   // offline: show the list as it was last seen
+    if (copy) { setNbs(copy.v); setOffline(copy.at); setAuthed(true) } else { setErr(e.message); setAuthed(false) }
+  })
   useEffect(() => { getToken() ? load() : setAuthed(false) }, [])
   const create = async () => { const { id } = await api('/notebooks', 'POST', { title: title.trim() || 'My World' }); location.href = `/n/${id}` }
   const logout = async () => { if (await confirm({ title: 'Log out?', ok: 'Log out' })) { setToken(''); setAuthed(false) } }
@@ -72,6 +76,7 @@ export default function Home() {
       <div className="row" style={{ marginBottom: 14 }}><span className="grow" />
         <button className="ghost" onClick={() => { location.href = '/account' }}>Account &amp; mod</button>
         <button className="ghost" onClick={logout}>Log out</button></div>
+      {offline > 0 && <p className="pill t-amber">You're offline. This list was saved {timeAgo(offline)}. Open a notebook you've visited on this device to see its saved copy.</p>}
       <div className="card row"><input className="grow" placeholder="New notebook (a world or server name)" maxLength={80} value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && create()} /><button onClick={create}>Create</button></div>
       {err && <p className="err">{err}</p>}
       <div className="grid">{nbs.map((n, i) => <div key={n.id} className="card nb" style={{ borderTopColor: ['#5da83a', '#f2c14e', '#3c6fd1', '#d9473a'][i % 4] }}>

@@ -53,7 +53,7 @@ final class Live {
 				Notebook.setLive(true);
 				BufferedReader r = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
 				String line;
-				while ((line = r.readLine()) != null) if (line.startsWith("data:") && !line.substring(5).isBlank()) refreshSoon();   // pings carry no data
+				while ((line = r.readLine()) != null) if (line.startsWith("data:") && !line.substring(5).isBlank() && !line.contains("\"map\":true")) refreshSoon();   // pings carry no data; new map tiles don't change anything shown in game
 			} catch (Api.ApiException | IOException ignored) { /* retry below */ }
 			current = null;
 			Notebook.setLive(false);

@@ -117,6 +117,24 @@ final class Api {
 		}
 	}
 
+	/** PUTs raw bytes (a compressed map tile). Returns the status so the caller can tell "full" (413) from other failures. */
+	static Res putBytes(String path, byte[] data) throws ApiException {
+		NbConfig c = NbConfig.get();
+		if (!c.connected()) throw new ApiException(0, "No token");
+		try {
+			HttpRequest req = HttpRequest.newBuilder(URI.create(c.base() + path)).timeout(Duration.ofSeconds(20))
+				.header("authorization", "Bearer " + c.token).header("user-agent", UA).header("content-type", "application/octet-stream")
+				.PUT(HttpRequest.BodyPublishers.ofByteArray(data)).build();
+			HttpResponse<String> r = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+			return new Res(r.statusCode(), JsonNull.INSTANCE);
+		} catch (IllegalArgumentException | IOException e) {
+			NbConfig.forgetBase(); throw new ApiException(0, "Can't reach the server");
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new ApiException(0, "Interrupted");
+		}
+	}
+
 	/** Deletes an uploaded file (used when a farm draft is cancelled after its file was already uploaded). */
 	static void deleteFile(String nb, String fileId) throws ApiException { ok(call("DELETE", "/notebooks/" + nb + "/files/" + fileId, null)); }
 

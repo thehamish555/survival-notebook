@@ -434,3 +434,9 @@ button.icobtn.compact{width:30px;height:30px;padding:2px;flex:none}
 
 button.fsel.swap{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;padding:5px 12px;border-radius:8px;background:var(--field);color:var(--ink);border:2px solid var(--ghost-lo)}
 button.fsel.swap:hover{background:var(--hover);color:var(--ink)}button.fsel.swap.on{border-color:var(--grass);color:var(--grass-hi)}[data-theme=light] button.fsel.swap.on{color:#2f7a14}
+/* 3.2: map, shopping list, quantities */
+.mapwrap{position:relative;border:2px solid var(--edge);background:var(--field);height:min(62vh,560px);touch-action:none}
+.mapcanvas{display:block;width:100%;height:100%;cursor:grab}.mapcanvas:active{cursor:grabbing}
+.mapcoord{position:absolute;left:8px;bottom:8px;background:#000a;color:#fff;font:12px var(--font-mono),monospace;padding:2px 8px;pointer-events:none}
+input.num{width:72px}
+tr.got td{opacity:.6}

@@ -11,12 +11,16 @@ import { Footer, Loading, McIcon, NbId, PinIcon, useConfirm, useToast } from '@/
 import { TAB_KEY, TabIcon } from '@/components/PixelIcon'
 import { BookList, Chips, Deaths, EnchantItem, FS, Legend, Table, uid } from '@/components/notebook/widgets'
 import { Stats } from '@/components/notebook/Stats'
+import { Shopping } from '@/components/notebook/Shopping'
+import { MapView } from '@/components/notebook/MapView'
+import { DIM_LABEL, parsePaste, type Dim, type Pasted } from '@/lib/coords'
 
 const isXYZ = (s: string) => /^-?\d+\s+-?\d+\s+-?\d+$/.test((s || '').trim())
 const blank = (s: string) => !(s || '').trim()
 const conv = (s: string, f: number) => { const n = s.trim().split(/\s+/).map(Number); return [Math.floor(n[0] * f), n[1], Math.floor(n[2] * f)].join(' ') }
-const TABS = ['Home', 'Coordinates', 'Enchantments', 'Deaths', 'Stats', 'To-Do', 'Farms', 'Notes']
-const SLUG: Record<string, string> = { Home: 'home', Coordinates: 'coordinates', Enchantments: 'enchantments', Deaths: 'deaths', Stats: 'stats', 'To-Do': 'todo', Farms: 'farms', Notes: 'notes' }
+const TABS = ['Home', 'Coordinates', 'Map', 'Enchantments', 'Deaths', 'Stats', 'To-Do', 'Farms', 'Shopping', 'Notes']
+const ITEM_TAB: Record<string, string> = { Map: 'filled_map', Shopping: 'bundle' }   // tabs drawn with a Minecraft item icon
+const SLUG: Record<string, string> = { Home: 'home', Coordinates: 'coordinates', Map: 'map', Enchantments: 'enchantments', Deaths: 'deaths', Stats: 'stats', 'To-Do': 'todo', Farms: 'farms', Shopping: 'shopping', Notes: 'notes' }
 // The URL hash remembers where you are (#todo, #enchantments/<player>) so a refresh — or a link from the mod — lands in the same place.
 const fromHash = () => {
   if (typeof window === 'undefined') return { tab: 'Home', player: '', members: false }
@@ -28,17 +32,20 @@ const MEMBER_TONES = ['blue', 'amber', 'teal', 'purple', 'red', 'green', 'yellow
 
 export default function Notebook() {
   const { id } = useParams<{ id: string }>(), confirm = useConfirm(), toast = useToast()
-  const { nb, role, d, members, meId, live, err, setErr, activity, save, reload, edit } = useNotebook(id)
+  const { nb, role, d, members, meId, live, err, setErr, activity, mapTiles, mapRev, savedAt, save, reload, edit } = useNotebook(id)
   const [tab, setTab] = useState(() => fromHash().tab), [q, setQ] = useState(''), [fs, setFs] = useState<any>({}), [gp, setGp] = useState(() => fromHash().player), [shareOpen, setShareOpen] = useState(() => fromHash().members), [helpOpen, setHelpOpen] = useState(false)
   const [inv, setInv] = useState({ email: '', role: 'editor' }), [nick, setNick] = useState('')
   const [links, setLinks] = useState<any[]>([]), [lk, setLk] = useState({ role: 'editor', days: '7' })
   const [actOpen, setActOpen] = useState(false), [allAct, setAllAct] = useState<any[]>([]), [actUser, setActUser] = useState('All'), [actSec, setActSec] = useState('All')
   const [since, setSince] = useState(0), seenSet = useRef(false)
+  const [paste, setPaste] = useState<{ text: string; dim: string; to: string; name: string } | null>(null)
+  const tabs = TABS.filter(t => t !== 'Map' || mapTiles > 0)   // the map only shows once someone's mod has sent some of it
   const go = (t: string) => { setTab(t); setQ(''); history.replaceState(null, '', `#${SLUG[t]}`) }
   const pickPlayer = (uid: string) => { setGp(uid); history.replaceState(null, '', `#enchantments/${uid}`) }
   const F = (k: string) => fs[k] || 'All', setF = (k: string, v: string) => setFs((p: any) => ({ ...p, [k]: v }))
 
-  useEffect(() => {   // keyboard: 1-6 tabs, / search, m members, ? help, Esc closes
+  const tabsRef = useRef(TABS); tabsRef.current = tabs
+  useEffect(() => {   // keyboard: 1-9 and 0 tabs, / search, m members, ? help, Esc closes
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       if (e.key === 'Escape') { setShareOpen(false); setHelpOpen(false); return }
@@ -46,7 +53,7 @@ export default function Notebook() {
       if (e.key === '/') { e.preventDefault(); document.querySelector<HTMLInputElement>('input[data-search]')?.focus() }
       else if (e.key === '?') setHelpOpen(h => !h)
       else if (e.key === 'm') setShareOpen(true)
-      else if (/^[1-8]$/.test(e.key)) go(TABS[+e.key - 1])
+      else if (/^[0-9]$/.test(e.key)) { const t = tabsRef.current[e.key === '0' ? 9 : +e.key - 1]; if (t) go(t) }
     }
     const onHash = () => { const h = fromHash(); setTab(h.tab); if (h.player) setGp(h.player); if (h.members) setShareOpen(true) }
     window.addEventListener('keydown', onKey); window.addEventListener('hashchange', onHash)
@@ -128,6 +135,30 @@ export default function Notebook() {
     a.href = url; a.download = `${nb.title.replace(/[^\w-]+/g, '_') || 'notebook'}.json`; a.click(); URL.revokeObjectURL(url)
   }
 
+  // ---- pasting coordinates from the game (F3 + C, /tp, or x y z). Never converts between dimensions.
+  const putOther = (r: any, p: Pasted, patch: (o: any) => void) => {
+    const dim = p.dim as Dim, cur = (r[dim] || '').trim()
+    const put = () => { patch({ [dim]: p.xyz }); toast(`That's a ${DIM_LABEL[dim]} position, so it went in the ${DIM_LABEL[dim]} column`, 'info') }
+    if (!cur || cur === p.xyz) return put()
+    confirm({ title: `Replace the ${DIM_LABEL[dim]} coordinates?`, body: `“${r.name || 'This place'}” has ${cur} in ${DIM_LABEL[dim]}. The pasted position is ${p.xyz}.`, ok: 'Replace' }).then(ok => { if (ok) put() })
+  }
+  let parsed: Pasted | null = null, pasteErr = ''
+  if (paste?.text.trim()) { try { parsed = parsePaste(paste.text); if (!parsed) pasteErr = 'That isn’t a position. Press F3 + C in game, then paste it here.' } catch (e: any) { pasteErr = e.message } }
+  const pasteDim = (parsed?.dim || paste?.dim || '') as Dim | ''
+  const savePaste = async () => {
+    if (!paste || !parsed || !pasteDim) return
+    const xyz = parsed.xyz
+    if (!paste.to) {
+      save('coords', [...coords, { id: uid(), name: paste.name.trim() || 'Pasted place', cat: 'Important', ow: '', nether: '', end: '', portal: 'No Portal', [pasteDim]: xyz }])
+    } else {
+      const r = coords.find((c: any) => c.id === paste.to); if (!r) return
+      const cur = (r[pasteDim] || '').trim()
+      if (cur && cur !== xyz && !(await confirm({ title: `Replace the ${DIM_LABEL[pasteDim]} coordinates?`, body: `“${r.name || 'This place'}” has ${cur}. The pasted position is ${xyz}.`, ok: 'Replace' }))) return
+      save('coords', coords.map((c: any) => (c.id === paste.to ? { ...c, [pasteDim]: xyz } : c)))
+    }
+    toast('Saved', 'ok'); setPaste(null)
+  }
+
   // ---- data + filters
   const coords = d.coords || [], myGear = d['gear:' + meId] || [], allTodos: any[] = d.todos || [], farms = d.farms || []
   const todos = allTodos.filter((t: any) => !t.auto)   // the farm to-do isn't a stored row you edit: it's computed from the farms (see below)
@@ -180,11 +211,12 @@ export default function Notebook() {
     </div><button className="ghost" onClick={() => setShareOpen(true)} title="Settings and members (m)"><TabIcon name="settings" size={16} /> Settings<span className={`dot ${live ? '' : 'off'}`} title={live ? 'Live sync connected' : 'Offline. Reconnecting'} /></button></div>
 
     <div className="shell">
-      <nav className="side">{TABS.map(t => <button key={t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => go(t)}>
-        <TabIcon name={TAB_KEY[t]} size={18} />{t}</button>)}</nav>
+      <nav className="side">{tabs.map(t => <button key={t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => go(t)}>
+        {ITEM_TAB[t] ? <McIcon name={ITEM_TAB[t]} size={18} /> : <TabIcon name={TAB_KEY[t]} size={18} />}{t}</button>)}</nav>
       <main>
       {err && <p className="err">{err}</p>}
-      {!edit && <p className="pill t-gray">View only. You can't edit this notebook.</p>}
+      {savedAt > 0 ? <p className="pill t-amber">You're offline. This is the copy saved {timeAgo(savedAt)}. You can't make changes until you're back online.</p>
+        : !edit && <p className="pill t-gray">View only. You can't edit this notebook.</p>}
 
       <div key={tab} className="pane">
       {tab === 'Home' && <>
@@ -221,19 +253,19 @@ export default function Notebook() {
       </>}
 
       {tab === 'Coordinates' && <div className="card">
-        <div className="row"><h2 className="grow">Coordinates</h2>{search}</div>
+        <div className="row"><h2 className="grow">Coordinates</h2>{edit && <button className="ghost" onClick={() => setPaste({ text: '', dim: '', to: '', name: '' })} title="Paste a position from the game">Paste from game</button>}{search}</div>
         <div className="filters">
           <Chips label="Category" value={F('cc')} opts={CATS} onChange={(v: string) => setF('cc', v)} />
           <Chips label="Portal" value={F('cp')} opts={['Portal', 'No Portal']} onChange={(v: string) => setF('cp', v)} />
           <Chips label="Has" value={F('ch')} opts={['Overworld', 'Nether', 'End']} onChange={(v: string) => setF('ch', v)} /></div>
-        <p className="mut">Enter coordinates as x y z. Use the buttons to copy them or convert between Overworld and Nether.</p>
+        <p className="mut">Enter coordinates as x y z, or paste what F3 + C copies in game. Use the buttons to copy them or convert between Overworld and Nether.</p>
         <FS edit={edit}><Table rows={coords} hl={hl} onChange={(v: any) => save('coords', v)} show={coordShow} onAdd={resetFilters} empty="No places yet. Add your first one."
           blank={{ name: '', cat: F('cc') === 'All' ? 'Important' : F('cc'), ow: '', nether: '', end: '', portal: 'No Portal' }}
-          cols={[{ k: 'name', l: 'Place name', icon: (r: any) => CAT_ICON[r.cat] }, { k: 'cat', l: 'Category', t: 'pill', opts: CATS, tones: TONES.cat }, { k: 'ow', l: 'Overworld', t: 'coord', dim: 'ow' }, { k: '_conv', l: '', t: 'custom', render: (r: any, patch: any) => {
+          cols={[{ k: 'name', l: 'Place name', icon: (r: any) => CAT_ICON[r.cat] }, { k: 'cat', l: 'Category', t: 'pill', opts: CATS, tones: TONES.cat }, { k: 'ow', l: 'Overworld', t: 'coord', dim: 'ow', other: putOther }, { k: '_conv', l: '', t: 'custom', render: (r: any, patch: any) => {
               const toN = isXYZ(r.ow) && blank(r.nether), toO = isXYZ(r.nether) && blank(r.ow)
               return <button className="x" disabled={!toN && !toO} onClick={() => patch(toN ? { nether: conv(r.ow, 1 / 8) } : { ow: conv(r.nether, 8) })}
                 title={toN ? 'Fill Nether from Overworld (÷8)' : toO ? 'Fill Overworld from Nether (×8)' : 'Fill in one coordinate and leave the other empty, nothing gets overwritten'}>⇄</button>
-            } }, { k: 'nether', l: 'Nether', t: 'coord', dim: 'nether' }, { k: 'end', l: 'End', t: 'coord', dim: 'end' },
+            } }, { k: 'nether', l: 'Nether', t: 'coord', dim: 'nether', other: putOther }, { k: 'end', l: 'End', t: 'coord', dim: 'end', other: putOther },
             { k: 'portal', l: 'Portal', t: 'pill', opts: ['No Portal', 'Portal'], tones: TONES.portal, norm: (v: string) => (v === 'Linked' ? 'Portal' : v) }]} /></FS>
       </div>}
 
@@ -281,9 +313,10 @@ export default function Notebook() {
           <Chips label="Priority" value={F('tr')} opts={['High', 'Medium', 'Low']} onChange={(v: string) => setF('tr', v)} />
           <Chips label="Assigned" value={F('ta')} opts={asgOpts} onChange={(v: string) => setF('ta', v)} />
           <Chips label="Sort" all="Manual" value={F('ts')} opts={['Priority', 'Progress']} onChange={(v: string) => setF('ts', v)} /></div>
+        <p className="mut">Give a to-do an item icon and a quantity, like 64 glass, and it goes on the shopping list.</p>
         {!!todos.length && <div className="bar lab"><div style={{ width: `${(done / todos.length) * 100}%` }} /><span>{done} of {todos.length} done</span></div>}
-        <FS edit={edit}><Table rows={allTodos} onChange={(v: any) => save('todos', v)} show={todoShow} sort={todoSort} onAdd={resetFilters} empty="Nothing to do yet." blank={{ project: '', priority: 'Medium', progress: 'To-Do', assignee: '', notes: '' }}
-          cols={[{ k: 'project', l: 'Project', icon: (r: any) => r.icon, pick: true }, { k: 'priority', l: 'Priority', t: 'pill', opts: ['Low', 'Medium', 'High'], tones: TONES.priority }, { k: 'progress', l: 'Progress', t: 'pill', opts: ['To-Do', 'In Progress', 'Done'], tones: TONES.progress }, assignCol, { k: 'notes', l: 'Notes' }]} /></FS></div></>}
+        <FS edit={edit}><Table rows={allTodos} onChange={(v: any) => save('todos', v)} show={todoShow} sort={todoSort} onAdd={resetFilters} empty="Nothing to do yet." blank={{ project: '', priority: 'Medium', progress: 'To-Do', assignee: '', notes: '', qty: '' }}
+          cols={[{ k: 'project', l: 'Project', icon: (r: any) => r.icon, pick: true }, { k: 'qty', l: 'Qty', t: 'num' }, { k: 'priority', l: 'Priority', t: 'pill', opts: ['Low', 'Medium', 'High'], tones: TONES.priority }, { k: 'progress', l: 'Progress', t: 'pill', opts: ['To-Do', 'In Progress', 'Done'], tones: TONES.progress }, assignCol, { k: 'notes', l: 'Notes' }]} /></FS></div></>}
 
       {tab === 'Farms' && <div className="card">
         <div className="row"><h2 className="grow">Farms</h2>{search}</div>
@@ -294,6 +327,11 @@ export default function Notebook() {
         <p className="mut">Farms link to a place with the same name. Paste a YouTube link to name a farm automatically.</p>
         <FS edit={edit}><Table rows={farms} onChange={(v: any) => save('farms', v)} show={farmShow} onAdd={resetFilters} empty="No farms yet." blank={{ name: '', icon: '', tutorial: '', ttl: '', file: null, assignee: '', place: '', building: false, built: false }}
           cols={[{ k: 'name', l: 'Farm', icon: (r: any) => r.icon, pick: true }, { k: 'place', l: 'Location', t: 'pill', opts: placeOpts, tones: placeTones, norm: (v: string) => (coords.some((c: any) => c.id === v) ? v : ''), after: (r: any) => (r.place && coords.some((c: any) => c.id === r.place) ? <button className="x pin" title="Show this place on the Coordinates tab" onClick={() => showPlace(r.place)}><PinIcon /></button> : null) }, { k: 'tutorial', l: 'Tutorial video', t: 'yt' }, { k: 'file', l: 'Litematica', t: 'file' }, assignCol, { k: 'status', l: 'Status', t: 'pill', opts: ['To build', 'Building', 'Built'], tones: { 'To build': 'gray', Building: 'blue', Built: 'green' }, get: fstat, set: (v: string) => ({ built: v === 'Built', building: v === 'Building' }) }]} /></FS></div>}
+
+      {tab === 'Map' && (mapTiles > 0 ? <MapView id={id} rev={mapRev} places={coords} role={role} onPlace={showPlace} />
+        : <div className="card"><h2>Map</h2><div className="empty">No map yet. It appears once someone turns on Share map in the mod's Settings and explores.</div></div>)}
+
+      {tab === 'Shopping' && <Shopping id={id} d={d} members={members} meId={meId} who={gearUid} setWho={pickPlayer} edit={edit} />}
 
       {tab === 'Notes' && <div className="card"><h2>Notes</h2>
         <textarea style={{ width: '100%', maxWidth: 760, minHeight: 360, resize: 'vertical' }} readOnly={!edit} value={typeof d.notes === 'string' ? d.notes : ''} onChange={e => save('notes', e.target.value)} placeholder="Anything about this world…" /></div>}
@@ -340,9 +378,23 @@ export default function Notebook() {
       {allAct.filter((a: any) => (actUser === 'All' || a.user === actUser) && (actSec === 'All' || a.section === actSec)).map((a: any) =>
         <div className="ench" key={a.id}><b style={{ minWidth: 0 }}>{a.name}</b><span>{a.text}</span><span className="grow" /><span className="mut small">{timeAgo(a.ts)}</span></div>)}
       {!allAct.length && <div className="empty">Nothing yet.</div>}</div></div>}
+    {paste && <div className="modal" onClick={() => setPaste(null)}><div className="card" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+      <div className="row"><h2 className="grow">Paste from game</h2><button className="x" onClick={() => setPaste(null)}>✕</button></div>
+      <p className="mut">Press F3 + C in game to copy where you are, then paste it here. A /tp command or plain x y z works too.</p>
+      <textarea autoFocus rows={2} style={{ width: '100%' }} placeholder="/execute in minecraft:overworld run tp @s 1303.46 60.00 -1888.91 6.34 20.58" value={paste.text} onChange={e => setPaste({ ...paste, text: e.target.value })} />
+      {pasteErr && <p className="err">{pasteErr}</p>}
+      {parsed && <>
+        <div className="row" style={{ margin: '10px 0' }}><code>{parsed.xyz}</code>
+          {parsed.dim ? <span className={`pill t-${parsed.dim === 'ow' ? 'green' : parsed.dim === 'nether' ? 'red' : 'purple'}`}>{DIM_LABEL[parsed.dim]}</span>
+            : <Chips label="Dimension" noAll value={paste.dim || 'pick'} opts={[...(paste.dim ? [] : [['pick', 'Choose…']]), ['ow', 'Overworld'], ['nether', 'Nether'], ['end', 'End']]} onChange={(v: string) => setPaste({ ...paste, dim: v === 'pick' ? '' : v })} />}</div>
+        {!parsed.dim && <p className="mut small">This kind of paste doesn't say which dimension it's from, so pick it.</p>}
+        <div className="row"><Chips label="Save to" noAll value={paste.to} opts={[['', 'New place'], ...coords.map((c: any) => [c.id, c.name || 'Unnamed place'])]} onChange={(v: string) => setPaste({ ...paste, to: v })} />
+          {!paste.to && <input className="grow" placeholder="Place name" value={paste.name} onChange={e => setPaste({ ...paste, name: e.target.value })} onKeyDown={e => e.key === 'Enter' && savePaste()} />}</div>
+        <div className="row" style={{ justifyContent: 'flex-end', marginTop: 14 }}><button className="ghost" onClick={() => setPaste(null)}>Cancel</button><button disabled={!pasteDim} onClick={savePaste}>Save</button></div></>}
+    </div></div>}
     {helpOpen && <div className="modal" onClick={() => setHelpOpen(false)}><div className="card" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
       <div className="row"><h2 className="grow">Keyboard shortcuts</h2><button className="x" onClick={() => setHelpOpen(false)}>✕</button></div>
-      {[['1 – 8', 'Switch tab'], ['/', 'Search this tab'], ['m', 'Settings & backup'], ['?', 'This help'], ['Esc', 'Close any window']].map(([k, v]) => <div className="ench" key={k}><kbd>{k}</kbd><span>{v}</span></div>)}
+      {[['1 – 9, 0', 'Switch tab'], ['/', 'Search this tab'], ['m', 'Settings & backup'], ['?', 'This help'], ['Esc', 'Close any window']].map(([k, v]) => <div className="ench" key={k}><kbd>{k}</kbd><span>{v}</span></div>)}
     </div></div>}
   </NbId.Provider>
 }

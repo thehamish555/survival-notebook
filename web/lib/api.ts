@@ -29,3 +29,15 @@ export async function downloadFile(nb: string, file: { id: string; name: string 
   if (!r.ok) throw new Error('Download failed')
   const url = URL.createObjectURL(await r.blob()), a = document.createElement('a'); a.href = url; a.download = file.name; a.click(); URL.revokeObjectURL(url)
 }
+/** Raw bytes from the API (map tiles). */
+export async function apiBytes(path: string): Promise<ArrayBuffer> {
+  const r = await fetch(BASE + path, { headers: auth() })
+  if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status })
+  return r.arrayBuffer()
+}
+
+// ---- offline copies (read-only): the last notebook list and each notebook as it was last loaded, kept in this browser
+export const saveLocal = (key: string, v: unknown) => { try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), v })) } catch { /* full or private mode */ } }
+export const readLocal = <T = any>(key: string): { at: number; v: T } | null => { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : null } catch { return null } }
+/** True when a failed call never reached the server (offline, or the server is down), as opposed to the server saying no. */
+export const isOffline = (e: any) => !e?.status

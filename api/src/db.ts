@@ -27,6 +27,15 @@ const MIGRATIONS: ((db: DB) => void)[] = [
   db => db.exec(`
     create table if not exists invites(code text primary key, nb text not null, role text not null, by text not null, created integer not null, expires integer not null, uses integer not null default 0);
     create index if not exists idx_invites_nb on invites(nb);`),
+  // 3.2: Litematica block counts (worked out once per file), map tiles from the mod, browser push subscriptions, and server settings (the VAPID keys).
+  db => {
+    if (!db.prepare("select 1 from pragma_table_info('files') where name='blocks'").get()) db.exec('alter table files add column blocks text')
+    db.exec(`
+      create table if not exists map_tiles(nb text not null, dim text not null, tx integer not null, tz integer not null, data blob not null, size integer not null, updated integer not null, by text not null, primary key(nb,dim,tx,tz));
+      create table if not exists push_subs(endpoint text primary key, user text not null, p256dh text not null, auth text not null, created integer not null);
+      create index if not exists idx_push_user on push_subs(user);
+      create table if not exists kv(k text primary key, v text not null);`)
+  },
 ]
 
 export function openDb(path: string): DB {

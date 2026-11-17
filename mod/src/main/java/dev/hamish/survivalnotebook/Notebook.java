@@ -185,7 +185,7 @@ final class Notebook {
 	static void pickNotebook(String id, String name) {
 		NbConfig c = NbConfig.get();
 		c.notebookId = id; c.notebookTitle = name; NbConfig.save();
-		role = ""; Live.restart(); refresh();
+		role = ""; MapRecorder.reset(); Live.restart(); refresh();
 	}
 
 	// ---- generic row editing (places, to-dos, farms, your own gear)
@@ -425,6 +425,24 @@ final class Notebook {
 		job(() -> {
 			requireNotebook(c);
 			Api.mutate(c.notebookId, "stats:" + userId, old -> { JsonArray a = new JsonArray(); a.add(row); return a; });
+		});
+	}
+
+	// ---- inventory snapshot for the website's shopping list (see InventoryScanner)
+
+	private static String lastInv = "";
+
+	static void syncInventory(JsonObject row) {
+		NbConfig c = NbConfig.get();
+		if (row == null || !canEdit() || !c.shareInventory) return;
+		JsonObject sigRow = row.deepCopy(); sigRow.remove("ts");
+		String sig = c.notebookId + sigRow;   // only sent when something changed
+		if (sig.equals(lastInv)) return;
+		lastInv = sig;
+		job(() -> {
+			requireNotebook(c);
+			if (userId.isEmpty()) userId = Api.me().get("id").getAsString();
+			Api.mutate(c.notebookId, "inv:" + userId, old -> { JsonArray a = new JsonArray(); a.add(row); return a; });
 		});
 	}
 

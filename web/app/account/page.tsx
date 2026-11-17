@@ -5,6 +5,7 @@ import { api, getToken, setToken } from '@/lib/api'
 import { MODRINTH_URL } from '@/lib/site'
 import { timeAgo } from '@/lib/time'
 import { Footer, Loading, useConfirm, useToast } from '@/lib/ui'
+import { AppCard } from '@/components/Pwa'
 
 export default function Account() {
   const confirm = useConfirm(), toast = useToast()
@@ -40,6 +41,8 @@ export default function Account() {
         {!tokens.length && <div className="empty">No tokens yet.</div>}
         {tokens.map(t => <div className="ench" key={t.id}><b>{t.name}</b><span className="pill t-gray">created {new Date(t.created).toLocaleDateString()}</span>
           <span className={`pill ${t.lastUsed ? 't-green' : 't-gray'}`}>{t.lastUsed ? `used ${timeAgo(t.lastUsed)}` : 'never used'}</span><span className="grow" /><button className="x" onClick={() => revoke(t)}>Revoke</button></div>)}</div>
+
+      <AppCard />
 
       <div className="card"><h2>Danger zone</h2>
         {!showDel ? <button className="danger" onClick={() => setShowDel(true)}>Delete my account…</button> : <div className="row">

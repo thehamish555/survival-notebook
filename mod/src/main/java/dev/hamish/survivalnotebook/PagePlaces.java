@@ -20,21 +20,48 @@ final class PagePlaces {
 	static int importPick = -1;
 	static String cat = "All";
 
-	static String confirmHere = "";
+	static String confirmHere = "", confirmValue = "", confirmLabel = "";
 
-	/** "Replace these coordinates?" — shown in place of the coordinate rows after pressing Here on a filled-in dimension. */
+	/** "Replace these coordinates?" — shown in place of the coordinate rows after pressing Here or Paste on a filled-in dimension. */
 	private static void confirmHere(NotebookScreen s, int y) {
 		Ui.Pal p = Ui.pal();
-		final String key = confirmHere, old = Notebook.str(draft, key);
-		Names.Spot h = Names.here();
-		final String now = h == null ? "" : h.xyz();
+		final String key = confirmHere, old = Notebook.str(draft, key), now = confirmValue;
 		final String dim = Names.dimName(key);
 		s.text("Replace the coordinates in " + dim + "?", s.cx, y + 4, p.gold);
 		s.text("Currently:  " + old, s.cx, y + 22, p.mut);
-		s.text("Where you are:  " + now, s.cx, y + 34, p.ink);
+		s.text(confirmLabel + ":  " + now, s.cx, y + 34, p.ink);
 		s.btn(s.cx, y + 52, 110, "Replace", 0, () -> { draft.addProperty(key, now); confirmHere = ""; s.rebuild(); }, !now.isEmpty());
 		s.btn(s.cx + 116, y + 52, 90, "Keep old", 1, () -> { confirmHere = ""; s.rebuild(); }, true);
 		s.btn(s.cx + 212, y + 52, 90, "Copy old", 1, () -> Notebook.msg(Compat.copy(old) ? "Copied " + old : "Couldn't copy"), true);
+	}
+
+	/** Asks before replacing coordinates that are already filled in; fills an empty dimension straight away. */
+	private static void offer(NotebookScreen s, String key, String xyz, String label) {
+		String old = Notebook.str(draft, key);
+		if (!old.isBlank() && !old.trim().equals(xyz)) { confirmHere = key; confirmValue = xyz; confirmLabel = label; }
+		else draft.addProperty(key, xyz);
+		s.rebuild();
+	}
+
+	/** The Paste button: reads F3+C (or /tp, or x y z) from the clipboard. Without a dimension in it, it's for the dimension you're in. */
+	private static void pasteClipboard(NotebookScreen s) {
+		Names.Pasted p;
+		try { p = Names.parsePaste(Compat.clipboard()); } catch (IllegalArgumentException e) { Notebook.msg(e.getMessage()); return; }
+		if (p == null) { Notebook.msg("Nothing to paste. Press F3 + C to copy where you are."); return; }
+		String dim = p.dim();
+		if (dim == null) { Names.Spot h = Names.here(); if (h == null) { Notebook.msg("That has no dimension and you're not in one the notebook knows"); return; } dim = h.dim(); }
+		offer(s, dim, p.xyz(), "Pasted");
+	}
+
+	/** Typing or pasting into a coordinate box: game text is turned into "x y z" and put in the dimension it names. */
+	private static void typed(NotebookScreen s, String key, String v) {
+		if (!Names.looksPasted(v)) { draft.addProperty(key, v); return; }
+		Names.Pasted p;
+		try { p = Names.parsePaste(v); } catch (IllegalArgumentException e) { Notebook.msg(e.getMessage()); return; }
+		if (p == null) { draft.addProperty(key, v); return; }
+		String dim = p.dim() == null ? key : p.dim();
+		if (!dim.equals(key)) Notebook.msg("That's a position in " + Names.dimName(dim) + ", so it goes in that row");
+		net.minecraft.client.Minecraft.getInstance().execute(() -> offer(s, dim, p.xyz(), "Pasted"));
 	}
 
 	static void reset() { confirmHere = ""; draft = null; confirmDel = false; importing = false; importPick = -1; }
@@ -171,6 +198,7 @@ final class PagePlaces {
 		s.dropdown("place-cat", bx, y, 150, "Category", List.of(CATS), curCat, Ui.cat(curCat), v -> draft.addProperty("cat", v));
 		s.pill(bx + 156, y, 86, 20, portal ? "Portal" : "No portal", portal ? p.purple : p.gray, () -> { draft.addProperty("portal", portal ? "No Portal" : "Portal"); s.rebuild(); }, true);
 		s.pill(bx + 248, y, 90, 20, tracked ? "Tracking" : "Track", tracked ? p.amber : p.gray, () -> { NbConfig c = NbConfig.get(); c.trackedPlace = tracked ? "" : id; NbConfig.save(); s.rebuild(); }, true);
+		if (bw >= 420) s.pill(bx + 344, y, 70, 20, "Paste", p.teal, () -> pasteClipboard(s), confirmHere.isEmpty());
 		y += 26;
 
 		String[][] dims = {{"ow", "Overworld"}, {"nether", "Nether"}, {"end", "End"}};
@@ -182,7 +210,7 @@ final class PagePlaces {
 			final int yy = y, barColor = bars[i];
 			s.text(dims[i][1], s.cx + 8, yy + 6, p.mut);
 			s.paint((g, mx, my) -> g.fill(s.cx, yy + 1, s.cx + 4, yy + 19, barColor));
-			s.box(bx, yy, bw - 112, "x y z", Notebook.str(draft, key), v -> draft.addProperty(key, v));
+			s.box(bx, yy, bw - 112, "x y z, or paste F3 + C", Notebook.str(draft, key), v -> typed(s, key, v));
 			s.paint((g, mx, my) -> {   // red outline while the text isn't a valid "x y z"
 				String v = Notebook.str(draft, key);
 				if (!v.isBlank() && !Names.isXyz(v)) g.outline(bx - 1, yy - 1, bw - 110, 22, 0xFFE0584A);
@@ -191,9 +219,7 @@ final class PagePlaces {
 			s.pill(bx + bw - 52, yy, 50, 20, "Here", p.secondary, () -> {
 				Names.Spot h = Names.here();
 				if (h == null || !h.dim().equals(key)) { Notebook.msg("You're not in that dimension right now"); return; }
-				String old = Notebook.str(draft, key);
-				if (!old.isBlank() && !old.trim().equals(h.xyz())) { confirmHere = key; s.rebuild(); return; }   // replacing existing coordinates: ask first
-				draft.addProperty(key, h.xyz()); s.rebuild();
+				offer(s, key, h.xyz(), "Where you are");   // replacing existing coordinates: ask first
 			}, true);
 			y += 26;
 			if (i == 0 && !asking) {   // between the Overworld and Nether rows: fills whichever of the two is empty
@@ -208,7 +234,7 @@ final class PagePlaces {
 			}
 		}
 		if (asking) y += 78;
-		s.text("Enter coordinates like 120 64 -33.", s.cx, y + 2, p.mut);
+		s.text("Enter coordinates like 120 64 -33, or press F3 + C and then Paste.", s.cx, y + 2, p.mut);
 
 		int by = s.bottom - 20, x = s.cx;
 		s.btn(x, by, 64, "Save", 0, () -> {

@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { randomUUID } from 'node:crypto'
 import { canEdit, getRole } from '../access'
+import { litematicItems } from '../litematic'
 import { requireAuth } from '../middleware'
 import type { Database } from 'better-sqlite3'
 import type { AppEnv, Ctx } from '../types'
@@ -28,8 +29,26 @@ export function sweepFiles(db: Database, graceMs = 2 * 60 * 60 * 1000, now = Dat
   return n
 }
 
+/** The items a schematic needs, as stored JSON. A file that can't be read is remembered as unreadable instead of being retried. */
+const countBlocks = (buf: Buffer) => { try { return JSON.stringify({ items: litematicItems(buf) }) } catch { return JSON.stringify({ items: {}, error: 'Couldn’t read this file' }) } }
+
 export const fileRoutes = (ctx: Ctx) => {
   const { db } = ctx, r = new Hono<AppEnv>(), auth = requireAuth(ctx)
+
+  // What each Litematica file in the notebook needs: { fileId: { items: { item: count }, error? } }. For the shopping list.
+  r.get('/notebooks/:id/blocks', auth, c => {
+    const id = c.req.param('id'); if (!getRole(db, id, c.get('uid'))) return c.json({ error: 'not found' }, 404)
+    const out: Record<string, unknown> = {}
+    for (const f of db.prepare('select id, blocks from files where nb=?').all(id) as { id: string; blocks: string | null }[]) {
+      let b = f.blocks
+      if (b === null) {   // uploaded before block counts existed: work it out once now
+        const row = db.prepare('select data from files where id=?').get(f.id) as { data: Buffer }
+        b = countBlocks(row.data); db.prepare('update files set blocks=? where id=?').run(b, f.id)
+      }
+      out[f.id] = JSON.parse(b)
+    }
+    return c.json(out)
+  })
 
   r.post('/notebooks/:id/files', auth, async c => {
     const id = c.req.param('id'); if (!canEdit(getRole(db, id, c.get('uid')))) return c.json({ error: 'forbidden' }, 403)
@@ -40,7 +59,7 @@ export const fileRoutes = (ctx: Ctx) => {
     if (buf.length > MAX_FILE) return c.json({ error: 'File is over the 100 KB limit' }, 413)
     const used = (db.prepare('select coalesce(sum(size),0) n from files where nb=?').get(id) as { n: number }).n
     if (used + buf.length > MAX_TOTAL) return c.json({ error: 'This notebook has run out of file storage' }, 413)
-    const fid = randomUUID(); db.prepare('insert into files values(?,?,?,?,?,?)').run(fid, id, name, buf.length, buf, Date.now())
+    const fid = randomUUID(); db.prepare('insert into files(id,nb,name,size,data,created,blocks) values(?,?,?,?,?,?,?)').run(fid, id, name, buf.length, buf, Date.now(), countBlocks(buf))
     return c.json({ id: fid, name, size: buf.length })
   })
 

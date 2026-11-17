@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { canEdit, getRole } from '../access'
 import { requireAuth } from '../middleware'
 import { diffRows, logActivity } from '../activity'
+import { newAssignments, whoAndWhere } from '../push'
 import { OWN_RE, SECTIONS } from '../seed'
 import type { AppEnv, Ctx } from '../types'
 
@@ -19,6 +20,17 @@ export const sectionRoutes = (ctx: Ctx) => {
   const sweep = (nb: string, rows: { file?: { id?: string } | null }[]) => {
     const keep = new Set(rows.map(x => x?.file?.id).filter(Boolean))
     for (const f of db.prepare('select id from files where nb=? and created<?').all(nb, Date.now() - 600_000) as { id: string }[]) if (!keep.has(f.id)) db.prepare('delete from files where id=?').run(f.id)
+  }
+
+  // Push: "Hamish assigned you Build the iron farm" to whoever was just assigned (not to yourself)
+  const notifyAssigned = (nb: string, by: string, section: string, prev: string | undefined, next: any[]) => {
+    const members = new Set((db.prepare('select user from members where nb=?').all(nb) as { user: string }[]).map(m => m.user))
+    const rows = newAssignments(prev, next, by, members); if (!rows.length) return
+    const { name, title } = whoAndWhere(db, nb, by)
+    for (const r of rows) {
+      const what = section === 'farms' ? `the farm “${String(r.name || 'Unnamed farm').slice(0, 80)}”` : `“${String(r.project || 'Untitled to-do').slice(0, 80)}”`
+      ctx.notify(r.assignee, { title, body: `${name} assigned you ${what}`, url: `/n/${nb}#${section === 'farms' ? 'farms' : 'todo'}` })
+    }
   }
 
   r.get('/notebooks/:id/s/:name', auth, c => {
@@ -43,12 +55,13 @@ export const sectionRoutes = (ctx: Ctx) => {
       const cur = prev?.rev ?? 0
       if (body.data.baseRev !== undefined && body.data.baseRev !== cur) return { conflict: cur }
       const detail = name === 'notes' ? { added: [], changed: [], removed: [], edited: (prev ? JSON.parse(prev.data) : '') !== data.data } : diffRows(prev?.data, data.data as any[])
-      if (own?.[1] !== 'prefs' && own?.[1] !== 'stats') logActivity(db, id, uid, own ? 'gear' : name, detail, c.get('mod') ? 'mod' : '')
+      if (own?.[1] === 'gear' || !own) logActivity(db, id, uid, own ? 'gear' : name, detail, c.get('mod') ? 'mod' : '')
       db.prepare('insert into sections values(?,?,?,1) on conflict(nb,name) do update set data=excluded.data, rev=rev+1').run(id, name, raw)
-      return { rev: (db.prepare('select rev from sections where nb=? and name=?').get(id, name) as { rev: number }).rev }
+      return { rev: (db.prepare('select rev from sections where nb=? and name=?').get(id, name) as { rev: number }).rev, prev: prev?.data }
     })()
     if ('conflict' in result) return c.json({ error: 'Out of date — someone else changed this just now', rev: result.conflict }, 409)
     if (name === 'farms') sweep(id, data.data as any[])
+    if (name === 'todos' || name === 'farms') notifyAssigned(id, uid, name, result.prev, data.data as any[])
     bus.emit(id, { section: name, rev: result.rev, by: uid, cid: c.req.header('x-client-id') || '' })   // cid lets a browser tab ignore its own echo but see edits from the mod or other tabs
     return c.json({ rev: result.rev })
   })

@@ -13,9 +13,10 @@ export default function Privacy() {
 
       <div className="card"><h2>What we keep</h2>
         <p><b>Your account.</b> You sign in with Google. We get your email address and the name on your Google account, and keep them so you can sign in and so people can invite you. We never see your Google password.</p>
-        <p><b>Your notebooks.</b> Everything you or your friends put in: places, to-dos, farms, notes, deaths, enchanted gear, stats, uploaded Litematica files, nicknames, and a list of recent changes showing who changed what.</p>
-        <p><b>From the mod.</b> If you connect the mod with a token, it sends the notebook data above as you. That includes your enchanted items, saved places, deaths, and your vanilla statistics (you can turn stats off in the mod's Settings). With "Notebook per world" on, it also uses the name of the world or server you join as a notebook name. Tokens are stored as a hash, so we can't read them back.</p>
-        <p><b>On your device.</b> The site saves your sign-in, theme and sound settings in your browser's local storage. There are no advertising or tracking cookies, and no analytics.</p></div>
+        <p><b>Your notebooks.</b> Everything you or your friends put in: places, to-dos, farms, notes, deaths, enchanted gear, stats, inventories, map tiles, uploaded Litematica files, nicknames, and a list of recent changes showing who changed what.</p>
+        <p><b>From the mod.</b> If you connect the mod with a token, it sends the notebook data above as you. That includes your enchanted items, saved places, deaths, your vanilla statistics, and what you're carrying (including inside shulker boxes and bundles) for the shopping list. You can turn stats and inventory off in the mod's Settings. If you turn on Share map (it's off by default), it also sends a map of the area around you as you explore. With "Notebook per world" on, it also uses the name of the world or server you join as a notebook name. Tokens are stored as a hash, so we can't read them back.</p>
+        <p><b>Notifications.</b> If you turn notifications on for a device, we store the address your browser gives us for sending them. It goes to your browser's push service (for example Google's or Apple's) only when there's something to tell you. Turn them off on the Account page.</p>
+        <p><b>On your device.</b> The site saves your sign-in, theme and sound settings, and a read-only copy of the notebooks you open (so they work offline), in your browser's local storage. There are no advertising or tracking cookies, and no analytics.</p></div>
 
       <div className="card"><h2>Who can see it</h2>
         <p>People in a notebook can see its contents and each other's display names and nicknames. Only the owner can see the email addresses of members. Nobody else can open your notebooks.</p>
@@ -31,7 +32,7 @@ export default function Privacy() {
         <p>The website is served over HTTPS. For now, the connection between the website or the mod and the server is not encrypted, so avoid putting anything in a notebook that you wouldn't want an unlucky network to read. Backups of the database are kept for up to 14 days.</p></div>
 
       <div className="card"><h2>Your choices</h2>
-        <p>You can change your display name, export a notebook as a file, revoke mod tokens, or delete your account on the Account page. Deleting your account removes it, the notebooks you own, your memberships, your gear and your tokens. Copies in backups disappear within about two weeks.</p>
+        <p>You can change your display name, export a notebook as a file, revoke mod tokens, or delete your account on the Account page. Deleting your account removes it, the notebooks you own, your memberships, your gear, inventory, notification settings and your tokens. Copies in backups disappear within about two weeks.</p>
         <p>Under New Zealand's Privacy Act 2020 you can ask to see or correct the information held about you. Email <a href={`mailto:${EMAIL}`}>{EMAIL}</a> and it will be sorted out.</p></div>
 
       <div className="card"><h2>Age</h2>

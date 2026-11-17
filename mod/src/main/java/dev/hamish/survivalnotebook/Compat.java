@@ -141,6 +141,87 @@ final class Compat {
 		}
 	}
 
+	/** Text on the clipboard ("" if none or unavailable). */
+	static String clipboard() {
+		try {
+			Minecraft mc = Minecraft.getInstance();
+			Object kh = Minecraft.class.getField("keyboardHandler").get(mc);
+			Object v = kh.getClass().getMethod("getClipboard").invoke(kh);
+			return v == null ? "" : v.toString();
+		} catch (ReflectiveOperationException | RuntimeException e) { return ""; }
+	}
+
+	/** Item id without "minecraft:" (modded items keep their namespace, e.g. "create:shaft"). */
+	static String itemId(ItemStack s) {
+		String id = BuiltInRegistries.ITEM.getKey(s.getItem()).toString();
+		return id.startsWith("minecraft:") ? id.substring(10) : id;
+	}
+
+	// ---- map: one byte per block column, in the same packing vanilla maps use (colour id * 4 + shade). 0 = nothing seen.
+
+	/** Top visible block of a column: y in the high bits, map colour id in the low byte. -1 if nothing has a map colour. */
+	private static int column(net.minecraft.client.multiplayer.ClientLevel level, net.minecraft.world.level.chunk.LevelChunk ch, net.minecraft.core.BlockPos.MutableBlockPos pos, int wx, int wz, boolean ceiling, int fromY) {
+		int minY = level.getMinY(), y;
+		if (ceiling) {   // the Nether's roof would hide everything: start near the player and look for the first floor below open air
+			y = Math.min(fromY, level.getMaxY() - 1);
+			int n = 0;
+			while (y > minY && n++ < 32 && !ch.getBlockState(pos.set(wx, y, wz)).isAir()) y--;
+			n = 0;
+			while (y > minY && n++ < 64 && ch.getBlockState(pos.set(wx, y, wz)).isAir()) y--;
+		} else y = ch.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, wx & 15, wz & 15);
+		for (int n = 0; y >= minY && n < 48; n++, y--) {   // see through glass and other blocks that have no map colour
+			net.minecraft.world.level.block.state.BlockState st = ch.getBlockState(pos.set(wx, y, wz));
+			net.minecraft.world.level.material.MapColor c = st.getMapColor(level, pos);
+			if (c != net.minecraft.world.level.material.MapColor.NONE) return (y << 8) | (c.id & 0xFF);
+		}
+		return -1;
+	}
+
+	/** How deep the water is under a water column (up to 10), for vanilla-style shading. */
+	private static int waterDepth(net.minecraft.world.level.chunk.LevelChunk ch, net.minecraft.core.BlockPos.MutableBlockPos pos, int wx, int y, int wz) {
+		int d = 0;
+		while (d < 10 && !ch.getBlockState(pos.set(wx, y - d, wz)).getFluidState().isEmpty()) d++;
+		return d;
+	}
+
+	/**
+	 * The 16x16 map pixels of a loaded chunk (index z * 16 + x), shaded like a vanilla map: lighter when higher than the block to the north.
+	 * Null if the chunk isn't loaded or this version can't read it.
+	 */
+	static byte[] mapChunk(int cx, int cz, int playerY) {
+		try {
+			var level = Minecraft.getInstance().level;
+			if (level == null || !level.hasChunk(cx, cz)) return null;
+			var ch = level.getChunk(cx, cz);
+			var north = level.hasChunk(cx, cz - 1) ? level.getChunk(cx, cz - 1) : null;
+			boolean ceiling = level.dimensionType().hasCeiling();
+			var pos = new net.minecraft.core.BlockPos.MutableBlockPos();
+			int[] top = new int[256], edge = new int[16];
+			for (int x = 0; x < 16; x++) edge[x] = north == null ? -1 : column(level, north, pos, cx * 16 + x, cz * 16 - 1, ceiling, playerY);
+			for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) top[z * 16 + x] = column(level, ch, pos, cx * 16 + x, cz * 16 + z, ceiling, playerY);
+			byte[] out = new byte[256];
+			int water = net.minecraft.world.level.material.MapColor.WATER.id;
+			for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
+				int t = top[z * 16 + x];
+				if (t < 0) continue;
+				int id = t & 0xFF, y = t >> 8, n = z > 0 ? top[(z - 1) * 16 + x] : edge[x];
+				net.minecraft.world.level.material.MapColor.Brightness b;
+				if (id == water) {
+					double d = waterDepth(ch, pos, cx * 16 + x, y, cz * 16 + z) * 0.1 + ((x + z) & 1) * 0.2;
+					b = d < 0.5 ? net.minecraft.world.level.material.MapColor.Brightness.HIGH : d > 0.9 ? net.minecraft.world.level.material.MapColor.Brightness.LOW : net.minecraft.world.level.material.MapColor.Brightness.NORMAL;
+				} else if (n < 0 || (n >> 8) == y) b = net.minecraft.world.level.material.MapColor.Brightness.NORMAL;
+				else b = y > (n >> 8) ? net.minecraft.world.level.material.MapColor.Brightness.HIGH : net.minecraft.world.level.material.MapColor.Brightness.LOW;
+				out[z * 16 + x] = net.minecraft.world.level.material.MapColor.byId(id).getPackedId(b);
+			}
+			return out;
+		} catch (RuntimeException | LinkageError e) { return null; }
+	}
+
+	/** Chunks the player can currently see, as a radius in chunks. */
+	static int viewChunks() {
+		try { return Minecraft.getInstance().options.getEffectiveRenderDistance(); } catch (RuntimeException | LinkageError e) { return 8; }
+	}
+
 	/** Name of the world or server you just joined ("" if unknown). Singleplayer uses the save's name, multiplayer the server list name or address. */
 	static String worldName(net.minecraft.client.Minecraft mc) {
 		try {

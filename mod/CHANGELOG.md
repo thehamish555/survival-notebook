@@ -1,3 +1,9 @@
+## 1.1.0 – Feature
+- New commands: `/notebook` opens the notebook, `/notebook place <name>` saves where you're standing, and `/notebook todo <text>` adds a to-do for you. `/notebook todo 64 glass` also puts 64 glass on the shopping list.
+- Paste coordinates: press F3 + C, then Paste in the place editor (or paste into a coordinate box). The dimension comes from what you copied. A plain `/tp x y z` uses the dimension you're in.
+- Share inventory (on by default, in Settings > Sync & privacy): sends what you're carrying, including inside shulker boxes and bundles, for the website's new shopping list.
+- Share map (off by default): draws a map of the chunks around you as you explore and shows it on the website with your places as pins. No minimap mod needed.
+
 ## 1.0.2 – Fix
 - Connects to the official server over HTTPS at notebook-api.hamish555.com, so your token is no longer sent in plain text.
 

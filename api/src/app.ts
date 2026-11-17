@@ -12,15 +12,18 @@ import { authRoutes } from './routes/auth'
 import { eventRoutes } from './routes/events'
 import { fileRoutes } from './routes/files'
 import { inviteRoutes } from './routes/invites'
+import { mapRoutes } from './routes/map'
 import { memberRoutes } from './routes/members'
 import { notebookRoutes } from './routes/notebooks'
+import { pushRoutes } from './routes/push'
 import { sectionRoutes } from './routes/sections'
 import { tokenRoutes } from './routes/tokens'
+import { makeNotify, webPushSender, type PushSender } from './push'
 import type { AppEnv, Ctx } from './types'
 
-export function createApp(config: Config, db: DB = openDb(config.DB_PATH), verifyGoogle: Ctx['verifyGoogle'] = googleVerifier(config)) {
+export function createApp(config: Config, db: DB = openDb(config.DB_PATH), verifyGoogle: Ctx['verifyGoogle'] = googleVerifier(config), sendPush: PushSender = webPushSender) {
   const bus = new EventEmitter(); bus.setMaxListeners(0)
-  const ctx: Ctx = { db, config, bus, verifyGoogle }
+  const ctx: Ctx = { db, config, bus, verifyGoogle, notify: makeNotify(db, config, sendPush) }
   const app = new Hono<AppEnv>()
 
   app.use('*', secureHeaders())
@@ -34,7 +37,7 @@ export function createApp(config: Config, db: DB = openDb(config.DB_PATH), verif
   app.use('*', originGuard(config))
   app.use('*', rateLimit(1500, 60_000))                                                      // generous per-IP ceiling for everything
   app.use('*', bodyLimit({ maxSize: 1024 * 1024, onError: c => c.json({ error: 'Request too large' }, 413) }))
-  for (const routes of [authRoutes, accountRoutes, tokenRoutes, notebookRoutes, sectionRoutes, memberRoutes, inviteRoutes, fileRoutes, eventRoutes]) app.route('/', routes(ctx))
+  for (const routes of [authRoutes, accountRoutes, tokenRoutes, notebookRoutes, sectionRoutes, memberRoutes, inviteRoutes, fileRoutes, mapRoutes, pushRoutes, eventRoutes]) app.route('/', routes(ctx))
 
   app.notFound(c => c.json({ error: 'not found' }, 404))
   app.onError((e, c) => { console.error(e); return c.json({ error: 'Internal error' }, 500) })

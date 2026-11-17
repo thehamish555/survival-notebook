@@ -8,7 +8,10 @@ const Schema = z.object({
   DB_PATH: z.string().default('./data/notebook.db'),
   PORT: z.coerce.number().int().default(8787),
   CORS_ORIGIN: z.string().optional(),   // allow browsers on this origin to call the API directly (comma-separate for several). Not needed in production: the website proxies /api through Vercel
-  BACKUP_DIR: z.string().optional(),    // defaults to <folder of DB_PATH>/backups; a snapshot is taken at start and every 24 h, newest 14 kept
+  BACKUP_DIR: z.string().optional(),
+  VAPID_PUBLIC_KEY: z.string().optional(),    // push notification keys. Optional: without them the server makes its own once and keeps them in the database
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().optional(),       // contact for push services, a mailto: or https: address (defaults to the website)    // defaults to <folder of DB_PATH>/backups; a snapshot is taken at start and every 24 h, newest 14 kept
 })
 export type Config = z.infer<typeof Schema>
 

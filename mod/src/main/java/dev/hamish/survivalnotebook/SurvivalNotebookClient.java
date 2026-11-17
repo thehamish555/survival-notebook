@@ -46,6 +46,7 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
 		ClientReceiveMessageEvents.GAME.register((message, overlay) -> { if (!overlay) Deaths.onGameMessage(message.getString(), ticks); });   // "Steve was slain by Zombie"
 
+		Commands.register();  // /notebook, /notebook place <name>, /notebook todo <text>
 		Live.start();         // live updates from the website
 		Notebook.connect();   // loads your notebooks + the selected one in the background
 	}
@@ -55,12 +56,13 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 		while (saveKey.consumeClick()) addPlace(mc);
 		while (quickKey.consumeClick()) quickSave();
 		while (hudKey.consumeClick()) { NbConfig c = NbConfig.get(); c.hud = !c.hud; NbConfig.save(); }
+		if (Commands.openSoon && mc.gui.screen() == null) { Commands.openSoon = false; mc.gui.setScreen(new NotebookScreen()); }
 		if (mc.player == null) {
 			if (wasInWorld && ++leaveTicks == 80) shareStats();   // just left a world: its stats file has been saved by now
 			if (leaveTicks > 80 || !wasInWorld) { wasInWorld = false; leaveTicks = 0; }
 			return;
 		}
-		if (!wasInWorld) joinTick = 0;
+		if (!wasInWorld) { joinTick = 0; MapRecorder.reset(); }
 		wasInWorld = true; leaveTicks = 0;
 		if (joinTick >= 0 && ++joinTick == 40) { joinTick = -1; Notebook.joinWorld(Compat.worldName(mc)); }   // ~2s in, once the server data is there
 
@@ -78,6 +80,8 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 			String json = gear.toString();
 			if (!json.equals(lastGear)) { lastGear = json; Notebook.syncGear(gear, false); }
 		}
+		if (ticks % 600 == 450 && cfg.shareInventory && Notebook.canEdit()) Notebook.syncInventory(InventoryScanner.scan());   // ~every 30s, only when it changed
+		if (cfg.shareMap && Notebook.canEdit()) MapRecorder.tick(mc, ticks);
 
 		boolean dead = mc.gui.screen() instanceof DeathScreen;
 		if (!dead && mc.player.isAlive() && ticks % 10 == 0) Deaths.snapshot();   // what you're carrying, so a death knows what was lost

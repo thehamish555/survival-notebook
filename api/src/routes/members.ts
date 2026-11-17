@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { getRole } from '../access'
 import { requireAuth } from '../middleware'
+import { whoAndWhere } from '../push'
 import { unassign } from '../unassign'
 import { Email, readBody } from '../validate'
 import type { AppEnv, Ctx } from '../types'
@@ -18,7 +19,9 @@ export const memberRoutes = (ctx: Ctx) => {
     const u = db.prepare('select id from users where email=?').get(b.data.email) as { id: string } | undefined
     if (!u) return c.json({ error: 'No account with that email' }, 404)
     if (u.id === c.get('uid')) return c.json({ error: "That's you" }, 400)
+    const isNew = !getRole(db, id, u.id)
     db.prepare("insert into members(nb,user,role) values(?,?,?) on conflict(nb,user) do update set role=excluded.role").run(id, u.id, b.data.role)
+    if (isNew) { const { name, title } = whoAndWhere(db, id, c.get('uid')); ctx.notify(u.id, { title: 'Added to a notebook', body: `${name} added you to “${title}”`, url: `/n/${id}` }) }
     bus.emit(id, { members: true, by: c.get('uid'), cid: c.req.header('x-client-id') || '' }); return c.json({ ok: true })
   })
 

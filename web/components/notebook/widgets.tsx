@@ -53,7 +53,8 @@ export function Table({ cols, rows, onChange, blank, extra, show, sort, empty, o
           : c.t === 'pill' ? <div className="inl"><Pill value={c.get ? c.get(r) : c.norm ? c.norm(r[c.k]) : r[c.k]} opts={c.opts} tones={c.tones} icons={c.icons} onChange={(v: string) => patch(r.id, c.set ? c.set(v) : { [c.k]: v })} />{c.after?.(r)}</div>
           : c.t === 'icon' ? <IconPicker value={r[c.k]} onChange={(v: string) => patch(r.id, { [c.k]: v })} />
           : c.t === 'check' ? <input type="checkbox" checked={!!r[c.k]} onChange={e => patch(r.id, { [c.k]: e.target.checked })} />
-          : c.t === 'coord' ? <CoordCell v={r[c.k]} dim={c.dim} onChange={(v: string) => patch(r.id, { [c.k]: v })} />
+          : c.t === 'coord' ? <CoordCell v={r[c.k]} dim={c.dim} onChange={(v: string) => patch(r.id, { [c.k]: v })} onOther={c.other ? (p: any) => c.other(r, p, (o: any) => patch(r.id, o)) : undefined} />
+          : c.t === 'num' ? <input type="number" min={0} max={1000000} className="num" placeholder="–" value={r[c.k] ?? ''} onChange={e => patch(r.id, { [c.k]: e.target.value === '' ? '' : Math.max(0, Math.floor(Number(e.target.value))) })} />
           : c.t === 'yt' ? <YtCell r={r} patch={(o: any) => patch(r.id, o)} />
           : c.t === 'file' ? <FileCell r={r} patch={(o: any) => patch(r.id, o)} />
           : c.icon ? <div className="inl">{c.pick ? <IconPicker compact value={r.icon || c.icon(r)} onChange={(v: string) => patch(r.id, { icon: v })} /> : <McIcon name={c.icon(r)} size={20} />}<input value={r[c.k] ?? ''} onChange={e => patch(r.id, { [c.k]: e.target.value })} /></div>

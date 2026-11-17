@@ -54,6 +54,40 @@ final class Names {
 		return (int) Math.floor(Double.parseDouble(a[0]) * factor) + " " + a[1] + " " + (int) Math.floor(Double.parseDouble(a[2]) * factor);
 	}
 
+	/** A position pasted from the game. dim is "ow", "nether" or "end", or null when the text doesn't say (plain /tp or x y z). */
+	record Pasted(String xyz, String dim) { }
+
+	private static final String NUM = "(-?\\d+(?:\\.\\d+)?)";
+	private static final java.util.regex.Pattern EXEC = java.util.regex.Pattern.compile("^execute in (\\S+) run (.*)$", java.util.regex.Pattern.CASE_INSENSITIVE);
+	private static final java.util.regex.Pattern TP = java.util.regex.Pattern.compile("^(?:tp|teleport) (?:(?:@[spaer](?:\\[[^\\]]*\\])?|(?!-?\\d)[\\w.-]{1,16}) )?(.*)$", java.util.regex.Pattern.CASE_INSENSITIVE);
+	private static final java.util.regex.Pattern XYZ = java.util.regex.Pattern.compile("^" + NUM + "[\\s,]+" + NUM + "[\\s,]+" + NUM + "(?:\\s+-?\\d+(?:\\.\\d+)?){0,2}$");
+
+	/**
+	 * Reads F3+C ("/execute in minecraft:the_nether run tp @s 1.5 70.0 -3.2 0 0"), "/tp x y z" or "x y z". Decimals round down to the block.
+	 * Null if it isn't a position. Throws for a dimension the notebook has no column for. Never converts between dimensions.
+	 */
+	static Pasted parsePaste(String text) {
+		String s = (text == null ? "" : text).trim().replaceFirst("^/", "").replaceAll("\\s+", " ");
+		String dim = null;
+		java.util.regex.Matcher ex = EXEC.matcher(s);
+		boolean exec = ex.matches();
+		if (exec) {
+			String id = ex.group(1).toLowerCase();
+			dim = switch (id) { case "minecraft:overworld", "overworld" -> "ow"; case "minecraft:the_nether", "the_nether" -> "nether"; case "minecraft:the_end", "the_end" -> "end"; default -> null; };
+			if (dim == null) throw new IllegalArgumentException("The notebook has no column for " + ex.group(1));
+			s = ex.group(2);
+		}
+		java.util.regex.Matcher tp = TP.matcher(s);
+		if (tp.matches()) s = tp.group(1);
+		else if (exec) return null;
+		java.util.regex.Matcher m = XYZ.matcher(s);
+		if (!m.matches()) return null;
+		return new Pasted((long) Math.floor(Double.parseDouble(m.group(1))) + " " + (long) Math.floor(Double.parseDouble(m.group(2))) + " " + (long) Math.floor(Double.parseDouble(m.group(3))), dim);
+	}
+
+	/** Text that came from the game rather than typed "x y z". */
+	static boolean looksPasted(String t) { String s = t == null ? "" : t.trim(); return s.matches("(?i)^/?(execute|tp|teleport)\\b.*") || s.matches(".*\\d\\.\\d.*") || s.contains(","); }
+
 	private static final java.util.regex.Pattern YT = java.util.regex.Pattern.compile("^(?:https?://)?(?:www\\.|m\\.)?(?:youtube\\.com/(?:watch\\?(?:.*&)?v=|shorts/|embed/|live/)|youtu\\.be/)([\\w-]{11})");
 	/** The 11-character video id of a YouTube link, or null if it isn't one. */
 	static String ytId(String url) {

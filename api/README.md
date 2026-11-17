@@ -26,6 +26,8 @@ It stores everything in one SQLite file (WAL mode) with versioned migrations tha
 | `DB_PATH` | no | Database file. Defaults to `./data/notebook.db`. |
 | `ORIGIN_SECRET` | no | If set, requests must send it in `x-origin-secret`. |
 | `CORS_ORIGIN` | no | Lets a browser on that origin call the API directly. Local development only. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | no | Keys for push notifications. Leave them out and the API makes a pair on first use and keeps it in the database. |
+| `VAPID_SUBJECT` | no | Contact for push services, a `mailto:` or `https:` address. Defaults to the website. |
 
 ## Running it
 

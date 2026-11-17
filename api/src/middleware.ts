@@ -16,12 +16,13 @@ export const originGuard = (config: Config): MiddlewareHandler => async (c, next
 
 export const hashToken = (t: string) => createHash('sha256').update(t).digest('hex')
 
-// Personal API tokens (snp_…) are for the Minecraft mod: it can read notebooks (and listen for live changes), edit places, to-dos, farms and its owner's own gear, and set a nickname. Nothing else.
+// Personal API tokens (snp_…) are for the Minecraft mod: it can read notebooks (and listen for live changes), edit places, to-dos, farms and its owner's own gear and inventory, upload map tiles, and set a nickname. Nothing else.
 const MOD_ROUTES: [string, RegExp][] = [
   ['GET', /^\/me$/], ['GET', /^\/notebooks$/], ['GET', /^\/notebooks\/[\w-]+$/], ['GET', /^\/notebooks\/[\w-]+\/s\/[\w:-]+$/],
   ['GET', /^\/notebooks\/[\w-]+\/activity$/], ['GET', /^\/notebooks\/[\w-]+\/events$/], ['PATCH', /^\/notebooks\/[\w-]+\/nick$/],
-  ['PUT', /^\/notebooks\/[\w-]+\/s\/(coords|todos|farms|deaths|notes|(gear|prefs|stats):[0-9a-f-]{36})$/],
+  ['PUT', /^\/notebooks\/[\w-]+\/s\/(coords|todos|farms|deaths|notes|(gear|prefs|stats|inv):[0-9a-f-]{36})$/],
   ['POST', /^\/notebooks$/], ['POST', /^\/notebooks\/[\w-]+\/files$/], ['GET', /^\/notebooks\/[\w-]+\/files\/[\w-]+$/], ['DELETE', /^\/notebooks\/[\w-]+\/files\/[\w-]+$/],   // Litematica upload / download
+  ['GET', /^\/notebooks\/[\w-]+\/blocks$/], ['PUT', /^\/notebooks\/[\w-]+\/map\/(ow|nether|end)\/-?\d+\/-?\d+$/],   // schematic block counts, map tiles
 ]
 // Mod tokens can manage members too (the in-game Members tab).
 const MEMBER_ROUTES: [string, RegExp][] = [['POST', /^\/notebooks\/[\w-]+\/members$/], ['DELETE', /^\/notebooks\/[\w-]+\/members\/[\w-]+$/]]
