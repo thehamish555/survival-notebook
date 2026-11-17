@@ -13,7 +13,7 @@
     "Node.js 22": "ghcr.io/parkervcp/yolks:nodejs_22"
   },
   "file_denylist": [],
-  "startup": "if [ -d .git ]; then git pull --ff-only || true; fi; cd api && npm ci --omit=dev && NODE_ENV=production DB_PATH=/home/container/data/notebook.db npx tsx src/index.ts",
+  "startup": "if [ -d .git ]; then git fetch --quiet origin \"${GIT_BRANCH:-main}\" && git reset --hard FETCH_HEAD; fi; cd api && npm ci --omit=dev && NODE_ENV=production DB_PATH=/home/container/data/notebook.db npx tsx src/index.ts",
   "config": {
     "files": "{}",
     "startup": "{\r\n    \"done\": \"API listening on\"\r\n}",
@@ -22,7 +22,7 @@
   },
   "scripts": {
     "installation": {
-      "script": "#!/bin/bash\n# Clones the repo into the server folder (the API lives in /api).\napt update && apt install -y git ca-certificates\ncd /mnt/server\nif [ -d .git ]; then\n  git pull --ff-only\nelse\n  URL=\"${GIT_ADDRESS}\"\n  if [ -n \"${GIT_TOKEN}\" ]; then URL=$(echo \"${GIT_ADDRESS}\" | sed \"s#https://#https://x-access-token:${GIT_TOKEN}@#\"); fi\n  git clone --branch \"${GIT_BRANCH}\" \"${URL}\" /tmp/repo\n  cp -a /tmp/repo/. /mnt/server/\nfi\nmkdir -p /mnt/server/data\necho \"Install finished.\"\n",
+      "script": "#!/bin/bash\n# Clones the repo into the server folder (the API lives in /api).\napt update && apt install -y git ca-certificates\ncd /mnt/server\nif [ -d .git ]; then\n  git fetch origin \"${GIT_BRANCH}\" && git reset --hard FETCH_HEAD\nelse\n  URL=\"${GIT_ADDRESS}\"\n  if [ -n \"${GIT_TOKEN}\" ]; then URL=$(echo \"${GIT_ADDRESS}\" | sed \"s#https://#https://x-access-token:${GIT_TOKEN}@#\"); fi\n  git clone --branch \"${GIT_BRANCH}\" \"${URL}\" /tmp/repo\n  cp -a /tmp/repo/. /mnt/server/\nfi\nmkdir -p /mnt/server/data\necho \"Install finished.\"\n",
       "container": "ghcr.io/parkervcp/installers:debian",
       "entrypoint": "bash"
     }
