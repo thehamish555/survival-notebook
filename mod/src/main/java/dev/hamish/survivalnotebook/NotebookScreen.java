@@ -49,6 +49,7 @@ final class NotebookScreen extends Screen {
 
 	Font font() { return this.font; }
 	void rebuild() { this.rebuildWidgets(); }
+	boolean dropdownOpen() { return openDd != null; }
 
 	static void resetEditors() { PagePlaces.reset(); PageTodo.reset(); PageFarms.reset(); PageGear.reset(); PageDeaths.reset(); PageNotes.reset(); PageShopping.reset(); PageMap.reset(); PageStats.reset(); ddKey = ""; ddScroll = 0; PagePlaces.importing = false; PageFarms.picking = false; scroll = 0; }
 	static String next(String cur, String[] opts) {
@@ -90,6 +91,7 @@ final class NotebookScreen extends Screen {
 
 	@Override
 	public void tick() {
+		if (PageMap.rebuildSoon) { PageMap.rebuildSoon = false; this.rebuildWidgets(); return; }
 		if (seen != Notebook.version) stale = true;
 		if (stale && boxes.stream().noneMatch(EditBox::isFocused) && typing.stream().noneMatch(w -> w.isFocused())) {   // fresh data arrived; don't rebuild while you're typing
 			stale = false;
@@ -138,7 +140,11 @@ final class NotebookScreen extends Screen {
 	// The Map tab handles its own dragging and clicking inside the map area.
 	@Override
 	public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent e, boolean doubleClick) {
-		if (tab == MAP && openDd == null && e.button() == 0 && PageMap.press(e.x(), e.y())) return true;
+		if (tab == MAP && openDd == null && PageMap.owns(e.x(), e.y())) {   // 26.x numbers mouse buttons from 1 (SDL): left is 1, right is 3
+			if (e.button() == com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT) PageMap.press(e.x(), e.y());
+			else if (e.button() == com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_RIGHT) PageMap.rightPress(e.x(), e.y());
+			return true;
+		}
 		return super.mouseClicked(e, doubleClick);
 	}
 
@@ -150,7 +156,7 @@ final class NotebookScreen extends Screen {
 
 	@Override
 	public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent e) {
-		if (tab == MAP && PageMap.release(e.x(), e.y())) return true;
+		if (tab == MAP && (e.button() == com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_RIGHT ? PageMap.rightRelease(e.x(), e.y()) : PageMap.release(e.x(), e.y()))) return true;
 		return super.mouseReleased(e);
 	}
 

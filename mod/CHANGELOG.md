@@ -1,3 +1,7 @@
+## 1.4.1 – Fix
+- Map: clicking and dragging work again. Minecraft 26.3 numbers mouse buttons differently, so the map never saw a left click.
+- Map: right-click an empty spot to add a place there. It opens in the Places editor with the coordinates filled in, ready to name.
+
 ## 1.4.0 – Feature
 - Team on the map: players show with their own face in their colour and a pointer for where they're looking. Everyone's last spot stays after they log off, dimmed, with when they were last seen.
 - Places on the map use the same icons as on the Places tab.

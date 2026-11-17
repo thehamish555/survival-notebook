@@ -65,7 +65,7 @@ final class PageMap {
 		s.btn(s.cx + 156, y, 24, "+", 1, () -> zoom(1.5), true);
 		s.btn(s.cx + 184, y, 24, "−", 1, () -> zoom(1 / 1.5), true);
 		s.btn(s.cx + 212, y, 70, "Find me", 1, () -> { Names.Spot h = Names.here(); if (h == null) return; dim = h.dim(); centreOnMe(); s.rebuild(); }, Names.here() != null);
-		String hint = "Drag to move, scroll to zoom, click a place";
+		String hint = "Drag to move, scroll to zoom, click a place, right-click to add one";
 		if (s.cx + 290 + s.font().width(hint) < s.cx + s.cw - 10) s.textRight(hint, s.cx + s.cw - 10, y + 6, p.mut);   // only when there's room beside the buttons
 
 		ax = s.cx; ay = y + 26; aw = s.cw - 10; ah = s.bottom - ay;
@@ -122,6 +122,41 @@ final class PageMap {
 
 	private static int sx(double x) { return (int) Math.round(ax + aw / 2.0 + (x - cx) * scale); }
 	private static int sz(double z) { return (int) Math.round(ay + ah / 2.0 + (z - cz) * scale); }
+
+	// ---- right-click adds a place (left-click picks one and drag moves the map, below)
+	static volatile boolean rebuildSoon;   // picked up by the screen's tick, so the page never rebuilds in the middle of handling a click
+	private static boolean rightArmed;
+	private static double rightX, rightY;
+	static boolean rightPress(double x, double y) { if (!owns(x, y)) return false; rightArmed = true; rightX = x; rightY = y; return true; }
+	static boolean rightRelease(double x, double y) {
+		if (!rightArmed) return false;
+		rightArmed = false;
+		if (Math.hypot(x - rightX, y - rightY) < 4) addPlaceAt(x, y);
+		return true;
+	}
+
+	/** Right-click on the map: a new place there, opened in the Places editor to name it. */
+	private static void addPlaceAt(double x, double y) {
+		if (!Notebook.canEdit()) return;
+		int wx = (int) Math.floor(cx + (x - ax - aw / 2.0) / scale), wz = (int) Math.floor(cz + (y - ay - ah / 2.0) / scale);
+		Minecraft mc = Minecraft.getInstance();
+		Names.Spot here = Names.here();
+		int wy = 64;
+		if (mc.player != null && here != null && here.dim().equals(dim)) {
+			wy = (int) Math.floor(mc.player.getY());
+			if (!dim.equals("nether") && mc.level != null && mc.level.hasChunk(wx >> 4, wz >> 4))   // the ground there, if it's loaded (the Nether's roof would mislead)
+				wy = mc.level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, wx, wz);
+		}
+		PagePlaces.openNew();
+		for (String d : DIMS) PagePlaces.draft.addProperty(d, "");
+		PagePlaces.draft.addProperty(dim, wx + " " + wy + " " + wz);
+		NotebookScreen.tab = NotebookScreen.PLACES;
+		Compat.soundToggle();
+		rebuildSoon = true;
+	}
+
+	/** Whether a click at this point belongs to the map (the screen then leaves it alone). */
+	static boolean owns(double x, double y) { return inside(x, y) && !onPanel(x, y); }
 
 	private static void draw(NotebookScreen s, GuiGraphicsExtractor g, int mx, int my, boolean sharing) {
 		Ui.Pal p = Ui.pal();
@@ -238,7 +273,7 @@ final class PageMap {
 			NbConfig c = NbConfig.get();
 			if (!selected.equals(c.trackedPlace)) { c.trackedPlace = selected; NbConfig.save(); Compat.soundToggle(); }
 		} else selected = "";
-		if (screen != null) screen.rebuild();
+		rebuildSoon = true;
 		return true;
 	}
 
