@@ -1,0 +1,72 @@
+{
+  "_comment": "Survival Notebook API. Import in Pelican: Admin > Eggs > Import.",
+  "meta": {
+    "version": "PTDL_v2",
+    "update_url": null
+  },
+  "exported_at": "2026-11-17T02:45:00+13:00",
+  "name": "Survival Notebook API",
+  "author": "hamishlester555@gmail.com",
+  "description": "Runs the Survival Notebook API (Node 22, Hono, SQLite) straight from the GitHub repo. Pulls the latest main on every start.",
+  "features": null,
+  "docker_images": {
+    "Node.js 22": "ghcr.io/parkervcp/yolks:nodejs_22"
+  },
+  "file_denylist": [],
+  "startup": "if [ -d .git ]; then git pull --ff-only || true; fi; cd api && npm ci --omit=dev && NODE_ENV=production DB_PATH=/home/container/data/notebook.db npx tsx src/index.ts",
+  "config": {
+    "files": "{}",
+    "startup": "{\r\n    \"done\": \"API listening on\"\r\n}",
+    "logs": "{}",
+    "stop": "^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/bash\n# Clones the repo into the server folder (the API lives in /api).\napt update && apt install -y git ca-certificates\ncd /mnt/server\nif [ -d .git ]; then\n  git pull --ff-only\nelse\n  URL=\"${GIT_ADDRESS}\"\n  if [ -n \"${GIT_TOKEN}\" ]; then URL=$(echo \"${GIT_ADDRESS}\" | sed \"s#https://#https://x-access-token:${GIT_TOKEN}@#\"); fi\n  git clone --branch \"${GIT_BRANCH}\" \"${URL}\" /tmp/repo\n  cp -a /tmp/repo/. /mnt/server/\nfi\nmkdir -p /mnt/server/data\necho \"Install finished.\"\n",
+      "container": "ghcr.io/parkervcp/installers:debian",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Git repository",
+      "description": "HTTPS address of the repo, e.g. https://github.com/you/survival-notebook.git",
+      "env_variable": "GIT_ADDRESS",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": false,
+      "rules": "required|string|max:200",
+      "field_type": "text"
+    },
+    {
+      "name": "Git branch",
+      "description": "Branch to run.",
+      "env_variable": "GIT_BRANCH",
+      "default_value": "main",
+      "user_viewable": true,
+      "user_editable": false,
+      "rules": "required|string|max:50",
+      "field_type": "text"
+    },
+    {
+      "name": "Git token",
+      "description": "Only for a private repo: a GitHub fine-grained token with read access to contents.",
+      "env_variable": "GIT_TOKEN",
+      "default_value": "",
+      "user_viewable": false,
+      "user_editable": true,
+      "rules": "nullable|string|max:200",
+      "field_type": "text"
+    },
+    {
+      "name": "JWT secret",
+      "description": "Signs login sessions. Make one with: openssl rand -hex 32. Changing it logs everyone out.",
+      "env_variable": "JWT_SECRET",
+      "default_value": "",
+      "user_viewable": false,
+      "user_editable": true,
+      "rules": "required|string|min:32|max:128",
+      "field_type": "text"
+    }
+  ]
+}

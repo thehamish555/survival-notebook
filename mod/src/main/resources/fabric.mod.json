@@ -1,0 +1,23 @@
+{
+	"schemaVersion": 1,
+	"id": "survival_notebook",
+	"version": "${version}",
+	"name": "Survival Notebook",
+	"description": "Syncs your enchanted gear, saved places and to-do list with The Survival Notebook website (notebook.hamish555.com).",
+	"authors": ["Hamish Lester"],
+	"contact": { "homepage": "https://notebook.hamish555.com" },
+	"license": "MIT",
+	"icon": "assets/survival_notebook/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["dev.hamish.survivalnotebook.SurvivalNotebookClient"],
+		"modmenu": ["dev.hamish.survivalnotebook.ModMenuIntegration"]
+	},
+	"suggests": { "modmenu": "*" },
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~26.3",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

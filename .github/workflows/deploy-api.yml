@@ -1,0 +1,39 @@
+# Restarts the API on your Pelican server whenever api/ changes on main.
+# The server's egg pulls the newest main when it starts, so a restart is the whole deploy.
+# Needs repo secrets: PELICAN_URL, PELICAN_API_KEY, PELICAN_SERVER_ID (see docs/DEPLOY.md).
+name: Deploy API
+on:
+  push:
+    branches: [main]
+    paths: ['api/**', 'deploy/**', '.github/workflows/deploy-api.yml']
+  workflow_dispatch:
+concurrency: deploy-api
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: api } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: api/package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+  restart:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restart the Pelican server
+        env:
+          PELICAN_URL: ${{ secrets.PELICAN_URL }}
+          PELICAN_API_KEY: ${{ secrets.PELICAN_API_KEY }}
+          PELICAN_SERVER_ID: ${{ secrets.PELICAN_SERVER_ID }}
+        run: |
+          if [ -z "$PELICAN_URL" ] || [ -z "$PELICAN_API_KEY" ] || [ -z "$PELICAN_SERVER_ID" ]; then
+            echo "::error::Add PELICAN_URL, PELICAN_API_KEY and PELICAN_SERVER_ID as repository secrets."; exit 1
+          fi
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${PELICAN_URL%/}/api/client/servers/${PELICAN_SERVER_ID}/power" \
+            -H "Authorization: Bearer ${PELICAN_API_KEY}" -H "Accept: application/json" -H "Content-Type: application/json" \
+            -d '{"signal":"restart"}')
+          echo "Pelican answered HTTP $code"
+          [ "$code" = "204" ] || [ "$code" = "202" ] || exit 1

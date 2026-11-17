@@ -1,0 +1,15 @@
+{
+  "name": "survival-notebook",
+  "private": true,
+  "scripts": {
+    "setup": "npm install --prefix api && npm install --prefix web",
+    "dev": "npx -y concurrently -n api,web -c green,cyan \"npm run dev --prefix api\" \"npm run dev --prefix web\"",
+    "test": "npm test --prefix api",
+    "typecheck": "npm run typecheck --prefix api && npm run typecheck --prefix web",
+    "build": "npm run build --prefix web",
+    "sync:shared": "python3 shared/build-enchants.py",
+    "icons": "npm run icons --prefix web",
+    "mod": "cd mod && gradlew build",
+    "all": "npm run setup && npm run icons && npm run mod && npm run dev"
+  }
+}

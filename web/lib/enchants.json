@@ -1,0 +1,815 @@
+{
+ "version": 1,
+ "enchants": {
+  "protection": {
+   "name": "Protection",
+   "max": 4
+  },
+  "fire_protection": {
+   "name": "Fire Protection",
+   "max": 4
+  },
+  "blast_protection": {
+   "name": "Blast Protection",
+   "max": 4
+  },
+  "projectile_protection": {
+   "name": "Projectile Protection",
+   "max": 4
+  },
+  "respiration": {
+   "name": "Respiration",
+   "max": 3
+  },
+  "aqua_affinity": {
+   "name": "Aqua Affinity",
+   "max": 1
+  },
+  "thorns": {
+   "name": "Thorns",
+   "max": 3
+  },
+  "feather_falling": {
+   "name": "Feather Falling",
+   "max": 4
+  },
+  "depth_strider": {
+   "name": "Depth Strider",
+   "max": 3
+  },
+  "frost_walker": {
+   "name": "Frost Walker",
+   "max": 2
+  },
+  "soul_speed": {
+   "name": "Soul Speed",
+   "max": 3
+  },
+  "swift_sneak": {
+   "name": "Swift Sneak",
+   "max": 3
+  },
+  "sharpness": {
+   "name": "Sharpness",
+   "max": 5
+  },
+  "smite": {
+   "name": "Smite",
+   "max": 5
+  },
+  "bane_of_arthropods": {
+   "name": "Bane of Arthropods",
+   "max": 5
+  },
+  "knockback": {
+   "name": "Knockback",
+   "max": 2
+  },
+  "fire_aspect": {
+   "name": "Fire Aspect",
+   "max": 2
+  },
+  "looting": {
+   "name": "Looting",
+   "max": 3
+  },
+  "sweeping_edge": {
+   "name": "Sweeping Edge",
+   "max": 3
+  },
+  "efficiency": {
+   "name": "Efficiency",
+   "max": 5
+  },
+  "silk_touch": {
+   "name": "Silk Touch",
+   "max": 1
+  },
+  "fortune": {
+   "name": "Fortune",
+   "max": 3
+  },
+  "unbreaking": {
+   "name": "Unbreaking",
+   "max": 3
+  },
+  "mending": {
+   "name": "Mending",
+   "max": 1
+  },
+  "power": {
+   "name": "Power",
+   "max": 5
+  },
+  "punch": {
+   "name": "Punch",
+   "max": 2
+  },
+  "flame": {
+   "name": "Flame",
+   "max": 1
+  },
+  "infinity": {
+   "name": "Infinity",
+   "max": 1
+  },
+  "multishot": {
+   "name": "Multishot",
+   "max": 1
+  },
+  "piercing": {
+   "name": "Piercing",
+   "max": 4
+  },
+  "quick_charge": {
+   "name": "Quick Charge",
+   "max": 3
+  },
+  "impaling": {
+   "name": "Impaling",
+   "max": 5
+  },
+  "riptide": {
+   "name": "Riptide",
+   "max": 3
+  },
+  "loyalty": {
+   "name": "Loyalty",
+   "max": 3
+  },
+  "channeling": {
+   "name": "Channeling",
+   "max": 1
+  },
+  "luck_of_the_sea": {
+   "name": "Luck of the Sea",
+   "max": 3
+  },
+  "lure": {
+   "name": "Lure",
+   "max": 3
+  },
+  "density": {
+   "name": "Density",
+   "max": 5
+  },
+  "breach": {
+   "name": "Breach",
+   "max": 4
+  },
+  "wind_burst": {
+   "name": "Wind Burst",
+   "max": 3
+  },
+  "lunge": {
+   "name": "Lunge",
+   "max": 3
+  },
+  "binding_curse": {
+   "name": "Curse of Binding",
+   "max": 1,
+   "curse": true
+  },
+  "vanishing_curse": {
+   "name": "Curse of Vanishing",
+   "max": 1,
+   "curse": true
+  }
+ },
+ "exclusive": [
+  [
+   "sharpness",
+   "smite",
+   "bane_of_arthropods",
+   "density",
+   "breach"
+  ],
+  [
+   "protection",
+   "fire_protection",
+   "blast_protection",
+   "projectile_protection"
+  ],
+  [
+   "fortune",
+   "silk_touch"
+  ],
+  [
+   "depth_strider",
+   "frost_walker"
+  ],
+  [
+   "infinity",
+   "mending"
+  ],
+  [
+   "multishot",
+   "piercing"
+  ],
+  [
+   "riptide",
+   "loyalty"
+  ],
+  [
+   "riptide",
+   "channeling"
+  ]
+ ],
+ "kinds": {
+  "sword": {
+   "label": "Sword",
+   "group": "Weapons",
+   "enchants": [
+    "sharpness",
+    "smite",
+    "bane_of_arthropods",
+    "knockback",
+    "fire_aspect",
+    "looting",
+    "sweeping_edge",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_sword"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_sword"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_sword"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_sword"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_sword"
+    },
+    {
+     "label": "Stone",
+     "id": "stone_sword"
+    },
+    {
+     "label": "Wooden",
+     "id": "wooden_sword"
+    }
+   ]
+  },
+  "spear": {
+   "label": "Spear",
+   "group": "Weapons",
+   "enchants": [
+    "lunge",
+    "sharpness",
+    "smite",
+    "bane_of_arthropods",
+    "knockback",
+    "fire_aspect",
+    "looting",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_spear"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_spear"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_spear"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_spear"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_spear"
+    },
+    {
+     "label": "Stone",
+     "id": "stone_spear"
+    },
+    {
+     "label": "Wooden",
+     "id": "wooden_spear"
+    }
+   ]
+  },
+  "mace": {
+   "label": "Mace",
+   "group": "Weapons",
+   "enchants": [
+    "density",
+    "breach",
+    "smite",
+    "bane_of_arthropods",
+    "wind_burst",
+    "fire_aspect",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Mace",
+     "id": "mace"
+    }
+   ]
+  },
+  "trident": {
+   "label": "Trident",
+   "group": "Weapons",
+   "enchants": [
+    "impaling",
+    "riptide",
+    "loyalty",
+    "channeling",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Trident",
+     "id": "trident"
+    }
+   ]
+  },
+  "bow": {
+   "label": "Bow",
+   "group": "Weapons",
+   "enchants": [
+    "power",
+    "punch",
+    "flame",
+    "infinity",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Bow",
+     "id": "bow"
+    }
+   ]
+  },
+  "crossbow": {
+   "label": "Crossbow",
+   "group": "Weapons",
+   "enchants": [
+    "quick_charge",
+    "multishot",
+    "piercing",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Crossbow",
+     "id": "crossbow"
+    }
+   ]
+  },
+  "axe": {
+   "label": "Axe",
+   "group": "Tools",
+   "enchants": [
+    "sharpness",
+    "smite",
+    "bane_of_arthropods",
+    "efficiency",
+    "silk_touch",
+    "fortune",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_axe"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_axe"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_axe"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_axe"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_axe"
+    },
+    {
+     "label": "Stone",
+     "id": "stone_axe"
+    },
+    {
+     "label": "Wooden",
+     "id": "wooden_axe"
+    }
+   ]
+  },
+  "pickaxe": {
+   "label": "Pickaxe",
+   "group": "Tools",
+   "enchants": [
+    "efficiency",
+    "silk_touch",
+    "fortune",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_pickaxe"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_pickaxe"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_pickaxe"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_pickaxe"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_pickaxe"
+    },
+    {
+     "label": "Stone",
+     "id": "stone_pickaxe"
+    },
+    {
+     "label": "Wooden",
+     "id": "wooden_pickaxe"
+    }
+   ]
+  },
+  "shovel": {
+   "label": "Shovel",
+   "group": "Tools",
+   "enchants": [
+    "efficiency",
+    "silk_touch",
+    "fortune",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_shovel"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_shovel"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_shovel"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_shovel"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_shovel"
+    },
+    {
+     "label": "Stone",
+     "id": "stone_shovel"
+    },
+    {
+     "label": "Wooden",
+     "id": "wooden_shovel"
+    }
+   ]
+  },
+  "hoe": {
+   "label": "Hoe",
+   "group": "Tools",
+   "enchants": [
+    "efficiency",
+    "silk_touch",
+    "fortune",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_hoe"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_hoe"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_hoe"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_hoe"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_hoe"
+    },
+    {
+     "label": "Stone",
+     "id": "stone_hoe"
+    },
+    {
+     "label": "Wooden",
+     "id": "wooden_hoe"
+    }
+   ]
+  },
+  "shears": {
+   "label": "Shears",
+   "group": "Tools",
+   "enchants": [
+    "efficiency",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Shears",
+     "id": "shears"
+    }
+   ]
+  },
+  "fishing_rod": {
+   "label": "Fishing Rod",
+   "group": "Tools",
+   "enchants": [
+    "luck_of_the_sea",
+    "lure",
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Fishing Rod",
+     "id": "fishing_rod"
+    }
+   ]
+  },
+  "helmet": {
+   "label": "Helmet",
+   "group": "Armor",
+   "enchants": [
+    "protection",
+    "fire_protection",
+    "blast_protection",
+    "projectile_protection",
+    "thorns",
+    "unbreaking",
+    "mending",
+    "binding_curse",
+    "vanishing_curse",
+    "respiration",
+    "aqua_affinity"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_helmet"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_helmet"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_helmet"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_helmet"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_helmet"
+    },
+    {
+     "label": "Chainmail",
+     "id": "chainmail_helmet"
+    },
+    {
+     "label": "Leather",
+     "id": "leather_helmet"
+    },
+    {
+     "label": "Turtle Shell",
+     "id": "turtle_helmet"
+    }
+   ]
+  },
+  "chestplate": {
+   "label": "Chestplate",
+   "group": "Armor",
+   "enchants": [
+    "protection",
+    "fire_protection",
+    "blast_protection",
+    "projectile_protection",
+    "thorns",
+    "unbreaking",
+    "mending",
+    "binding_curse",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_chestplate"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_chestplate"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_chestplate"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_chestplate"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_chestplate"
+    },
+    {
+     "label": "Chainmail",
+     "id": "chainmail_chestplate"
+    },
+    {
+     "label": "Leather",
+     "id": "leather_chestplate"
+    }
+   ]
+  },
+  "leggings": {
+   "label": "Leggings",
+   "group": "Armor",
+   "enchants": [
+    "protection",
+    "fire_protection",
+    "blast_protection",
+    "projectile_protection",
+    "thorns",
+    "unbreaking",
+    "mending",
+    "binding_curse",
+    "vanishing_curse",
+    "swift_sneak"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_leggings"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_leggings"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_leggings"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_leggings"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_leggings"
+    },
+    {
+     "label": "Chainmail",
+     "id": "chainmail_leggings"
+    },
+    {
+     "label": "Leather",
+     "id": "leather_leggings"
+    }
+   ]
+  },
+  "boots": {
+   "label": "Boots",
+   "group": "Armor",
+   "enchants": [
+    "protection",
+    "fire_protection",
+    "blast_protection",
+    "projectile_protection",
+    "thorns",
+    "unbreaking",
+    "mending",
+    "binding_curse",
+    "vanishing_curse",
+    "feather_falling",
+    "depth_strider",
+    "frost_walker",
+    "soul_speed"
+   ],
+   "variants": [
+    {
+     "label": "Netherite",
+     "id": "netherite_boots"
+    },
+    {
+     "label": "Diamond",
+     "id": "diamond_boots"
+    },
+    {
+     "label": "Iron",
+     "id": "iron_boots"
+    },
+    {
+     "label": "Copper",
+     "id": "copper_boots"
+    },
+    {
+     "label": "Golden",
+     "id": "golden_boots"
+    },
+    {
+     "label": "Chainmail",
+     "id": "chainmail_boots"
+    },
+    {
+     "label": "Leather",
+     "id": "leather_boots"
+    }
+   ]
+  },
+  "shield": {
+   "label": "Shield",
+   "group": "Other",
+   "enchants": [
+    "unbreaking",
+    "mending",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Shield",
+     "id": "shield"
+    }
+   ]
+  },
+  "elytra": {
+   "label": "Elytra",
+   "group": "Other",
+   "enchants": [
+    "unbreaking",
+    "mending",
+    "binding_curse",
+    "vanishing_curse"
+   ],
+   "variants": [
+    {
+     "label": "Elytra",
+     "id": "elytra"
+    }
+   ]
+  }
+ }
+}
