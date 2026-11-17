@@ -3,7 +3,6 @@ package dev.hamish.survivalnotebook;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 
 import java.util.List;
@@ -11,38 +10,39 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Where everyone on the notebook is right now. Your mod sends your position every couple of seconds while you move
- * (if Share position is on), and the server passes everyone's on through the live connection. The server only keeps them
- * in memory and forgets them after two minutes; the Map tab here and on the website draws them.
+ * Where everyone on the notebook is. Your mod sends your position every couple of seconds while you move (if Share position
+ * is on) and marks you offline when you leave; the server keeps each player's last spot and passes changes on through the
+ * live connection. The Map tab here and on the website draws them: online players bright, offline ones dimmed where they left.
  */
 final class Players {
 	private Players() { }
 
-	record Pos(String uid, String name, String dim, double x, int y, double z, float yaw, long seen) { }
-	static final long TTL = 120_000;
-	private static final Map<String, Pos> others = new ConcurrentHashMap<>();
+	/** online: still sending (a live update in the last two minutes). seen: when we last heard about them, on this computer's clock. */
+	record Pos(String uid, String name, String dim, double x, int y, double z, float yaw, boolean online, long seen, String mcName, String mcUuid) {
+		boolean live() { return online && System.currentTimeMillis() - seen < ONLINE_FOR; }
+	}
+	static final long ONLINE_FOR = 120_000;
+	private static final Map<String, Pos> people = new ConcurrentHashMap<>();
 	private static String lastSent = "", sentTo = "";
 	private static long lastAt;
 	private static volatile boolean busy;
 
-	/** Everyone currently shared (yourself included, as the server sees you), newest first. */
+	/** Everyone with a position in this notebook, online first, then most recently seen. */
 	static List<Pos> all() {
-		long now = System.currentTimeMillis();
-		others.values().removeIf(p -> now - p.seen() > TTL);
-		return others.values().stream().sorted((a, b) -> Long.compare(b.seen(), a.seen())).toList();
+		return people.values().stream().sorted((a, b) -> a.live() != b.live() ? (a.live() ? -1 : 1) : Long.compare(b.seen(), a.seen())).toList();
 	}
 
-	/** Called every tick while in a world. Sends at most every 2 seconds, and only when you've moved (or every 30 seconds to stay listed). */
+	/** Called every tick while in a world. Sends at most every 2 seconds, and only when you've moved (or every 30 seconds to stay online). */
 	static void tick(Minecraft mc, int ticks) {
 		NbConfig c = NbConfig.get();
-		if (ticks % 40 != 7 || busy || mc.player == null || !c.connected() || c.notebookId.isBlank()) return;
-		if (!c.sharePosition) { leave(); return; }
+		if (ticks % 40 != 7 || busy || mc.player == null || !c.connected() || c.notebookId.isBlank() || !c.sharePosition) return;
 		Names.Spot h = Names.here(); if (h == null) return;
 		String key = h.dim() + " " + h.xyz();
 		long now = System.currentTimeMillis();
 		if (key.equals(lastSent) && c.notebookId.equals(sentTo) && now - lastAt < 30_000) return;
 		JsonObject b = new JsonObject();
 		b.addProperty("dim", h.dim()); b.addProperty("x", mc.player.getX()); b.addProperty("y", mc.player.getY()); b.addProperty("z", mc.player.getZ()); b.addProperty("yaw", mc.player.getYRot());
+		b.addProperty("mcName", mc.player.getName().getString()); b.addProperty("mcUuid", mc.player.getUUID().toString());   // for your face on the map
 		String nb = c.notebookId;
 		busy = true;
 		Api.EXEC.execute(() -> {
@@ -52,16 +52,24 @@ final class Players {
 		});
 	}
 
-	/** Left the world or switched sharing off: take yourself off everyone's map straight away. */
+	/** Left the world: you stay on the map where you were, shown as offline. */
 	static void leave() {
 		if (sentTo.isEmpty()) return;
 		String nb = sentTo; sentTo = ""; lastSent = "";
 		Api.EXEC.execute(() -> { try { Api.call("DELETE", "/notebooks/" + nb + "/pos", null); } catch (Api.ApiException ignored) { } });
 	}
 
-	/** Everyone who's on right now, when the live connection (re)opens or the notebook changes. */
+	/** Switched Share position off: take you off the map altogether. */
+	static void forget() {
+		NbConfig c = NbConfig.get();
+		String nb = c.notebookId; sentTo = ""; lastSent = "";
+		if (nb.isBlank() || !c.connected()) return;
+		Api.EXEC.execute(() -> { try { Api.call("DELETE", "/notebooks/" + nb + "/pos/me", null); } catch (Api.ApiException ignored) { } });
+	}
+
+	/** Everyone's last position, when the live connection (re)opens or the notebook changes. */
 	static void load(String nb) {
-		others.clear();
+		people.clear();
 		try {
 			JsonElement e = Api.ok(Api.call("GET", "/notebooks/" + nb + "/pos", null)).body();
 			if (e.isJsonArray()) for (JsonElement p : (JsonArray) e) if (p.isJsonObject()) put(p.getAsJsonObject());
@@ -72,10 +80,10 @@ final class Players {
 	static boolean onEvent(String json) {
 		if (!json.contains("\"pos\"")) return false;
 		try {
-			JsonObject o = JsonParser.parseString(json).getAsJsonObject();
+			JsonObject o = com.google.gson.JsonParser.parseString(json).getAsJsonObject();
 			if (!o.has("pos") || !o.get("pos").isJsonObject()) return false;
 			JsonObject p = o.getAsJsonObject("pos");
-			if (Notebook.bool(p, "gone")) others.remove(Notebook.str(p, "uid")); else put(p);
+			if (Notebook.bool(p, "gone")) people.remove(Notebook.str(p, "uid")); else put(p);
 			return true;
 		} catch (RuntimeException e) { return false; }
 	}
@@ -83,9 +91,14 @@ final class Players {
 	private static void put(JsonObject p) {
 		try {
 			String uid = Notebook.str(p, "uid"); if (uid.isEmpty()) return;
-			others.put(uid, new Pos(uid, Notebook.str(p, "name"), Notebook.str(p, "dim"), p.get("x").getAsDouble(), p.get("y").getAsInt(), p.get("z").getAsDouble(),
-				p.has("yaw") ? p.get("yaw").getAsFloat() : 0, System.currentTimeMillis()));
+			people.put(uid, new Pos(uid, Notebook.str(p, "name"), Notebook.str(p, "dim"), p.get("x").getAsDouble(), p.get("y").getAsInt(), p.get("z").getAsDouble(),
+				p.has("yaw") ? p.get("yaw").getAsFloat() : 0, Notebook.bool(p, "online"), System.currentTimeMillis() - (Notebook.bool(p, "online") ? 0 : age(p)),
+				Notebook.str(p, "mcName"), Notebook.str(p, "mcUuid")));
 		} catch (RuntimeException ignored) { }
+	}
+	/** How long ago the server last heard from an offline player, so "last seen" is right even though our clocks differ. */
+	private static long age(JsonObject p) {
+		try { return Math.max(0, Math.min(System.currentTimeMillis() - p.get("ts").getAsLong(), 365L * 86_400_000)); } catch (RuntimeException e) { return 0; }
 	}
 
 	/** The same colour for a player as on the website. */
@@ -94,5 +107,21 @@ final class Players {
 		long h = 7;
 		for (char ch : uid.toCharArray()) h = (h * 31 + ch) & 0xFFFFFFFFL;
 		return COLOURS[(int) (h % COLOURS.length)];
+	}
+
+	/** A player's face (their real skin, fetched by the game) with a frame in their colour; dimmed when they're offline. */
+	private static final Map<String, net.minecraft.world.item.component.ResolvableProfile> PROFILES = new ConcurrentHashMap<>();
+	static void face(net.minecraft.client.gui.GuiGraphicsExtractor g, String mcUuid, int x, int y, int size, int frame, boolean dim) {
+		g.fill(x - 2, y - 2, x + size + 2, y + size + 2, 0xFF000000);
+		g.fill(x - 1, y - 1, x + size + 1, y + size + 1, frame);
+		boolean drawn = false;
+		try {
+			java.util.UUID id = java.util.UUID.fromString(mcUuid);
+			var prof = PROFILES.computeIfAbsent(mcUuid, k -> net.minecraft.world.item.component.ResolvableProfile.createUnresolved(id));
+			net.minecraft.client.gui.components.PlayerFaceExtractor.extractRenderState(g, prof, x, y, size);
+			drawn = true;
+		} catch (RuntimeException ignored) { }
+		if (!drawn) g.fill(x, y, x + size, y + size, frame);
+		if (dim) g.fill(x, y, x + size, y + size, 0x99202020);
 	}
 }

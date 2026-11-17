@@ -36,6 +36,10 @@ const MIGRATIONS: ((db: DB) => void)[] = [
       create index if not exists idx_push_user on push_subs(user);
       create table if not exists kv(k text primary key, v text not null);`)
   },
+  // 3.8: each player's last position on the map (shown greyed out once they're offline), with their Minecraft name and UUID for their face.
+  db => db.exec(`
+    create table if not exists positions(nb text not null, user text not null, dim text not null, x real not null, y integer not null, z real not null, yaw integer not null,
+      ts integer not null, online integer not null default 1, mc_name text not null default '', mc_uuid text not null default '', primary key(nb, user));`),
 ]
 
 export function openDb(path: string): DB {

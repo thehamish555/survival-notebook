@@ -58,7 +58,7 @@ export const notebookRoutes = (ctx: Ctx) => {
 
   r.delete('/notebooks/:id', auth, c => {
     const id = c.req.param('id'); if (getRole(db, id, c.get('uid')) !== 'owner') return c.json({ error: 'forbidden' }, 403)
-    db.transaction(() => { db.prepare('delete from notebooks where id=?').run(id); for (const t of ['sections', 'members', 'files', 'activity', 'invites', 'map_tiles']) db.prepare(`delete from ${t} where nb=?`).run(id) })()
+    db.transaction(() => { db.prepare('delete from notebooks where id=?').run(id); for (const t of ['sections', 'members', 'files', 'activity', 'invites', 'map_tiles', 'positions']) db.prepare(`delete from ${t} where nb=?`).run(id) })()
     return c.json({ ok: true })
   })
   return r

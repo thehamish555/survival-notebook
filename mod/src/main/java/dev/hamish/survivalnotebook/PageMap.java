@@ -111,6 +111,15 @@ final class PageMap {
 		s.pill(x + w - 20, y + 5, 15, 15, "\u2715", p.secondary, () -> { selected = ""; s.rebuild(); }, true);
 	}
 
+	/** A small arrowhead just outside a player's face, pointing the way they're looking. */
+	private static void pointer(GuiGraphicsExtractor g, int px, int pz, float yawDeg, int col) {
+		double yaw = Math.toRadians(yawDeg), dx = -Math.sin(yaw), dz = Math.cos(yaw), nx = -dz, nz = dx;
+		for (int r = 8; r <= 11; r++) {
+			int half = 11 - r;   // wide at the base, one pixel at the tip
+			for (int w = -half; w <= half; w++) { int x = px + (int) Math.round(dx * r + nx * w), z = pz + (int) Math.round(dz * r + nz * w); g.fill(x, z, x + 1, z + 1, col); }
+		}
+	}
+
 	private static int sx(double x) { return (int) Math.round(ax + aw / 2.0 + (x - cx) * scale); }
 	private static int sz(double z) { return (int) Math.round(ay + ah / 2.0 + (z - cz) * scale); }
 
@@ -137,36 +146,35 @@ final class PageMap {
 		}
 		String tracked = NbConfig.get().trackedPlace;
 		JsonObject hover = pinAt(mx, my);
-		for (JsonObject o : Notebook.rows("coords")) {
+		for (JsonObject o : Notebook.rows("coords")) {   // places: the same icon as their category on the Places tab
 			double[] at = xyz(Notebook.str(o, dim));
 			if (at == null) continue;
 			int px = sx(at[0]), pz = sz(at[2]);
 			boolean on = Notebook.str(o, "id").equals(tracked), hov = o == hover;
-			if (on || hov) g.fill(px - 4, pz - 4, px + 5, pz + 5, on ? p.gold : p.ink);
-			g.fill(px - 3, pz - 3, px + 4, pz + 4, 0xFF000000);
-			g.fill(px - 2, pz - 2, px + 3, pz + 3, Ui.cat(Notebook.str(o, "cat")).fg());
+			if (on || hov) { g.fill(px - 8, pz - 8, px + 8, pz + 8, on ? p.gold : p.ink); g.fill(px - 7, pz - 7, px + 7, pz + 7, 0xCC000000); }
+			g.pose().pushMatrix(); g.pose().translate(px - 6, pz - 6); g.pose().scale(0.75f, 0.75f);
+			Compat.drawItem(g, PagePlaces.CAT_ICON.getOrDefault(Notebook.str(o, "cat"), "paper"), 0, 0);
+			g.pose().popMatrix();
 			if (scale >= 0.5 || hov || on) {
 				String name = Notebook.str(o, "name").isBlank() ? "Unnamed place" : Notebook.str(o, "name");
-				g.text(font, (on ? "> " : "") + name, px + 6, pz - 4, on ? p.gold : 0xFFFFFFFF, true);
+				g.text(font, (on ? "> " : "") + name, px + 9, pz - 4, on ? p.gold : 0xFFFFFFFF, true);
 			}
 		}
-		for (Players.Pos o : Players.all()) {   // your team: an arrow the way they face, with their name, in the same colour as on the website
+		for (Players.Pos o : Players.all()) {   // your team: their face in their colour, a pointer the way they face; dimmed where they logged off
 			if (!o.dim().equals(dim) || o.uid().equals(Notebook.userId)) continue;
 			int px = sx(o.x()), pz = sz(o.z()), col = Players.colour(o.uid());
-			double yaw = Math.toRadians(o.yaw()), dx = -Math.sin(yaw), dz = Math.cos(yaw);
-			for (int i = 3; i <= 8; i++) { int lx = px + (int) Math.round(dx * i), lz = pz + (int) Math.round(dz * i); g.fill(lx, lz, lx + 1, lz + 1, col); }
-			g.fill(px - 3, pz - 3, px + 4, pz + 4, 0xFF000000);
-			g.fill(px - 2, pz - 2, px + 3, pz + 3, col);
-			g.text(font, o.name(), px - font.width(o.name()) / 2, pz - 14, col, true);   // above, so it never sits on a place name
+			boolean live = o.live();
+			if (live) pointer(g, px, pz, o.yaw(), col);
+			Players.face(g, o.mcUuid(), px - 5, pz - 5, 10, live ? col : 0xFF6B6F78, !live);
+			String label = live ? o.name() : o.name() + " · " + Ui.ago(o.seen());
+			g.text(font, label, px - font.width(label) / 2, pz - 19, live ? col : p.mut, true);   // above, so it never sits on a place name
 		}
 		var pl = Minecraft.getInstance().player;
 		Names.Spot here = Names.here();
-		if (pl != null && here != null && here.dim().equals(dim)) {   // you: a white square with a line the way you're facing
+		if (pl != null && here != null && here.dim().equals(dim)) {   // you: your face in a white frame, pointing the way you're facing
 			int px = sx(pl.getX()), pz = sz(pl.getZ());
-			double yaw = Math.toRadians(pl.getYRot()), dx = -Math.sin(yaw), dz = Math.cos(yaw);
-			for (int i = 3; i <= 9; i++) { int lx = px + (int) Math.round(dx * i), lz = pz + (int) Math.round(dz * i); g.fill(lx, lz, lx + 1, lz + 1, 0xFFFFFFFF); }
-			g.fill(px - 3, pz - 3, px + 4, pz + 4, 0xFF000000);
-			g.fill(px - 2, pz - 2, px + 3, pz + 3, 0xFFFFFFFF);
+			pointer(g, px, pz, pl.getYRot(), 0xFFFFFFFF);
+			Players.face(g, pl.getUUID().toString(), px - 5, pz - 5, 10, 0xFFFFFFFF, false);
 		}
 		g.disableScissor();
 		if (tiles.isEmpty()) {

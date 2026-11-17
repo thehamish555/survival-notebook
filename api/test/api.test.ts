@@ -200,16 +200,24 @@ test('invite links: owner makes one, a stranger joins with it, expiry and revoke
   assert.equal((await call('GET', `/invites/${again}`)).status, 404)                                                     // revoked
   assert.equal((await call('POST', `/notebooks/${nb}/invites`, { days: 3 }, a.token)).status, 400)                      // only 1, 7 or 30
 })
-test('live positions: members share where they are, outsiders cannot, leaving removes it', async () => {
+test('positions: members share where they are, the last spot stays after they leave, outsiders cannot', async () => {
   const { call, user, notebook } = mk(), a = await user('alice'), b = await user('bob'), c = await user('carol'), nb = await notebook(a.token)
   await call('POST', `/notebooks/${nb}/members`, { email: 'bob@x.com', role: 'viewer' }, a.token)
   const mod = (await call('POST', '/me/tokens', { name: 'mod' }, b.token)).json.token
-  assert.equal((await call('PUT', `/notebooks/${nb}/pos`, { dim: 'nether', x: 12.345, y: 70.6, z: -8, yaw: 91.4 }, mod)).status, 200)   // the mod sends it
-  const list = (await call('GET', `/notebooks/${nb}/pos`, undefined, a.token)).json
-  assert.equal(list.length, 1); assert.deepEqual([list[0].name, list[0].dim, list[0].x, list[0].y, list[0].yaw], ['bob', 'nether', 12.3, 71, 91])
+  assert.equal((await call('PUT', `/notebooks/${nb}/pos`, { dim: 'nether', x: 12.345, y: 70.6, z: -8, yaw: 91.4, mcName: 'Bob_1', mcUuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5' }, mod)).status, 200)
+  let list = (await call('GET', `/notebooks/${nb}/pos`, undefined, a.token)).json
+  assert.equal(list.length, 1); assert.deepEqual([list[0].name, list[0].dim, list[0].x, list[0].y, list[0].yaw, list[0].online, list[0].mcName], ['bob', 'nether', 12.3, 71, 91, true, 'Bob_1'])
   assert.equal((await call('PUT', `/notebooks/${nb}/pos`, { dim: 'ow', x: 0, y: 0, z: 0 }, c.token)).status, 404)                        // not a member
   assert.equal((await call('PUT', `/notebooks/${nb}/pos`, { dim: 'moon', x: 0, y: 0, z: 0 }, b.token)).status, 400)
   assert.equal((await call('GET', `/notebooks/${nb}/pos`, undefined, c.token)).status, 404)
-  await call('DELETE', `/notebooks/${nb}/pos`, undefined, mod)
+  assert.equal((await call('GET', `/notebooks/${nb}/skin/0123`, undefined, a.token)).status, 404)                                    // not a uuid
+  assert.equal((await call('GET', `/notebooks/${nb}/skin/11111111-2222-3333-4444-555555555555`, undefined, a.token)).status, 404)    // nobody here has it
+  await call('DELETE', `/notebooks/${nb}/pos`, undefined, mod)                                                                        // left the world
+  list = (await call('GET', `/notebooks/${nb}/pos`, undefined, a.token)).json
+  assert.equal(list.length, 1); assert.equal(list[0].online, false); assert.equal(list[0].mcName, 'Bob_1')
+  await call('DELETE', `/notebooks/${nb}/pos/me`, undefined, mod)                                                                     // sharing off: gone
+  assert.equal((await call('GET', `/notebooks/${nb}/pos`, undefined, a.token)).json.length, 0)
+  await call('PUT', `/notebooks/${nb}/pos`, { dim: 'ow', x: 1, y: 2, z: 3 }, mod)
+  await call('DELETE', `/notebooks/${nb}/members/${b.id}`, undefined, a.token)                                                        // removed from the notebook
   assert.equal((await call('GET', `/notebooks/${nb}/pos`, undefined, a.token)).json.length, 0)
 })

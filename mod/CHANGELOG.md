@@ -1,3 +1,9 @@
+## 1.4.0 – Feature
+- Team on the map: players show with their own face in their colour and a pointer for where they're looking. Everyone's last spot stays after they log off, dimmed, with when they were last seen.
+- Places on the map use the same icons as on the Places tab.
+- Shopping list: potions and tipped arrows count exactly, so a Potion of Fire Resistance only counts towards fire resistance.
+- Turning Share position off removes you from the map completely; just leaving the world leaves you there as offline.
+
 ## 1.3.0 – Feature
 - See your team on the map: everyone with the mod shows on the Map tab as an arrow with their name, live, and on the website too. Turn it off with Share position in Settings > Sync & privacy.
 - Map: a faint grid moves with the map, so dragging shows even where nothing is mapped yet, and clicking a place's name picks it, not just its square.

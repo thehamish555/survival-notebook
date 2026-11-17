@@ -73,7 +73,7 @@ final class InventoryScanner {
 
 	private static void add(ItemStack s, Map<String, Integer> items, Map<String, Integer> books, int depth) {
 		if (s == null || s.isEmpty()) return;
-		items.merge(Compat.itemId(s), s.getCount(), Integer::sum);
+		items.merge(Compat.shopId(s), s.getCount(), Integer::sum);   // potions keep their effect, so the shopping list matches exactly
 		ItemEnchantments stored = s.getOrDefault(DataComponents.STORED_ENCHANTMENTS, ItemEnchantments.EMPTY);
 		for (var e : stored.entrySet()) {
 			String key = e.getKey().unwrapKey().map(Object::toString).orElse("");

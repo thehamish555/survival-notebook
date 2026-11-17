@@ -21,6 +21,7 @@ export const LINKS: [string, [string, string, string][]][] = [
 ]
 
 export const CHANGELOG: [string, string, string[]][] = [
+  ['3.8.0', 'November 17th, 2026', ['Feature:', 'Map: your team shows with their Minecraft faces, a pointer for where they are looking, and everyone’s last spot stays after they log off, dimmed with when they were last seen.', 'Places on the map use their category icons, the same as on the Coordinates tab.', 'Shopping list: potions and tipped arrows count exactly, so carrying a Potion of Healing only counts towards Potion of Healing.']],
   ['3.7.0', 'November 17th, 2026', ['Feature:', 'See your team live on the Map tab: everyone in game with the mod shows as an arrow with their name, with an Online now list that finds them on the map. Positions are never saved, and each player can turn it off in the mod.', 'Potions, splash and lingering potions and tipped arrows come in every effect\'s colour, like Potion of Healing and Arrow of Poison.', 'Fix:', 'The stonecutter\'s saw is grey, not green.', 'The shield fits in its icon, and the enchantment glint moves slowly like in game.']],
   ['3.6.0', 'November 17th, 2026', ['Feature:', 'Icon clean-up: the icon list only has real items now, so leftover pieces like overlays, arrow tips, open bundle halves and clock frames are gone.', 'Animated icons: the clock turns, compasses spin, the bow and crossbow draw back, and blocks like sea lanterns, magma, prismarine and sculk move like they do in game.', 'Enchanted books, written books, the enchanted golden apple, nether stars and other shiny items have the enchantment glint.', 'Every item has an icon, including the shield, decorated pot, dragon head and copper golem statues, all drawn in 3D like the game. Tridents and spears show their inventory look.']],
   ['3.5.2', 'November 17th, 2026', ['Fix:', 'Item icons no longer have a glowing edge in dark mode.', 'Leather armour, potions, tipped arrows and other items the game colours now show their real colours instead of grey.', 'The light and dark mode button has its own pixel sun and moon.']],
@@ -53,7 +54,7 @@ export const TONES = {
   role: { owner: 'green', editor: 'blue', viewer: 'gray' },
 } as Record<string, Record<string, string>>
 
-export const CAT_ICON: Record<string, string> = { Important: 'nether_star', Farms: 'wheat', Biomes: 'spyglass', Structures: 'brick', Other: 'paper' }
+export const CAT_ICON: Record<string, string> = { Important: 'nether_star', Farms: 'wheat', Biomes: 'spyglass', Structures: 'bricks', Other: 'paper' }
 export const TAB_ICON: Record<string, string> = { Home: 'oak_sign', Coordinates: 'map', Enchantments: 'enchanted_book', Deaths: 'totem_of_undying', Stats: 'experience_bottle', 'To-Do': 'writable_book', Farms: 'wheat', Notes: 'book' }
 export const ENCH_INDEX = (() => {
   const m: Record<string, { name: string; max: number; groups: string[] }> = {}

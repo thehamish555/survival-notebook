@@ -83,7 +83,7 @@ export function useNotebook(id: string) {
     api('/me').then(u => { me = u.id; setMeId(u.id); saveLocal('sn_me', u.id) }).catch(e => { if (isOffline(e)) setMeId(readLocal('sn_me')?.v || ''); else location.href = '/' })
     load(); loadActivity()
     api(`/notebooks/${id}/pos`).then((ps: any[]) => setPlayers(Array.isArray(ps) ? ps : [])).catch(() => {})
-    const stale = setInterval(() => setPlayers(ps => ps.filter(p => Date.now() - p.ts < 120_000)), 15000)
+    const stale = setInterval(() => setPlayers(ps => ps.map(p => (p.online && Date.now() - p.ts > 120_000 ? { ...p, online: false } : p))), 15000)   // quiet for 2 minutes: offline
 
     const es = new EventSource(eventsUrl(id))
     let opened = false
@@ -92,7 +92,7 @@ export function useNotebook(id: string) {
     const poll = setInterval(() => { if (document.visibilityState === 'visible' && es.readyState !== EventSource.OPEN) load() }, 20000)   // safety net if the live stream can't stay connected
     es.onmessage = e => {
       const m = JSON.parse(e.data)
-      if (m.pos) { setPlayers(ps => [...ps.filter(p => p.uid !== m.pos.uid), ...(m.pos.gone ? [] : [{ ...m.pos, ts: Date.now() }])]); return }   // someone moved
+      if (m.pos) { setPlayers(ps => [...ps.filter(p => p.uid !== m.pos.uid), ...(m.pos.gone ? [] : [{ ...m.pos, ts: m.pos.online ? Date.now() : m.pos.ts }])]); return }   // someone moved, logged off, or stopped sharing
       if (m.map) { setMapRev(v => v + 1); if (!mapSeen.current) load(); return }   // the first tiles make the Map tab appear   // new map tiles from the mod
       if (!m.cid || m.cid !== clientId()) load(m.section); bumpActivity()   // apply everything except this tab's own echo
     }

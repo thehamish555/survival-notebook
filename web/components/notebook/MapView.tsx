@@ -5,6 +5,8 @@ import { DIM_LABEL, type Dim } from '@/lib/coords'
 import { PACKED_RGBA } from '@/lib/mapcolors'
 import { useConfirm } from '@/lib/ui'
 import { Chips } from '@/components/notebook/widgets'
+import { CAT_ICON } from '@/lib/data'
+import { timeAgo } from '@/lib/time'
 
 const TILE = 128
 type TileInfo = { dim: Dim; tx: number; tz: number; updated: number }
@@ -35,6 +37,23 @@ export function MapView({ id, rev, places, role, onPlace, players = [], meId = '
   useEffect(() => { api(`/notebooks/${id}/map`).then((t: TileInfo[]) => { setTiles(t); if (t.length && !t.some(x => x.dim === dim)) setDim(t[0].dim) }).catch(e => setErr(e.message)) }, [id, rev])   // eslint-disable-line react-hooks/exhaustive-deps
   const dims = (['ow', 'nether', 'end'] as Dim[]).filter(k => tiles.some(t => t.dim === k) || players.some(p => p.dim === k))
   const here = players.filter(p => p.dim === dim)
+  // Pictures the canvas draws: category icons for places, and each player's skin (their face is cut from it). Loaded once, then the map redraws.
+  const pics = useRef(new Map<string, CanvasImageSource | null>())
+  const pic = (key: string, load: () => Promise<CanvasImageSource>) => {
+    if (!pics.current.has(key)) { pics.current.set(key, null); load().then(img => { pics.current.set(key, img); redraw(n => n + 1) }).catch(() => {}) }
+    return pics.current.get(key) || null
+  }
+  const iconPic = (name: string) => pic('icon:' + name, () => new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = `/mc/item/${name}.png` }))
+  // A face: the skin's head front plus its hat layer. Old 64x32 skins fill the hat with solid colour, and the game skips a hat with no see-through pixels, so we do too.
+  const skinPic = (uuid: string) => (uuid ? pic('skin:' + uuid, () => apiBytes(`/notebooks/${id}/skin/${uuid}`).then(b => createImageBitmap(new Blob([b], { type: 'image/png' }))).then(img => {
+    const c = document.createElement('canvas'); c.width = c.height = 8
+    const g = c.getContext('2d')!; g.drawImage(img, 8, 8, 8, 8, 0, 0, 8, 8)
+    const hat = document.createElement('canvas'); hat.width = hat.height = 8
+    const h = hat.getContext('2d')!; h.drawImage(img, 40, 8, 8, 8, 0, 0, 8, 8)
+    const a = h.getImageData(0, 0, 8, 8).data
+    if ([...a.keys()].some(i => i % 4 === 3 && a[i] < 255)) g.drawImage(hat, 0, 0)
+    return c
+  })) : null)
   const mine = tiles.filter(t => t.dim === dim)
 
   // Start centred on the middle of what has been mapped in this dimension
@@ -65,20 +84,29 @@ export function MapView({ id, rev, places, role, onPlace, players = [], meId = '
     }
     ctx.font = `${12 * devicePixelRatio}px system-ui, sans-serif`
     for (const { p, at } of pins) {
-      const x = sx(at[0] + 0.5), y = sz(at[2] + 0.5), r = 5 * devicePixelRatio
-      ctx.fillStyle = '#f2c14e'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2 * devicePixelRatio
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+      const x = sx(at[0] + 0.5), y = sz(at[2] + 0.5), r = 9 * devicePixelRatio, img = iconPic(CAT_ICON[p.cat] || 'paper')
+      ctx.fillStyle = '#000a'; ctx.beginPath(); ctx.arc(x, y, r + 2 * devicePixelRatio, 0, Math.PI * 2); ctx.fill()
+      if (img) ctx.drawImage(img, x - r, y - r, r * 2, r * 2)
+      else { ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(x, y, 4 * devicePixelRatio, 0, Math.PI * 2); ctx.fill() }
       const label = p.name || 'Unnamed place'; ctx.lineWidth = 3 * devicePixelRatio; ctx.strokeText(label, x + r + 3, y + 4); ctx.fillStyle = '#fff'; ctx.fillText(label, x + r + 3, y + 4)
     }
-    for (const pl of here) {   // team members: an arrow the way they face, with their name
-      const x = sx(pl.x), y = sz(pl.z), r = 7 * devicePixelRatio, a = (pl.yaw || 0) * Math.PI / 180
-      const col = playerColour(pl.uid), tip = [x - Math.sin(a) * r * 1.4, y + Math.cos(a) * r * 1.4]
-      ctx.fillStyle = col; ctx.strokeStyle = '#000'; ctx.lineWidth = 2 * devicePixelRatio
-      ctx.beginPath(); ctx.moveTo(tip[0], tip[1])
-      ctx.lineTo(x - Math.sin(a + 2.5) * r, y + Math.cos(a + 2.5) * r); ctx.lineTo(x, y); ctx.lineTo(x - Math.sin(a - 2.5) * r, y + Math.cos(a - 2.5) * r); ctx.closePath(); ctx.fill(); ctx.stroke()
-      const label = pl.uid === meId ? `${pl.name} (you)` : pl.name
-      ctx.font = `600 ${12 * devicePixelRatio}px system-ui, sans-serif`; ctx.lineWidth = 3 * devicePixelRatio; ctx.strokeText(label, x + r + 4, y - r)
-      ctx.fillStyle = col; ctx.fillText(label, x + r + 4, y - r)
+    for (const pl of [...here].sort((a, b) => Number(a.online) - Number(b.online))) {   // offline first, so people online draw on top
+      const d = devicePixelRatio, x = sx(pl.x), y = sz(pl.z), f = 18 * d, col = pl.online ? playerColour(pl.uid) : '#6b6f78', a = (pl.yaw || 0) * Math.PI / 180
+      ctx.globalAlpha = pl.online ? 1 : 0.6
+      if (pl.online) {   // pointer: a little triangle just outside the frame
+        const dx = -Math.sin(a), dz = Math.cos(a), nx = -dz, nz = dx, r0 = f / 2 + 4 * d, r1 = r0 + 7 * d
+        ctx.fillStyle = col; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * d
+        ctx.beginPath(); ctx.moveTo(x + dx * r1, y + dz * r1); ctx.lineTo(x + dx * r0 + nx * 5 * d, y + dz * r0 + nz * 5 * d); ctx.lineTo(x + dx * r0 - nx * 5 * d, y + dz * r0 - nz * 5 * d); ctx.closePath(); ctx.fill(); ctx.stroke()
+      }
+      ctx.fillStyle = '#000'; ctx.fillRect(x - f / 2 - 3 * d, y - f / 2 - 3 * d, f + 6 * d, f + 6 * d)
+      ctx.fillStyle = col; ctx.fillRect(x - f / 2 - 2 * d, y - f / 2 - 2 * d, f + 4 * d, f + 4 * d)
+      const skin = skinPic(pl.mcUuid)
+      if (skin) ctx.drawImage(skin, x - f / 2, y - f / 2, f, f)
+      else { ctx.fillStyle = '#20232a'; ctx.fillRect(x - f / 2, y - f / 2, f, f); ctx.fillStyle = col; ctx.font = `700 ${11 * d}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.fillText((pl.name || '?')[0].toUpperCase(), x, y + 4 * d); ctx.textAlign = 'left' }
+      const label = (pl.uid === meId ? `${pl.name} (you)` : pl.name) + (pl.online ? '' : ` · ${timeAgo(pl.ts)}`)
+      ctx.font = `600 ${12 * d}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.lineWidth = 3 * d; ctx.strokeStyle = '#000'
+      ctx.strokeText(label, x, y - f / 2 - 8 * d); ctx.fillStyle = pl.online ? col : '#c8cbd2'; ctx.fillText(label, x, y - f / 2 - 8 * d); ctx.textAlign = 'left'
+      ctx.globalAlpha = 1
     }
   }, [mine, pins, id, here, meId])
   useEffect(draw)
@@ -113,12 +141,12 @@ export function MapView({ id, rev, places, role, onPlace, players = [], meId = '
     <div className="row"><h2 className="grow">Map</h2>
       {dims.length > 1 && <Chips label="Dimension" noAll value={dim} opts={dims.map(k => [k, DIM_LABEL[k]])} onChange={(v: Dim) => setDim(v)} />}
       <button className="ghost" onClick={() => zoom(1.5)} title="Zoom in">+</button><button className="ghost" onClick={() => zoom(1 / 1.5)} title="Zoom out">−</button></div>
-    <p className="mut">Drawn by the mod as players explore. Anyone can turn it off with Share map in the mod's Settings. Pins are your saved places in {DIM_LABEL[dim]}. Click one to open it. Arrows are teammates in game right now (each can turn it off with Share position in the mod).</p>
+    <p className="mut">Drawn by the mod as players explore. Anyone can turn it off with Share map in the mod's Settings. Pins are your saved places in {DIM_LABEL[dim]}. Click one to open it. Faces are your team: bright while they're in game, dimmed where they last were (each can turn it off with Share position in the mod).</p>
     {err && <p className="err">{err}</p>}
-    {players.length > 0 && <div className="row" style={{ marginBottom: 8 }}><span className="mut small">Online now</span>
-      {players.map(p => <button key={p.uid} type="button" className="chip playerchip" title={`${DIM_LABEL[p.dim as Dim]} ${Math.floor(p.x)} ${p.y} ${Math.floor(p.z)}. Click to find them on the map.`}
+    {players.length > 0 && <div className="row" style={{ marginBottom: 8 }}><span className="mut small">Team</span>
+      {[...players].sort((a, b) => Number(b.online) - Number(a.online) || b.ts - a.ts).map(p => <button key={p.uid} type="button" className={`chip playerchip ${p.online ? '' : 'off'}`} title={`${p.online ? 'Online now' : `Offline, last seen ${timeAgo(p.ts)}`}. ${DIM_LABEL[p.dim as Dim]} ${Math.floor(p.x)} ${p.y} ${Math.floor(p.z)}. Click to find them on the map.`}
         onClick={() => { setDim(p.dim); view.current = { x: p.x, z: p.z, scale: Math.max(1, view.current?.scale || 1) }; redraw(n => n + 1) }}>
-        <i style={{ background: playerColour(p.uid) }} />{p.uid === meId ? `${p.name} (you)` : p.name}<span className="mut small">{DIM_LABEL[p.dim as Dim]} {Math.floor(p.x)} {p.y} {Math.floor(p.z)}</span></button>)}</div>}
+        <i style={{ background: p.online ? playerColour(p.uid) : 'transparent', borderColor: playerColour(p.uid) }} />{p.uid === meId ? `${p.name} (you)` : p.name}<span className="mut small">{DIM_LABEL[p.dim as Dim]} {Math.floor(p.x)} {p.y} {Math.floor(p.z)}</span></button>)}</div>}
     <div className="mapwrap">
       <canvas ref={canvas} className="mapcanvas" onPointerDown={e => { drag.current = { x: e.clientX, y: e.clientY, moved: false }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }}
         onPointerMove={e => {

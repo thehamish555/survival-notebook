@@ -197,6 +197,23 @@ final class Compat {
 		return id.startsWith("minecraft:") ? id.substring(10) : id;
 	}
 
+	/** The potion effects the website has coloured icons for (long and strong versions count as the same effect). */
+	private static final java.util.Set<String> EFFECTS = java.util.Set.of("night_vision", "invisibility", "leaping", "fire_resistance", "swiftness", "slowness", "turtle_master",
+		"water_breathing", "healing", "harming", "poison", "regeneration", "strength", "weakness", "luck", "slow_falling", "wind_charged", "weaving", "oozing", "infested");
+
+	/** The name used on the shopping list: the item id, except potions and tipped arrows keep their effect (potion_fire_resistance), so lists match exactly. */
+	static String shopId(ItemStack s) {
+		String id = itemId(s);
+		if (!id.equals("potion") && !id.equals("splash_potion") && !id.equals("lingering_potion") && !id.equals("tipped_arrow")) return id;
+		try {
+			net.minecraft.world.item.alchemy.PotionContents pc = s.get(net.minecraft.core.component.DataComponents.POTION_CONTENTS);
+			if (pc == null || pc.potion().isEmpty()) return id;
+			Identifier key = BuiltInRegistries.POTION.getKey(pc.potion().get().value());
+			String effect = key == null ? "" : key.getPath().replaceFirst("^(long|strong)_", "");
+			return EFFECTS.contains(effect) ? id + "_" + effect : id;
+		} catch (RuntimeException e) { return id; }
+	}
+
 	// ---- map: one byte per block column, in the same packing vanilla maps use (colour id * 4 + shade). 0 = nothing seen.
 
 	/** Top visible block of a column: y in the high bits, map colour id in the low byte. -1 if nothing has a map colour. */

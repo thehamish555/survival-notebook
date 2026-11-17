@@ -29,7 +29,7 @@ export const memberRoutes = (ctx: Ctx) => {
     const id = c.req.param('id'), target = c.req.param('uid'), me = c.get('uid')
     if (getRole(db, id, target) === 'owner') return c.json({ error: 'The owner cannot be removed' }, 400)
     if (getRole(db, id, me) !== 'owner' && me !== target) return c.json({ error: 'forbidden' }, 403)
-    db.prepare('delete from members where nb=? and user=?').run(id, target); unassign(db, bus, id, target)
+    db.prepare('delete from members where nb=? and user=?').run(id, target); db.prepare('delete from positions where nb=? and user=?').run(id, target); unassign(db, bus, id, target)
     bus.emit(id, { members: true, by: me, cid: c.req.header('x-client-id') || '' }); return c.json({ ok: true })
   })
 

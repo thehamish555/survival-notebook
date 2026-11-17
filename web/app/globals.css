@@ -471,3 +471,4 @@ td.grip{width:26px;letter-spacing:0;font-size:0;line-height:0}td.grip svg{opacit
 
 [data-theme=light] .bar,[data-theme=light] .statrow .sbar{background:#0000001c}   /* the empty part of a progress bar shows in light mode too */
 .playerchip{display:inline-flex;align-items:center;gap:6px}.playerchip i{width:9px;height:9px;border-radius:50%;flex:none}.playerchip .small{margin-left:4px}
+.playerchip i{border:2px solid transparent;box-sizing:border-box}.playerchip.off{opacity:.75}
