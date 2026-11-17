@@ -1,8 +1,8 @@
 """Generates the brand art from ONE source of truth: the pixel grids below.
-   Outputs (logo only): components/pixel-data.ts, app/icon.svg, public/brand/*.png, public/og.png, and the mod icon.
-   Run from web/:  python3 scripts/gen-art.py   (needs Pillow; add --icons to skip the Open Graph card)"""
-import json, os, sys, urllib.request
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+   Outputs (logo only): components/pixel-data.ts, app/icon.svg, public/brand/*.png and the mod icon. The link preview picture comes from scripts/og.mjs.
+   Run from web/:  python3 scripts/gen-art.py   (needs Pillow)"""
+import json, os, sys
+from PIL import Image, ImageDraw
 
 PAL = {'a': '#f2c14e', 'k': '#14161a', 'g': '#5da83a', 'G': '#86d05a', 'd': '#3a6b24', 'c': '#efe6d2', 'y': '#f2c14e', 'p': '#b07cff', 'P': '#e3d0ff',
        'r': '#d9473a', 'b': '#5aa9ff', 'o': '#d98a3a', 'w': '#efe6d2', 'n': '#8a5b25'}
@@ -85,30 +85,6 @@ maskable(512, 18).save('public/brand/maskable-512.png'); badge(96).save('public/
 maskable(180, 9).save('app/apple-icon.png')   # iOS rounds the corners itself
 os.makedirs('../mod/src/main/resources/assets/survival_notebook', exist_ok=True)
 tile(128, 6).save('../mod/src/main/resources/assets/survival_notebook/icon.png')
-if '--icons' in sys.argv: print('ok'); sys.exit()
-
-# ---- Open Graph card
-def font(sz):
-    p = '/tmp/PixelifySans.ttf'
-    if not os.path.exists(p):
-        try: urllib.request.urlretrieve('https://raw.githubusercontent.com/google/fonts/main/ofl/pixelifysans/PixelifySans%5Bwght%5D.ttf', p)
-        except Exception: pass
-    for cand in (p, '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'):
-        try: return ImageFont.truetype(cand, sz)
-        except Exception: continue
-    return ImageFont.load_default()
-bg = Image.open('public/cover.jpg').convert('RGB'); W, H = 1200, 630
-r = max(W / bg.width, H / bg.height); bg = bg.resize((int(bg.width * r), int(bg.height * r)), Image.LANCZOS)
-bg = bg.crop(((bg.width - W) // 2, (bg.height - H) // 2, (bg.width - W) // 2 + W, (bg.height - H) // 2 + H))
-shade = Image.new('RGBA', (W, H), (21, 17, 13, 0)); sd = ImageDraw.Draw(shade)
-for x in range(W): sd.line([(x, 0), (x, H)], fill=(21, 17, 13, int(235 - 150 * x / W)))
-og = bg.convert('RGBA'); og.alpha_composite(shade)
-logo = render(LOGO, 14); og.alpha_composite(logo, (80, (H - logo.height) // 2 - 10))
-d = ImageDraw.Draw(og)
-d.text((340, 190), "The Survival", font=font(86), fill=(240, 230, 210, 255)); d.text((340, 275), "Notebook", font=font(86), fill=(242, 193, 78, 255))
-d.text((344, 395), "Coordinates, enchantments, to-dos and farms —", font=font(30), fill=(200, 188, 165, 255))
-d.text((344, 435), "shared live with everyone in your world.", font=font(30), fill=(200, 188, 165, 255))
-d.text((344, 520), "notebook.hamish555.com", font=font(34), fill=(134, 208, 90, 255))
-og.convert('RGB').save('public/og.png', quality=90)
+# The Open Graph card (public/og.png) is made from the real home page now: npm run og
 
 print('ok')
