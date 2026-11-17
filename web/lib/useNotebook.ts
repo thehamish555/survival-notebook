@@ -15,7 +15,8 @@ export function useNotebook(id: string) {
   const toast = useToast()
   const [nb, setNb] = useState<any>(null), [role, setRole] = useState(''), [d, setD] = useState<any>({}), [members, setMembers] = useState<any[]>([])
   const [live, setLive] = useState(false), [err, setErr] = useState(''), [meId, setMeId] = useState(''), [activity, setActivity] = useState<any[]>([])
-  const [mapTiles, setMapTiles] = useState(0), [mapRev, setMapRev] = useState(0), [savedAt, setSavedAt] = useState(0)   // savedAt > 0: showing the offline copy
+  const [mapTiles, setMapTiles] = useState(0), [mapRev, setMapRev] = useState(0), [savedAt, setSavedAt] = useState(0)
+  const [players, setPlayers] = useState<any[]>([])   // where team members are right now (sent by their mods, kept for 2 minutes)   // savedAt > 0: showing the offline copy
   const mapSeen = useRef(false)
   const ctl = useRef<{ save: (k: string, v: any) => void; reload: () => Promise<void> }>({ save: () => {}, reload: async () => {} })
 
@@ -81,6 +82,8 @@ export function useNotebook(id: string) {
     }
     api('/me').then(u => { me = u.id; setMeId(u.id); saveLocal('sn_me', u.id) }).catch(e => { if (isOffline(e)) setMeId(readLocal('sn_me')?.v || ''); else location.href = '/' })
     load(); loadActivity()
+    api(`/notebooks/${id}/pos`).then((ps: any[]) => setPlayers(Array.isArray(ps) ? ps : [])).catch(() => {})
+    const stale = setInterval(() => setPlayers(ps => ps.filter(p => Date.now() - p.ts < 120_000)), 15000)
 
     const es = new EventSource(eventsUrl(id))
     let opened = false
@@ -89,14 +92,15 @@ export function useNotebook(id: string) {
     const poll = setInterval(() => { if (document.visibilityState === 'visible' && es.readyState !== EventSource.OPEN) load() }, 20000)   // safety net if the live stream can't stay connected
     es.onmessage = e => {
       const m = JSON.parse(e.data)
+      if (m.pos) { setPlayers(ps => [...ps.filter(p => p.uid !== m.pos.uid), ...(m.pos.gone ? [] : [{ ...m.pos, ts: Date.now() }])]); return }   // someone moved
       if (m.map) { setMapRev(v => v + 1); if (!mapSeen.current) load(); return }   // the first tiles make the Map tab appear   // new map tiles from the mod
       if (!m.cid || m.cid !== clientId()) load(m.section); bumpActivity()   // apply everything except this tab's own echo
     }
     const beforeUnload = (e: BeforeUnloadEvent) => { if (Object.keys(pending).length) { e.preventDefault(); e.returnValue = '' } }   // unsaved edits
     window.addEventListener('beforeunload', beforeUnload)
-    return () => { es.close(); clearInterval(poll); window.removeEventListener('beforeunload', beforeUnload); clearTimeout(actTimer); Object.keys(pending).forEach(k => { write(k) }) }
+    return () => { es.close(); clearInterval(poll); clearInterval(stale); window.removeEventListener('beforeunload', beforeUnload); clearTimeout(actTimer); Object.keys(pending).forEach(k => { write(k) }) }
   }, [id, toast])
 
   useEffect(() => { mapSeen.current = mapTiles > 0 }, [mapTiles])
-  return { nb, role, d, members, meId, live, err, setErr, activity, mapTiles, mapRev, savedAt, save: (k: string, v: any) => ctl.current.save(k, v), reload: () => ctl.current.reload(), edit: !savedAt && (role === 'owner' || role === 'editor') }
+  return { nb, role, d, members, meId, live, err, setErr, activity, mapTiles, mapRev, players, savedAt, save: (k: string, v: any) => ctl.current.save(k, v), reload: () => ctl.current.reload(), edit: !savedAt && (role === 'owner' || role === 'editor') }
 }

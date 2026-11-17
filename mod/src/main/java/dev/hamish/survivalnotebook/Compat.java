@@ -35,16 +35,23 @@ final class Compat {
 		if (level != stacksFor) { STACKS.clear(); stacksFor = level; }   // a new world binds its own item data, so make the stacks again
 		ItemStack hit = STACKS.get(path);
 		if (hit != null) return hit;
+		final String asked = path;
 		try {
+			// "potion_healing", "tipped_arrow_poison" and so on: the website's coloured potion icons, drawn as that potion in game
+			java.util.regex.Matcher pm = POTION_OF.matcher(path);
+			Identifier potion = null;
+			if (pm.matches() && !BuiltInRegistries.ITEM.containsKey(Identifier.withDefaultNamespace(path))) { potion = Identifier.withDefaultNamespace(pm.group(2)); path = pm.group(1); }
 			Identifier id = Identifier.withDefaultNamespace(path);
-			if (!BuiltInRegistries.ITEM.containsKey(id)) { STACKS.put(path, ItemStack.EMPTY); return ItemStack.EMPTY; }   // not an item: that won't change
+			if (!BuiltInRegistries.ITEM.containsKey(id) || (potion != null && !BuiltInRegistries.POTION.containsKey(potion))) { STACKS.put(asked, ItemStack.EMPTY); return ItemStack.EMPTY; }   // not an item: that won't change
 			ItemStack s;
 			try { s = new ItemStack(BuiltInRegistries.ITEM.getValue(id)); }
 			catch (RuntimeException e) { if (level != null || !bindForMenu()) return ItemStack.EMPTY; s = new ItemStack(BuiltInRegistries.ITEM.getValue(id)); }
-			if (!s.isEmpty()) STACKS.put(path, s);
+			if (potion != null) s.set(net.minecraft.core.component.DataComponents.POTION_CONTENTS, new net.minecraft.world.item.alchemy.PotionContents(BuiltInRegistries.POTION.get(potion).orElseThrow()));
+			if (!s.isEmpty()) STACKS.put(asked, s);
 			return s;
 		} catch (RuntimeException e) { return ItemStack.EMPTY; }
 	}
+	private static final java.util.regex.Pattern POTION_OF = java.util.regex.Pattern.compile("^(potion|splash_potion|lingering_potion|tipped_arrow)_([a-z_]+)$");
 	private static Object stacksFor;
 	private static int menuBind;   // 0 not tried, 1 bound, -1 failed
 

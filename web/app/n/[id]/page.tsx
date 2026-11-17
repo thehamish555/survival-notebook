@@ -31,14 +31,14 @@ const MEMBER_TONES = ['blue', 'amber', 'teal', 'purple', 'red', 'green', 'yellow
 
 export default function Notebook() {
   const { id } = useParams<{ id: string }>(), confirm = useConfirm(), toast = useToast()
-  const { nb, role, d, members, meId, live, err, setErr, activity, mapTiles, mapRev, savedAt, save, reload, edit } = useNotebook(id)
+  const { nb, role, d, members, meId, live, err, setErr, activity, mapTiles, mapRev, players, savedAt, save, reload, edit } = useNotebook(id)
   const [tab, setTab] = useState(() => fromHash().tab), [q, setQ] = useState(''), [fs, setFs] = useState<any>({}), [gp, setGp] = useState(() => fromHash().player), [shareOpen, setShareOpen] = useState(() => fromHash().members), [helpOpen, setHelpOpen] = useState(false)
   const [inv, setInv] = useState({ email: '', role: 'editor' }), [nick, setNick] = useState('')
   const [links, setLinks] = useState<any[]>([]), [lk, setLk] = useState({ role: 'editor', days: '7' })
   const [actOpen, setActOpen] = useState(false), [allAct, setAllAct] = useState<any[]>([]), [actUser, setActUser] = useState('All'), [actSec, setActSec] = useState('All')
   const [since, setSince] = useState(0), seenSet = useRef(false)
   const [paste, setPaste] = useState<{ text: string; dim: string; to: string; name: string } | null>(null)
-  const tabs = TABS.filter(t => t !== 'Map' || mapTiles > 0)   // the map only shows once someone's mod has sent some of it
+  const tabs = TABS.filter(t => t !== 'Map' || mapTiles > 0 || players.length > 0)   // the map shows once someone's mod has sent some of it, or someone is online
   const go = (t: string) => { setTab(t); setQ(''); history.replaceState(null, '', `#${SLUG[t]}`) }
   const pickPlayer = (uid: string) => { setGp(uid); history.replaceState(null, '', `#enchantments/${uid}`) }
   const F = (k: string) => fs[k] || 'All', setF = (k: string, v: string) => setFs((p: any) => ({ ...p, [k]: v }))
@@ -327,7 +327,7 @@ export default function Notebook() {
         <FS edit={edit}><Table rows={farms} onChange={(v: any) => save('farms', v)} show={farmShow} onAdd={resetFilters} empty="No farms yet." blank={{ name: '', icon: '', tutorial: '', ttl: '', file: null, assignee: '', place: '', building: false, built: false }}
           cols={[{ k: 'name', l: 'Farm', icon: (r: any) => r.icon, pick: true }, { k: 'place', l: 'Location', t: 'pill', opts: placeOpts, tones: placeTones, norm: (v: string) => (coords.some((c: any) => c.id === v) ? v : ''), after: (r: any) => (r.place && coords.some((c: any) => c.id === r.place) ? <button className="x pin" title="Show this place on the Coordinates tab" onClick={() => showPlace(r.place)}><PinIcon /></button> : null) }, { k: 'tutorial', l: 'Tutorial video', t: 'yt' }, { k: 'file', l: 'Litematica', t: 'file' }, assignCol, { k: 'status', l: 'Status', t: 'pill', opts: ['To build', 'Building', 'Built'], tones: { 'To build': 'gray', Building: 'blue', Built: 'green' }, get: fstat, set: (v: string) => ({ built: v === 'Built', building: v === 'Building' }) }]} /></FS></div>}
 
-      {tab === 'Map' && (mapTiles > 0 ? <MapView id={id} rev={mapRev} places={coords} role={role} onPlace={showPlace} />
+      {tab === 'Map' && (mapTiles > 0 || players.length > 0 ? <MapView id={id} rev={mapRev} places={coords} role={role} onPlace={showPlace} players={players} meId={meId} />
         : <div className="card"><h2>Map</h2><div className="empty">No map yet. It appears once someone explores with the mod connected (Share map is on in its Settings by default).</div></div>)}
 
       {tab === 'Shopping' && <Shopping id={id} d={d} members={members} meId={meId} who={gearUid} setWho={pickPlayer} edit={edit} save={save} />}

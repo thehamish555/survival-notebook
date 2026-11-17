@@ -200,3 +200,16 @@ test('invite links: owner makes one, a stranger joins with it, expiry and revoke
   assert.equal((await call('GET', `/invites/${again}`)).status, 404)                                                     // revoked
   assert.equal((await call('POST', `/notebooks/${nb}/invites`, { days: 3 }, a.token)).status, 400)                      // only 1, 7 or 30
 })
+test('live positions: members share where they are, outsiders cannot, leaving removes it', async () => {
+  const { call, user, notebook } = mk(), a = await user('alice'), b = await user('bob'), c = await user('carol'), nb = await notebook(a.token)
+  await call('POST', `/notebooks/${nb}/members`, { email: 'bob@x.com', role: 'viewer' }, a.token)
+  const mod = (await call('POST', '/me/tokens', { name: 'mod' }, b.token)).json.token
+  assert.equal((await call('PUT', `/notebooks/${nb}/pos`, { dim: 'nether', x: 12.345, y: 70.6, z: -8, yaw: 91.4 }, mod)).status, 200)   // the mod sends it
+  const list = (await call('GET', `/notebooks/${nb}/pos`, undefined, a.token)).json
+  assert.equal(list.length, 1); assert.deepEqual([list[0].name, list[0].dim, list[0].x, list[0].y, list[0].yaw], ['bob', 'nether', 12.3, 71, 91])
+  assert.equal((await call('PUT', `/notebooks/${nb}/pos`, { dim: 'ow', x: 0, y: 0, z: 0 }, c.token)).status, 404)                        // not a member
+  assert.equal((await call('PUT', `/notebooks/${nb}/pos`, { dim: 'moon', x: 0, y: 0, z: 0 }, b.token)).status, 400)
+  assert.equal((await call('GET', `/notebooks/${nb}/pos`, undefined, c.token)).status, 404)
+  await call('DELETE', `/notebooks/${nb}/pos`, undefined, mod)
+  assert.equal((await call('GET', `/notebooks/${nb}/pos`, undefined, a.token)).json.length, 0)
+})

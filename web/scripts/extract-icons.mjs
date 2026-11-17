@@ -160,7 +160,7 @@ async function flatIcon(ref, tints = []) {
   })
 }
 /** A block item: its block model (or several, for a composite like a bed) drawn at the inventory angle by block-render.mjs. */
-async function blockIcon(parts) {
+async function blockIcon(parts, tints = []) {   // tints: the item's own tint list (leaves, grass); a face with no colour there stays as it is
   const elements = [], names = new Map(); let gui = null
   for (const [pi, { ref, at }] of parts.entries()) {
     const c = chain(ref); if (c.flat || !c.elements) return null
@@ -177,7 +177,7 @@ async function blockIcon(parts) {
     }
   }
   const textures = [...new Set(names.values())]
-  return encode(textures, get => renderModel({ elements, gui, texture: k => (names.has(k) ? get(names.get(k)) : null), tint: k => TINT[names.get(k)?.split('/').pop()] ?? GREEN }, 64))
+  return encode(textures, get => renderModel({ elements, gui, texture: k => (names.has(k) ? get(names.get(k)) : null), tint: (k, i) => tintColour(tints[i]) ?? TINT[names.get(k)?.split('/').pop()] ?? null }, 64))
 }
 
 // Items the game shows as a sequence: the clock's face turning, compasses spinning, the bow and crossbow being drawn, light levels.
@@ -240,9 +240,10 @@ const ENTITY = {
 }
 for (const w of ['', 'exposed_', 'weathered_', 'oxidized_']) ENTITY[`waxed_${w}copper_chest`] = ENTITY[`${w}copper_chest`]
 // The shield: a board and a handle, turned to face the viewer (the item flips Y and Z).
+const shieldAt = p => { const q = flipX180(8, 8, 8)(p); return [8 + (q[0] - 8) * 0.85 - 2.5, 8 + (q[1] - 8) * 0.85 - 5.5, 8 + (q[2] - 8) * 0.85] }   // a little smaller, as the game shows it in a slot
 ENTITY.shield = entity('item/shield', [
-  { texture: 'shield/shield_base_nopattern', u: 0, v: 0, from: [-6, -11, -2], size: [12, 22, 1], place: flipX180(8, 8, 8) },
-  { texture: 'shield/shield_base_nopattern', u: 26, v: 0, from: [-1, -3, -1], size: [2, 6, 6], place: flipX180(8, 8, 8) }])
+  { texture: 'shield/shield_base_nopattern', u: 0, v: 0, from: [-6, -11, -2], size: [12, 22, 1], place: shieldAt },
+  { texture: 'shield/shield_base_nopattern', u: 26, v: 0, from: [-1, -3, -1], size: [2, 6, 6], place: shieldAt }])
 // The dragon head: the head part is moved up and shrunk to 3/4 size, with the jaw hanging from it (from the game's DragonHeadModel).
 {
   const t = 'enderdragon/dragon', item = flipX180(8, 0, 8)
@@ -327,7 +328,7 @@ async function iconFor(n) {
   if (node?.type === 'minecraft:model' && typeof node.model === 'string') {
     const c = chain(node.model)
     if (c.flat) { const f = await flatIcon(node.model, node.tints); if (f) return { buf: f, kind: 'flat' } }
-    else if (c.elements) { const b = await blockIcon([{ ref: node.model, at: [0, 0, 0] }]); if (b) return { buf: b, kind: '3d' } }
+    else if (c.elements) { const b = await blockIcon([{ ref: node.model, at: [0, 0, 0] }], node.tints); if (b) return { buf: b, kind: '3d' } }
   }
   if (SPECIAL[n]) { const t = await SPECIAL[n]().catch(() => null); if (t) return { buf: await toPng(t), kind: 'flat' } }
   if (node?.type === 'minecraft:special' && typeof node.base === 'string') {   // something we don't model (copper golem statues): the texture its model names
@@ -345,7 +346,7 @@ const GLINT = new Set(['enchanted_book', 'written_book', 'enchanted_golden_apple
 async function glint(buf) {
   const g = await loadTex('minecraft:misc/enchanted_glint_item'); if (!g) return buf
   const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
-  const w = info.width, h = info.height, N = 30, cos = Math.cos(0.1745), sin = Math.sin(0.1745), frames = []
+  const w = info.width, h = info.height, N = 48, cos = Math.cos(0.1745), sin = Math.sin(0.1745), frames = []
   for (let f = 0; f < N; f++) {
     const out2 = Buffer.from(data), shift = f / N
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -356,7 +357,7 @@ async function glint(buf) {
     }
     frames.push({ w, h, data: out2 })
   }
-  return apng(frames, frames.map(() => 70))
+  return apng(frames, frames.map(() => 125))   // about 6 seconds a loop, like the game's slow drift
 }
 const names = [], missing = [], counts = { '3d': 0, flat: 0, animated: 0 }
 for (const n of itemDefs) {
@@ -366,6 +367,19 @@ for (const n of itemDefs) {
   if (GLINT.has(n)) r.buf = await glint(r.buf)
   fs.writeFileSync(path.join(out, n + '.png'), r.buf); names.push(n)
   counts[r.buf.includes(Buffer.from('acTL')) ? 'animated' : r.kind]++
+}
+// Coloured potions and tipped arrows, one per effect, named like potion_healing and tipped_arrow_poison.
+// The colours are the effects' own (they live in the game's code, not its assets); turtle master mixes slowness and resistance.
+const POTIONS = { night_vision: 0xC2FF66, invisibility: 0xF6F6F6, leaping: 0xFDFF84, fire_resistance: 0xFF9900, swiftness: 0x33EBFF, slowness: 0x8BAFE0,
+  turtle_master: 0x8D7DE3, water_breathing: 0x98DAC0, healing: 0xF82423, harming: 0xA9656A, poison: 0x87A363, regeneration: 0xCD5CAB, strength: 0xFFC700,
+  weakness: 0x484D48, luck: 0x59C106, slow_falling: 0xF3CFB9, wind_charged: 0xBDC9FF, weaving: 0x78695A, oozing: 0x99FFA3, infested: 0x8C9B8C }
+if (!ONLY || [...ONLY].some(n => /potion|arrow/.test(n))) for (const base of ['potion', 'splash_potion', 'lingering_potion', 'tipped_arrow']) {
+  const node = pick(readJson(`assets/minecraft/items/${base}.json`)?.model); if (node?.type !== 'minecraft:model') continue
+  for (const [effect, colour] of Object.entries(POTIONS)) {
+    const tints = [{ type: 'minecraft:constant', value: colour }, ...(node.tints || []).slice(1)]
+    const buf = await flatIcon(node.model, tints); if (!buf) continue
+    fs.writeFileSync(path.join(out, `${base}_${effect}.png`), buf); names.push(`${base}_${effect}`); counts.flat++
+  }
 }
 if (missing.length) console.log(`No icon for ${missing.length} item(s): ${missing.join(', ')}`)
 if (!ONLY) fs.writeFileSync(path.join('public', 'mc', 'index.json'), JSON.stringify(names))

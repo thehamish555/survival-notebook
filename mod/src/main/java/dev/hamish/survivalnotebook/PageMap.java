@@ -120,6 +120,14 @@ final class PageMap {
 		g.fill(ax, ay, ax + aw, ay + ah, p.panel2);
 		g.outline(ax - 1, ay - 1, aw + 2, ah + 2, p.edge);
 		g.enableScissor(ax, ay, ax + aw, ay + ah);
+		// A faint grid (chunks, and every 128 blocks a map tile) that moves with the map, so dragging shows even where nothing is mapped yet.
+		for (int step : new int[] {16, 128}) {
+			if (step * scale < 6) continue;
+			int col = step == 128 ? 0x30FFFFFF : 0x14FFFFFF;
+			double wx0 = cx - aw / 2.0 / scale, wz0 = cz - ah / 2.0 / scale;
+			for (double wx = Math.floor(wx0 / step) * step; wx <= cx + aw / 2.0 / scale; wx += step) { int x = sx(wx); if (x >= ax && x < ax + aw) g.fill(x, ay, x + 1, ay + ah, col); }
+			for (double wz = Math.floor(wz0 / step) * step; wz <= cz + ah / 2.0 / scale; wz += step) { int z = sz(wz); if (z >= ay && z < ay + ah) g.fill(ax, z, ax + aw, z + 1, col); }
+		}
 		List<int[]> tiles = MapTiles.tilesIn(dim);
 		for (int[] t : tiles) {
 			int x0 = sx(t[0] * 128.0), z0 = sz(t[1] * 128.0), x1 = sx(t[0] * 128.0 + 128), z1 = sz(t[1] * 128.0 + 128);
@@ -141,6 +149,15 @@ final class PageMap {
 				String name = Notebook.str(o, "name").isBlank() ? "Unnamed place" : Notebook.str(o, "name");
 				g.text(font, (on ? "> " : "") + name, px + 6, pz - 4, on ? p.gold : 0xFFFFFFFF, true);
 			}
+		}
+		for (Players.Pos o : Players.all()) {   // your team: an arrow the way they face, with their name, in the same colour as on the website
+			if (!o.dim().equals(dim) || o.uid().equals(Notebook.userId)) continue;
+			int px = sx(o.x()), pz = sz(o.z()), col = Players.colour(o.uid());
+			double yaw = Math.toRadians(o.yaw()), dx = -Math.sin(yaw), dz = Math.cos(yaw);
+			for (int i = 3; i <= 8; i++) { int lx = px + (int) Math.round(dx * i), lz = pz + (int) Math.round(dz * i); g.fill(lx, lz, lx + 1, lz + 1, col); }
+			g.fill(px - 3, pz - 3, px + 4, pz + 4, 0xFF000000);
+			g.fill(px - 2, pz - 2, px + 3, pz + 3, col);
+			g.text(font, o.name(), px - font.width(o.name()) / 2, pz - 14, col, true);   // above, so it never sits on a place name
 		}
 		var pl = Minecraft.getInstance().player;
 		Names.Spot here = Names.here();
@@ -169,7 +186,12 @@ final class PageMap {
 		for (JsonObject o : Notebook.rows("coords")) {
 			double[] at = xyz(Notebook.str(o, dim));
 			if (at == null) continue;
-			double d = Math.hypot(sx(at[0]) - mx, sz(at[2]) - my);
+			int px = sx(at[0]), pz = sz(at[2]);
+			double d = Math.hypot(px - mx, pz - my);
+			if (d >= bd && screen != null && scale >= 0.5) {   // the name beside the pin counts too
+				String name = Notebook.str(o, "name").isBlank() ? "Unnamed place" : Notebook.str(o, "name");
+				if (mx >= px + 4 && mx <= px + 10 + screen.font().width(name) && my >= pz - 6 && my <= pz + 6) d = bd - 0.01;
+			}
 			if (d < bd) { bd = d; best = o; }
 		}
 		return best;

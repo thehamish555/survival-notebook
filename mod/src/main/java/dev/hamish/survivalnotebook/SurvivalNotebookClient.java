@@ -58,6 +58,7 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 		while (hudKey.consumeClick()) { NbConfig c = NbConfig.get(); c.hud = !c.hud; NbConfig.save(); }
 		if (Commands.openSoon && mc.gui.screen() == null) { Commands.openSoon = false; mc.gui.setScreen(new NotebookScreen()); }
 		if (mc.player == null) {
+			if (wasInWorld && leaveTicks == 0) Players.leave();   // off the team's map straight away
 			if (wasInWorld && ++leaveTicks == 80) shareStats();   // just left a world: its stats file has been saved by now
 			if (leaveTicks > 80 || !wasInWorld) { wasInWorld = false; leaveTicks = 0; }
 			return;
@@ -83,6 +84,7 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 		if (ticks % 10 == 5 && cfg.shareInventory) InventoryScanner.watchEnder();
 		if (ticks % 600 == 450 && cfg.shareInventory && Notebook.canEdit()) Notebook.syncInventory(InventoryScanner.scan());   // ~every 30s, only when it changed
 		if (cfg.shareMap && Notebook.canEdit()) MapRecorder.tick(mc, ticks);
+		Players.tick(mc, ticks);
 
 		boolean dead = mc.gui.screen() instanceof DeathScreen;
 		if (!dead && mc.player.isAlive() && ticks % 10 == 0) Deaths.snapshot();   // what you're carrying, so a death knows what was lost

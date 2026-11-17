@@ -1,3 +1,8 @@
+## 1.3.0 – Feature
+- See your team on the map: everyone with the mod shows on the Map tab as an arrow with their name, live, and on the website too. Turn it off with Share position in Settings > Sync & privacy.
+- Map: a faint grid moves with the map, so dragging shows even where nothing is mapped yet, and clicking a place's name picks it, not just its square.
+- Coloured potions and tipped arrows from the website (Potion of Healing and so on) show in their colours in game.
+
 ## 1.2.3 – Fix
 - The mod can reach the notebook again. Some older setups had a leftover local server address saved in the config, which 1.2.1 started using by mistake. It's cleared on start now.
 

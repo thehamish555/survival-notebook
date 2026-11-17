@@ -10,7 +10,14 @@ const NAME_TO_KEY: Record<string, string> = Object.fromEntries(Object.entries(EN
 export const KIND_GROUPS = ['Weapons', 'Tools', 'Armor', 'Other']
 
 export const kindOfItem = (item?: string): string | undefined => Object.entries(KINDS).find(([, k]) => k.variants.some(v => v.id === item))?.[0]
-export const prettyItem = (id?: string) => (id || '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+const words = (s: string) => s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+const POTION_OF = /^(potion|splash_potion|lingering_potion|tipped_arrow)_(.+)$/
+/** A readable item name. Potion and arrow icons made for each effect read "Potion of Healing", "Arrow of Poison" and so on. */
+export const prettyItem = (id?: string) => {
+  const m = (id || '').match(POTION_OF)
+  if (m && !['potion', 'splash_potion', 'lingering_potion'].includes(id || '')) return `${m[1] === 'tipped_arrow' ? 'Arrow' : words(m[1])} of ${words(m[2])}`
+  return words(id || '')
+}
 export const conflictsOf = (key: string) => new Set(EXCLUSIVE.filter(s => s.includes(key)).flat().filter(k => k !== key))
 
 export type Owned = { name: string; level: number; max: number; state: 'max' | 'low' | 'curse' | 'other' }

@@ -23,6 +23,7 @@ const MOD_ROUTES: [string, RegExp][] = [
   ['PUT', /^\/notebooks\/[\w-]+\/s\/(coords|todos|farms|deaths|notes|shop|(gear|prefs|stats|inv):[0-9a-f-]{36})$/],
   ['POST', /^\/notebooks$/], ['POST', /^\/notebooks\/[\w-]+\/files$/], ['GET', /^\/notebooks\/[\w-]+\/files\/[\w-]+$/], ['DELETE', /^\/notebooks\/[\w-]+\/files\/[\w-]+$/],   // Litematica upload / download
   ['GET', /^\/notebooks\/[\w-]+\/blocks$/], ['GET', /^\/notebooks\/[\w-]+\/map(\/(ow|nether|end)\/-?\d+\/-?\d+)?$/], ['PUT', /^\/notebooks\/[\w-]+\/map\/(ow|nether|end)\/-?\d+\/-?\d+$/],   // schematic block counts, map tiles
+  ['GET', /^\/notebooks\/[\w-]+\/pos$/], ['PUT', /^\/notebooks\/[\w-]+\/pos$/], ['DELETE', /^\/notebooks\/[\w-]+\/pos$/],   // live player positions
 ]
 // Mod tokens can manage members too (the in-game Members tab).
 const MEMBER_ROUTES: [string, RegExp][] = [['POST', /^\/notebooks\/[\w-]+\/members$/], ['DELETE', /^\/notebooks\/[\w-]+\/members\/[\w-]+$/]]
