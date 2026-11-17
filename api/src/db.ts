@@ -23,6 +23,10 @@ const MIGRATIONS: ((db: DB) => void)[] = [
   db => { if (!db.prepare("select 1 from pragma_table_info('api_tokens') where name='can_members'").get()) db.exec('alter table api_tokens add column can_members integer not null default 0') },
   // Google sign-in: link an account to its Google id. Older password hashes stay in `hash` but are no longer used.
   db => { if (!db.prepare("select 1 from pragma_table_info('users') where name='google_sub'").get()) db.exec("alter table users add column google_sub text; create unique index if not exists idx_users_google on users(google_sub)") },
+  // Invite links: anyone signed in who opens one joins the notebook with the stated role, until it expires or is revoked.
+  db => db.exec(`
+    create table if not exists invites(code text primary key, nb text not null, role text not null, by text not null, created integer not null, expires integer not null, uses integer not null default 0);
+    create index if not exists idx_invites_nb on invites(nb);`),
 ]
 
 export function openDb(path: string): DB {

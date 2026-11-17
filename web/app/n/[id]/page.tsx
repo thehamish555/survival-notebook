@@ -31,6 +31,9 @@ export default function Notebook() {
   const { nb, role, d, members, meId, live, err, setErr, activity, save, reload, edit } = useNotebook(id)
   const [tab, setTab] = useState(() => fromHash().tab), [q, setQ] = useState(''), [fs, setFs] = useState<any>({}), [gp, setGp] = useState(() => fromHash().player), [shareOpen, setShareOpen] = useState(() => fromHash().members), [helpOpen, setHelpOpen] = useState(false)
   const [inv, setInv] = useState({ email: '', role: 'editor' }), [nick, setNick] = useState('')
+  const [links, setLinks] = useState<any[]>([]), [lk, setLk] = useState({ role: 'editor', days: '7' })
+  const [actOpen, setActOpen] = useState(false), [allAct, setAllAct] = useState<any[]>([]), [actUser, setActUser] = useState('All'), [actSec, setActSec] = useState('All')
+  const [since, setSince] = useState(0), seenSet = useRef(false)
   const go = (t: string) => { setTab(t); setQ(''); history.replaceState(null, '', `#${SLUG[t]}`) }
   const pickPlayer = (uid: string) => { setGp(uid); history.replaceState(null, '', `#enchantments/${uid}`) }
   const F = (k: string) => fs[k] || 'All', setF = (k: string, v: string) => setFs((p: any) => ({ ...p, [k]: v }))
@@ -67,6 +70,14 @@ export default function Notebook() {
 
   const [hl, setHl] = useState('')
   const latest = useRef<any>({})   // newest gear for toast actions
+  useEffect(() => { if (shareOpen && role === 'owner') loadLinks() }, [shareOpen, role])
+  useEffect(() => {
+    if (seenSet.current || !activity.length || !meId) return
+    seenSet.current = true
+    let last = 0; try { last = Number(localStorage.getItem(`sn_seen_${id}`)) || 0 } catch {}
+    if (last) setSince(activity.filter((a: any) => a.ts > last && a.user !== meId).length)
+    try { localStorage.setItem(`sn_seen_${id}`, String(activity[0].ts)) } catch {}
+  }, [activity, meId])
   if (err && !nb) return <div className="wrap"><p className="err">{err}</p><Link href="/">← Back</Link></div>
   if (!nb) return <Loading />
 
@@ -78,6 +89,12 @@ export default function Notebook() {
     setTimeout(() => document.getElementById('row-' + pid)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120)
     setTimeout(() => setHl(''), 3500)
   }
+  const loadLinks = () => api(`/notebooks/${id}/invites`).then(setLinks).catch(() => {})
+  const linkUrl = (code: string) => `${location.origin}/join/${code}`
+  const makeLink = async () => { try { const r = await api(`/notebooks/${id}/invites`, 'POST', { role: lk.role, days: Number(lk.days) }); await navigator.clipboard.writeText(linkUrl(r.code)).catch(() => {}); toast('Link copied', 'ok'); loadLinks() } catch (e: any) { setErr(e.message) } }
+  const dropLink = async (c: string) => { if (await confirm({ title: 'Remove this link?', body: 'Anyone who has it will no longer be able to join with it. People who already joined stay.', ok: 'Remove', danger: true })) { await api(`/notebooks/${id}/invites/${c}`, 'DELETE').catch((e: any) => setErr(e.message)); loadLinks() } }
+  // "N changes since you were last here": remember the newest change you have seen, per notebook
+  const openAct = () => { setActOpen(true); api(`/notebooks/${id}/activity?limit=100`).then(setAllAct).catch(() => setAllAct(activity)) }
   const share = async () => { try { await api(`/notebooks/${id}/members`, 'POST', inv); setInv({ ...inv, email: '' }); setErr(''); reload() } catch (e: any) { setErr(e.message) } }
   const remove = async (m: any) => {
     const self = m.id === meId
@@ -193,7 +210,8 @@ export default function Notebook() {
           {!todos.some((t: any) => t.priority === 'High' && t.progress !== 'Done') && <div className="empty">No open high-priority to-dos.</div>}
           {todos.filter((t: any) => t.priority === 'High' && t.progress !== 'Done').slice(0, 5).map((t: any) => <div className="ench tl" key={t.id}><b>{t.project || 'Untitled to-do'}</b><span className={`pill t-${TONES.progress[t.progress]}`}>{t.progress}</span>
             <span className={`pill t-${mTones[members.some(m => m.id === t.assignee) ? t.assignee : '']}`}>{members.find(m => m.id === t.assignee)?.name || 'All users'}</span></div>)}</div>
-        <div className="card"><h2>Recent activity</h2>
+        <div className="card"><div className="row"><h2 className="grow">Recent activity</h2>{activity.length > 0 && <button type="button" className="ghost" onClick={openAct}>See all</button>}</div>
+          {since > 0 && <p className="mut">{since} change{since === 1 ? '' : 's'} by others since you were last here.</p>}
           {!activity.length && <div className="empty">Nothing yet. Changes show up here.</div>}
           {activity.slice(0, 8).map((a: any) => <div className="ench" key={a.id}><b style={{ minWidth: 0 }}>{a.name}</b><span>{a.text}</span><span className="grow" /><span className="mut small">{timeAgo(a.ts)}</span></div>)}</div>
         <div className="card"><h2>Team</h2><div style={{ overflowX: 'auto' }}><table>
@@ -297,13 +315,31 @@ export default function Notebook() {
       {role === 'owner' && <><h3>Invite someone</h3><div className="row">
         <input className="grow" placeholder="Their account email" value={inv.email} onChange={e => setInv({ ...inv, email: e.target.value })} onKeyDown={e => e.key === 'Enter' && share()} />
         <button type="button" className="ghost" onClick={() => setInv({ ...inv, role: inv.role === 'editor' ? 'viewer' : 'editor' })}>{inv.role === 'editor' ? 'Can edit' : 'View only'}</button>
-        <button onClick={share}>Invite</button></div></>}
+        <button onClick={share}>Invite</button></div>
+        <h3>Invite link</h3>
+        <p className="mut">Anyone with the link can join after signing in with Google.</p>
+        <div className="row">
+          <button type="button" className="ghost" onClick={() => setLk({ ...lk, role: lk.role === 'editor' ? 'viewer' : 'editor' })}>{lk.role === 'editor' ? 'Can edit' : 'View only'}</button>
+          <Chips label="Expires in" noAll value={lk.days} opts={[['1', '1 day'], ['7', '7 days'], ['30', '30 days']]} onChange={(v: string) => setLk({ ...lk, days: v })} />
+          <button onClick={makeLink}>Create link</button></div>
+        {links.map(l => <div className="row" key={l.code} style={{ padding: '4px 0' }}>
+          <span className="grow mut small" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.role === 'editor' ? 'Can edit' : 'View only'} · {l.uses} joined · expires {new Date(l.expires).toLocaleDateString()}</span>
+          <button className="ghost" onClick={() => { navigator.clipboard.writeText(linkUrl(l.code)); toast('Link copied', 'ok') }}>Copy</button>
+          <button className="x" onClick={() => dropLink(l.code)}>Remove</button></div>)}</>}
       {err && <p className="err">{err}</p>}
       <h3 style={{ marginTop: 18 }}>Backup</h3>
       <div className="row"><button className="ghost" onClick={exportJson}>Export notebook (JSON)</button>
         <label className={`btn ghost ${edit ? '' : 'off'}`} style={edit ? undefined : { opacity: .4, pointerEvents: 'none' }}>Import…<input type="file" accept="application/json,.json" hidden disabled={!edit} onChange={e => { importJson(e.target.files?.[0]); e.target.value = '' }} /></label></div>
       {role === 'owner' && <><h3 style={{ marginTop: 18 }}>Danger zone</h3><button className="danger" onClick={destroy}>Delete this notebook</button></>}
     </div></div>}
+    {actOpen && <div className="modal" onClick={() => setActOpen(false)}><div className="card" style={{ maxWidth: 640, maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div className="row"><h2 className="grow">Activity</h2><button className="x" onClick={() => setActOpen(false)}>✕</button></div>
+      <div className="row" style={{ marginBottom: 8 }}>
+        <Chips label="Person" value={actUser} opts={[...new Map(allAct.map((a: any) => [a.user, a.name])).entries()]} onChange={setActUser} />
+        <Chips label="Section" value={actSec} opts={[...new Set(allAct.map((a: any) => a.section))].map(x => [x, x === 'members' ? 'Members' : String(x)[0].toUpperCase() + String(x).slice(1)])} onChange={setActSec} /></div>
+      {allAct.filter((a: any) => (actUser === 'All' || a.user === actUser) && (actSec === 'All' || a.section === actSec)).map((a: any) =>
+        <div className="ench" key={a.id}><b style={{ minWidth: 0 }}>{a.name}</b><span>{a.text}</span><span className="grow" /><span className="mut small">{timeAgo(a.ts)}</span></div>)}
+      {!allAct.length && <div className="empty">Nothing yet.</div>}</div></div>}
     {helpOpen && <div className="modal" onClick={() => setHelpOpen(false)}><div className="card" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
       <div className="row"><h2 className="grow">Keyboard shortcuts</h2><button className="x" onClick={() => setHelpOpen(false)}>✕</button></div>
       {[['1 – 8', 'Switch tab'], ['/', 'Search this tab'], ['m', 'Settings & backup'], ['?', 'This help'], ['Esc', 'Close any window']].map(([k, v]) => <div className="ench" key={k}><kbd>{k}</kbd><span>{v}</span></div>)}

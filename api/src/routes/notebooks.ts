@@ -19,9 +19,10 @@ export const notebookRoutes = (ctx: Ctx) => {
 
   r.get('/notebooks/:id/activity', auth, c => {
     const id = c.req.param('id'); if (!getRole(db, id, c.get('uid'))) return c.json({ error: 'not found' }, 404)
-    const rows = db.prepare(`select a.id, a.section, a.detail, a.via, a.ts, coalesce(nullif(m.nick,''), u.name, 'Someone') as name
-      from activity a left join users u on u.id=a.user left join members m on m.nb=a.nb and m.user=a.user where a.nb=? order by a.id desc limit 30`).all(id) as any[]
-    return c.json(rows.map(x => ({ id: x.id, name: x.name, via: x.via, ts: x.ts, section: x.section, text: describe(x.section, JSON.parse(x.detail)) })))
+    const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 30))
+    const rows = db.prepare(`select a.id, a.user, a.section, a.detail, a.via, a.ts, coalesce(nullif(m.nick,''), u.name, 'Someone') as name
+      from activity a left join users u on u.id=a.user left join members m on m.nb=a.nb and m.user=a.user where a.nb=? order by a.id desc limit ?`).all(id, limit) as any[]
+    return c.json(rows.map(x => ({ id: x.id, user: x.user, name: x.name, via: x.via, ts: x.ts, section: x.section, text: describe(x.section, JSON.parse(x.detail)) })))
   })
 
   r.post('/notebooks', auth, async c => {
@@ -55,7 +56,7 @@ export const notebookRoutes = (ctx: Ctx) => {
 
   r.delete('/notebooks/:id', auth, c => {
     const id = c.req.param('id'); if (getRole(db, id, c.get('uid')) !== 'owner') return c.json({ error: 'forbidden' }, 403)
-    db.transaction(() => { db.prepare('delete from notebooks where id=?').run(id); for (const t of ['sections', 'members', 'files', 'activity']) db.prepare(`delete from ${t} where nb=?`).run(id) })()
+    db.transaction(() => { db.prepare('delete from notebooks where id=?').run(id); for (const t of ['sections', 'members', 'files', 'activity', 'invites']) db.prepare(`delete from ${t} where nb=?`).run(id) })()
     return c.json({ ok: true })
   })
   return r

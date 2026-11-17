@@ -38,6 +38,7 @@ export function logActivity(db: DB, nb: string, user: string, section: string, d
 const LABEL: Record<string, [string, string]> = { coords: ['place', 'places'], todos: ['to-do', 'to-dos'], farms: ['farm', 'farms'], gear: ['gear item', 'gear items'], deaths: ['death', 'deaths'] }
 export function describe(section: string, d: Detail): string {
   if (section === 'notes') return 'edited the notes'
+  if (section === 'members') return 'joined the notebook'
   const [one, many] = LABEL[section] ?? ['row', 'rows']
   const n = (k: number) => `${k} ${k === 1 ? one : many}`
   const parts = [d.added.length && `added ${n(d.added.length)}`, d.changed.length && `edited ${n(d.changed.length)}`, d.removed.length && `removed ${n(d.removed.length)}`].filter(Boolean)

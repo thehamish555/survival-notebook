@@ -180,3 +180,23 @@ test('files: unattached uploads are swept after the grace period, attached ones 
   const left = (db.prepare('select id from files where nb=?').all(nb) as any[]).map(r => r.id)
   assert.deepEqual(left, [kept.id]); assert.ok(!left.includes(orphan.id))
 })
+
+test('invite links: owner makes one, a stranger joins with it, expiry and revoke work', async () => {
+  const { call, user, notebook, db } = mk(), a = await user('alice'), b = await user('bob'), nb = await notebook(a.token)
+  assert.equal((await call('POST', `/notebooks/${nb}/invites`, { role: 'editor', days: 7 }, b.token)).status, 403)       // not the owner
+  const made = await call('POST', `/notebooks/${nb}/invites`, { role: 'viewer', days: 7 }, a.token); assert.equal(made.status, 200)
+  const code = made.json.code as string
+  const peek = await call('GET', `/invites/${code}`); assert.equal(peek.json.title, 'World'); assert.equal(peek.json.role, 'viewer')
+  assert.equal((await call('POST', `/invites/${code}`, undefined, b.token)).json.id, nb)
+  assert.equal((await call('GET', `/notebooks/${nb}`, undefined, b.token)).json.role, 'viewer')
+  assert.equal((await call('POST', `/invites/${code}`, undefined, a.token)).status, 200)                                // the owner opening it changes nothing
+  assert.equal((await call('GET', `/notebooks/${nb}`, undefined, a.token)).json.role, 'owner')
+  const feed = (await call('GET', `/notebooks/${nb}/activity`, undefined, a.token)).json; assert.equal(feed[0].text, 'joined the notebook')
+  assert.equal((await call('GET', `/notebooks/${nb}/invites`, undefined, a.token)).json[0].uses, 1)
+  db.prepare('update invites set expires=? where code=?').run(Date.now() - 1, code)
+  assert.equal((await call('GET', `/invites/${code}`)).status, 404)                                                      // expired
+  const again = (await call('POST', `/notebooks/${nb}/invites`, { days: 1 }, a.token)).json.code
+  assert.equal((await call('DELETE', `/notebooks/${nb}/invites/${again}`, undefined, a.token)).status, 200)
+  assert.equal((await call('GET', `/invites/${again}`)).status, 404)                                                     // revoked
+  assert.equal((await call('POST', `/notebooks/${nb}/invites`, { days: 3 }, a.token)).status, 400)                      // only 1, 7 or 30
+})

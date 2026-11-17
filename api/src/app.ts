@@ -11,6 +11,7 @@ import { accountRoutes } from './routes/account'
 import { authRoutes } from './routes/auth'
 import { eventRoutes } from './routes/events'
 import { fileRoutes } from './routes/files'
+import { inviteRoutes } from './routes/invites'
 import { memberRoutes } from './routes/members'
 import { notebookRoutes } from './routes/notebooks'
 import { sectionRoutes } from './routes/sections'
@@ -33,7 +34,7 @@ export function createApp(config: Config, db: DB = openDb(config.DB_PATH), verif
   app.use('*', originGuard(config))
   app.use('*', rateLimit(1500, 60_000))                                                      // generous per-IP ceiling for everything
   app.use('*', bodyLimit({ maxSize: 1024 * 1024, onError: c => c.json({ error: 'Request too large' }, 413) }))
-  for (const routes of [authRoutes, accountRoutes, tokenRoutes, notebookRoutes, sectionRoutes, memberRoutes, fileRoutes, eventRoutes]) app.route('/', routes(ctx))
+  for (const routes of [authRoutes, accountRoutes, tokenRoutes, notebookRoutes, sectionRoutes, memberRoutes, inviteRoutes, fileRoutes, eventRoutes]) app.route('/', routes(ctx))
 
   app.notFound(c => c.json({ error: 'not found' }, 404))
   app.onError((e, c) => { console.error(e); return c.json({ error: 'Internal error' }, 500) })

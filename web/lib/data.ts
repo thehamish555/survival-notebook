@@ -21,6 +21,7 @@ export const LINKS: [string, [string, string, string][]][] = [
 ]
 
 export const CHANGELOG: [string, string, string[]][] = [
+  ['3.1.0', 'November 17th, 2026', ['Feature:', 'Invite links: the owner can make a link (can edit or view only, lasting 1, 7 or 30 days) and anyone who signs in with it joins the notebook. Links can be copied or removed in Settings.', 'Recent activity has a See all view with filters for person and section, joins show up in it, and Home says how many changes others made since you were last here.']],
   ['3.0.1', 'November 17th, 2026', ['Fix:', 'Filters and settings with only two choices are now a single button that swaps between them, instead of a dropdown.']],
   ['3.0', 'November 10th, 2026', ['Website release.']],
   ['2.3', 'November 21st, 2024', ['Table Updates:', 'Standardized table widths across the document.', 'Adjusted table heights for consistency (except on the Enchantments page).', 'Removed extra rows from the Farms Tabs.', 'Other Changes:', 'Minor tweaks to improve document appearance and usability.']],
