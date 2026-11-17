@@ -331,7 +331,7 @@ export default function Notebook() {
       {tab === 'Map' && (mapTiles > 0 ? <MapView id={id} rev={mapRev} places={coords} role={role} onPlace={showPlace} />
         : <div className="card"><h2>Map</h2><div className="empty">No map yet. It appears once someone explores with the mod connected (Share map is on in its Settings by default).</div></div>)}
 
-      {tab === 'Shopping' && <Shopping id={id} d={d} members={members} meId={meId} who={gearUid} setWho={pickPlayer} edit={edit} />}
+      {tab === 'Shopping' && <Shopping id={id} d={d} members={members} meId={meId} who={gearUid} setWho={pickPlayer} edit={edit} save={save} />}
 
       {tab === 'Notes' && <div className="card"><h2>Notes</h2>
         <textarea style={{ width: '100%', maxWidth: 760, minHeight: 360, resize: 'vertical' }} readOnly={!edit} value={typeof d.notes === 'string' ? d.notes : ''} onChange={e => save('notes', e.target.value)} placeholder="Anything about this world…" /></div>}

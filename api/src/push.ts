@@ -37,6 +37,31 @@ export const whoAndWhere = (db: DB, nb: string, uid: string) => {
   return { name: r?.name || 'Someone', title: r?.title || 'a notebook' }
 }
 
+const rowsOf = (raw: string | undefined): any[] => { try { const v = JSON.parse(raw ?? '[]'); return Array.isArray(v) ? v : [] } catch { return [] } }
+
+/** Remembers who made each to-do or farm (`by`), so they can hear when it's finished. Clients don't send it, so it's kept from the stored copy. */
+export function stampBy(prevRaw: string | undefined, next: any[], uid: string): any[] {
+  const before = new Map(rowsOf(prevRaw).map(r => [r?.id, r]))
+  return next.map(r => {
+    if (!r || typeof r !== 'object' || r.auto || typeof r.by === 'string') return r
+    const old = before.get(r.id)
+    return { ...r, by: old ? (typeof old.by === 'string' ? old.by : '') : uid }   // rows from before this existed stay unowned
+  })
+}
+
+/** To-dos someone other than their maker just moved to Done. */
+export const newlyDone = (prevRaw: string | undefined, next: any[], by: string) => {
+  const before = new Map(rowsOf(prevRaw).map(r => [r?.id, r?.progress]))
+  return next.filter(r => r && !r.auto && r.progress === 'Done' && before.has(r.id) && before.get(r.id) !== 'Done' && r.by && r.by !== by)
+}
+/** Farms that just got marked built. */
+export const newlyBuilt = (prevRaw: string | undefined, next: any[]) => {
+  const before = new Map(rowsOf(prevRaw).map(r => [r?.id, !!r?.built]))
+  return next.filter(r => r && r.built && before.has(r.id) && !before.get(r.id))
+}
+/** Deaths that weren't there before. */
+export const newDeaths = (prevRaw: string | undefined, next: any[]) => { const ids = new Set(rowsOf(prevRaw).map(r => r?.id)); return next.filter(r => r && !ids.has(r.id)) }
+
 /** Rows (to-dos or farms) that were just assigned to someone other than the person saving. Unchanged assignments are ignored. */
 export function newAssignments(prevRaw: string | undefined, next: any[], by: string, members: Set<string>) {
   let prev: any[] = []; try { const v = JSON.parse(prevRaw ?? '[]'); if (Array.isArray(v)) prev = v } catch { /* treat as empty */ }

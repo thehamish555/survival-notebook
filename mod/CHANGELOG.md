@@ -1,3 +1,8 @@
+## 1.2.0 – Feature
+- Map tab: the notebook's shared map in game, with your places as pins and a marker showing where you are and which way you face. Drag to move, scroll to zoom, and click a pin to track it. What you've just explored shows straight away.
+- Ender chest: the mod remembers what's in it each time you open it, and the shopping list counts it as Have (on the website too).
+- Shopping tab: press I'll get it on an item so everyone can see who's gathering it. It's shared with the website.
+
 ## 1.1.0 – Feature
 - New commands: `/notebook` opens the notebook, `/notebook place <name>` saves where you're standing, and `/notebook todo <text>` adds a to-do for you. `/notebook todo 64 glass` also puts 64 glass on the shopping list.
 - Paste coordinates: press F3 + C, then Paste in the place editor (or paste into a coordinate box). The dimension comes from what you copied. A plain `/tp x y z` uses the dimension you're in.

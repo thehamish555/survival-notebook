@@ -24,13 +24,19 @@ final class MapRecorder {
 
 	private static final Map<String, byte[]> tiles = new HashMap<>();   // "dim/tx/tz" -> 128*128 packed pixels
 	private static final Map<String, Long> touched = new HashMap<>();
+	private static final Map<String, Long> versions = new HashMap<>();   // bumps when a tile changes, so the Map tab redraws it
 	private static final Set<String> dirty = new HashSet<>();
 	private static final Map<Long, Long> scanned = new HashMap<>();
 	private static String dimNow = "";
 	private static volatile boolean full, busy;
 
 	/** Forget everything (new world, new notebook, or sharing switched off). */
-	static synchronized void reset() { tiles.clear(); touched.clear(); dirty.clear(); scanned.clear(); dimNow = ""; full = false; }
+	static synchronized void reset() { tiles.clear(); touched.clear(); versions.clear(); dirty.clear(); scanned.clear(); dimNow = ""; full = false; }
+
+	// ---- read by the Map tab (MapTiles), so what you just explored shows before it's uploaded
+	static synchronized java.util.Set<String> keys() { return new HashSet<>(tiles.keySet()); }
+	static synchronized byte[] copy(String key) { byte[] t = tiles.get(key); return t == null ? null : t.clone(); }
+	static synchronized long version(String key) { return versions.getOrDefault(key, 0L); }
 
 	static void tick(Minecraft mc, int ticks) {
 		if (mc.player == null || mc.level == null) return;
@@ -75,7 +81,7 @@ final class MapRecorder {
 			if (b != 0 && t[i] != b) { t[i] = b; changed = true; }
 		}
 		touched.put(key, now);
-		if (changed) dirty.add(key);
+		if (changed) { dirty.add(key); versions.merge(key, 1L, Long::sum); }
 	}
 
 	/** Sends a few changed tiles (most recently explored first). Tiles nobody has touched for a while are dropped from memory. */
@@ -91,6 +97,7 @@ final class MapRecorder {
 			long old = System.currentTimeMillis() - 15 * 60_000;
 			tiles.keySet().removeIf(k -> !dirty.contains(k) && touched.getOrDefault(k, 0L) < old);
 			touched.keySet().retainAll(tiles.keySet());
+			versions.keySet().retainAll(tiles.keySet());
 		}
 		if (keys.isEmpty()) return;
 		busy = true;

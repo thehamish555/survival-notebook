@@ -16,8 +16,8 @@ import java.util.function.Consumer;
  * Vanilla buttons do the clicking, and we paint over them, so everything looks like one consistent UI.
  */
 final class NotebookScreen extends Screen {
-	static final String[] TABS = {"Home", "Places", "Enchants", "Deaths", "To-Do", "Farms", "Shopping", "Notes", "Settings"};
-	static final int SHOPPING = 6, NOTES = 7, SETTINGS = 8;
+	static final String[] TABS = {"Home", "Places", "Map", "Enchants", "Deaths", "To-Do", "Farms", "Shopping", "Notes", "Settings"};
+	static final int HOME = 0, PLACES = 1, MAP = 2, GEAR = 3, DEATHS = 4, TODO = 5, FARMS = 6, SHOPPING = 7, NOTES = 8, SETTINGS = 9;
 	static int tab = -1, scroll, scrollMax;
 
 	int x0, y0, pw, ph, sw, cx, cw, top, bottom;   // panel and content-area geometry
@@ -50,7 +50,7 @@ final class NotebookScreen extends Screen {
 	Font font() { return this.font; }
 	void rebuild() { this.rebuildWidgets(); }
 
-	static void resetEditors() { PagePlaces.reset(); PageTodo.reset(); PageFarms.reset(); PageGear.reset(); PageDeaths.reset(); PageNotes.reset(); PageShopping.reset(); ddKey = ""; ddScroll = 0; PagePlaces.importing = false; PageFarms.picking = false; scroll = 0; }
+	static void resetEditors() { PagePlaces.reset(); PageTodo.reset(); PageFarms.reset(); PageGear.reset(); PageDeaths.reset(); PageNotes.reset(); PageShopping.reset(); PageMap.reset(); ddKey = ""; ddScroll = 0; PagePlaces.importing = false; PageFarms.picking = false; scroll = 0; }
 	static String next(String cur, String[] opts) {
 		for (int i = 0; i < opts.length; i++) if (opts[i].equals(cur)) return opts[(i + 1) % opts.length];
 		return opts[0];
@@ -70,12 +70,13 @@ final class NotebookScreen extends Screen {
 		header();
 		tabBar();
 		switch (tab) {
-			case 0 -> PageHome.build(this);
-			case 1 -> PagePlaces.build(this);
-			case 2 -> PageGear.build(this);
-			case 3 -> PageDeaths.build(this);
-			case 4 -> PageTodo.build(this);
-			case 5 -> PageFarms.build(this);
+			case HOME -> PageHome.build(this);
+			case PLACES -> PagePlaces.build(this);
+			case MAP -> PageMap.build(this);
+			case GEAR -> PageGear.build(this);
+			case DEATHS -> PageDeaths.build(this);
+			case TODO -> PageTodo.build(this);
+			case FARMS -> PageFarms.build(this);
 			case SHOPPING -> PageShopping.build(this);
 			case NOTES -> PageNotes.build(this);
 			default -> PageSettings.build(this);
@@ -118,6 +119,7 @@ final class NotebookScreen extends Screen {
 
 	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+		if (tab == MAP && openDd == null && PageMap.scroll(mouseX, mouseY, scrollY)) return true;
 		if (openDd != null) {
 			int max = Math.max(0, openDd.opts().size() - DD_ROWS);
 			int n = Math.max(0, Math.min(max, ddScroll - (int) Math.signum(scrollY)));
@@ -132,9 +134,28 @@ final class NotebookScreen extends Screen {
 		return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
 	}
 
+	// The Map tab handles its own dragging and clicking inside the map area.
+	@Override
+	public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent e, boolean doubleClick) {
+		if (tab == MAP && openDd == null && e.button() == 0 && PageMap.press(e.x(), e.y())) return true;
+		return super.mouseClicked(e, doubleClick);
+	}
+
+	@Override
+	public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent e, double dx, double dy) {
+		if (tab == MAP && PageMap.drag(dx, dy)) return true;
+		return super.mouseDragged(e, dx, dy);
+	}
+
+	@Override
+	public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent e) {
+		if (tab == MAP && PageMap.release(e.x(), e.y())) return true;
+		return super.mouseReleased(e);
+	}
+
 	// ---- chrome
 
-	private static final String[] TAB_ICONS = {"home", "places", "gear", "deaths", "todo", "farms", "item:bundle", "notes", "settings"};   // "item:" = a Minecraft item icon
+	private static final String[] TAB_ICONS = {"home", "places", "item:filled_map", "gear", "deaths", "todo", "farms", "item:bundle", "notes", "settings"};   // "item:" = a Minecraft item icon
 
 	private void header() {
 		paint((g, mx, my) -> {
@@ -185,11 +206,11 @@ final class NotebookScreen extends Screen {
 	static String badge(int t) {
 		try {
 			switch (t) {
-				case 1: { int n = Notebook.list("coords").size(); return n > 0 ? String.valueOf(n) : ""; }
-				case 3: { int n = 0; for (var d : Notebook.rows("deaths")) if (!Notebook.bool(d, "recovered")) n++; return n > 0 ? String.valueOf(n) : ""; }
-				case 4: { int n = Notebook.todoList(true, false).size(); return n > 0 ? String.valueOf(n) : ""; }
-				case 5: { int n = Notebook.list("farms").size(); return n > 0 ? String.valueOf(n) : ""; }
-				case 2: { int n = Notebook.gear(Notebook.userId).size(); return n > 0 ? String.valueOf(n) : ""; }
+				case PLACES: { int n = Notebook.list("coords").size(); return n > 0 ? String.valueOf(n) : ""; }
+				case DEATHS: { int n = 0; for (var d : Notebook.rows("deaths")) if (!Notebook.bool(d, "recovered")) n++; return n > 0 ? String.valueOf(n) : ""; }
+				case TODO: { int n = Notebook.todoList(true, false).size(); return n > 0 ? String.valueOf(n) : ""; }
+				case FARMS: { int n = Notebook.list("farms").size(); return n > 0 ? String.valueOf(n) : ""; }
+				case GEAR: { int n = Notebook.gear(Notebook.userId).size(); return n > 0 ? String.valueOf(n) : ""; }
 				default: return "";
 			}
 		} catch (RuntimeException e) { return ""; }
@@ -199,8 +220,8 @@ final class NotebookScreen extends Screen {
 	String webUrl() {
 		NbConfig c = NbConfig.get();
 		if (tab == SETTINGS || c.notebookId.isBlank()) return c.web() + "/account";
-		String[] slug = {"home", "coordinates", "enchantments", "deaths", "todo", "farms", "shopping", "notes", "members"};
-		String extra = tab == 2 && !PageGear.uid.isBlank() ? "/" + PageGear.uid : "";
+		String[] slug = {"home", "coordinates", "map", "enchantments", "deaths", "todo", "farms", "shopping", "notes", "members"};
+		String extra = tab == GEAR && !PageGear.uid.isBlank() ? "/" + PageGear.uid : "";
 		return c.web() + "/n/" + c.notebookId + "#" + slug[Math.min(tab, slug.length - 1)] + extra;
 	}
 

@@ -80,6 +80,7 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 			String json = gear.toString();
 			if (!json.equals(lastGear)) { lastGear = json; Notebook.syncGear(gear, false); }
 		}
+		if (ticks % 10 == 5 && cfg.shareInventory) InventoryScanner.watchEnder();
 		if (ticks % 600 == 450 && cfg.shareInventory && Notebook.canEdit()) Notebook.syncInventory(InventoryScanner.scan());   // ~every 30s, only when it changed
 		if (cfg.shareMap && Notebook.canEdit()) MapRecorder.tick(mc, ticks);
 

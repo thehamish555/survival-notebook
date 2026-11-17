@@ -89,6 +89,10 @@ export function MapView({ id, rev, places, role, onPlace }: { id: string; rev: n
     const v = view.current!, [wx, wz] = toWorld(e)
     return pins.find(({ at }) => Math.hypot(at[0] + 0.5 - wx, at[2] + 0.5 - wz) * v.scale < 9)
   }
+  const prune = async () => {
+    if (!(await confirm({ title: 'Clear old tiles?', body: 'Removes parts of the map nobody has been to for 90 days. Anything within 256 blocks of a saved place stays. This also happens by itself once a day.', ok: 'Clear old tiles' }))) return
+    api(`/notebooks/${id}/map/prune`, 'POST').then((r: any) => setErr(r.removed ? '' : 'Nothing old enough to clear.')).catch(e => setErr(e.message))
+  }
   const clear = async () => { if (await confirm({ title: 'Clear the map?', body: 'Every tile is deleted for everyone. It fills in again as players with map sharing on explore.', ok: 'Clear map', danger: true })) await api(`/notebooks/${id}/map`, 'DELETE').catch(e => setErr(e.message)) }
 
   return <div className="card">
@@ -109,6 +113,6 @@ export function MapView({ id, rev, places, role, onPlace }: { id: string; rev: n
         onPointerLeave={() => setHover(null)} />
       {hover && <span className="mapcoord">x {hover[0]} · z {hover[1]}</span>}
     </div>
-    {role === 'owner' && <div className="row" style={{ marginTop: 10 }}><span className="grow mut small">{tiles.length} tile{tiles.length === 1 ? '' : 's'} recorded.</span><button className="ghost" onClick={clear}>Clear map</button></div>}
+    {role === 'owner' && <div className="row" style={{ marginTop: 10 }}><span className="grow mut small">{tiles.length} tile{tiles.length === 1 ? '' : 's'} recorded.</span><button className="ghost" onClick={prune}>Clear old tiles</button><button className="ghost" onClick={clear}>Clear map</button></div>}
   </div>
 }

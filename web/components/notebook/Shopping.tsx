@@ -16,7 +16,7 @@ const UNSTACKABLE = /(_bucket|_bed|_boat|_raft|_minecart|_shulker_box|^shulker_b
  * What still needs gathering: blocks for farms not built yet (from their Litematica files), quantities typed on open to-dos,
  * and enchanted books for the player's gear. Compared with the inventory the mod last sent (shulker boxes and bundles included).
  */
-export function Shopping({ id, d, members, meId, who, setWho, edit }: any) {
+export function Shopping({ id, d, members, meId, who, setWho, edit, save }: any) {
   const farms: any[] = (d.farms || []).filter((f: any) => !f.built && f.file?.id)
   const [blocks, setBlocks] = useState<Record<string, { items: Record<string, number>; error?: string }>>({}), [loadErr, setLoadErr] = useState('')
   const [skip, setSkip] = useState<Set<string>>(new Set()), [show, setShow] = useState('Still needed')
@@ -36,7 +36,9 @@ export function Shopping({ id, d, members, meId, who, setWho, edit }: any) {
       add(t.icon || 'todo:' + t.id, t.icon || '', t.icon ? prettyItem(t.icon) : t.project || 'Untitled to-do', q, 'To-do: ' + (t.project || 'Untitled'))
     }
     for (const b of bookList(d['gear:' + who] || [])) add(`book:${b.name}:${b.max}`, 'enchanted_book', `${lvl(b.name, b.max, b.max)} book`, b.count, 'Gear')
-    const items: Record<string, number> = inv?.items || {}, books: [string, number, number][] = Array.isArray(inv?.books) ? inv.books : []
+    // the ender chest is counted too: the mod remembers it from the last time it was opened
+    const items: Record<string, number> = { ...(inv?.items || {}) }, books: [string, number, number][] = [...(Array.isArray(inv?.books) ? inv.books : []), ...(Array.isArray(inv?.ender?.books) ? inv.ender.books : [])]
+    for (const [k, n] of Object.entries<number>(inv?.ender?.items || {})) items[k] = (items[k] || 0) + n
     for (const l of m.values()) {
       if (!inv) continue
       if (l.key.startsWith('book:')) { const [, n, lv] = l.key.split(':'); l.have = books.filter(([bn, bl]) => bn === n && bl >= Number(lv)).reduce((s, [, , c]) => s + c, 0) }
@@ -48,13 +50,22 @@ export function Shopping({ id, d, members, meId, who, setWho, edit }: any) {
   const left = (l: Line) => Math.max(0, l.need - (l.have ?? 0))
   const view = lines.filter(l => show === 'Everything' || l.have === null || left(l) > 0)
   const doneN = lines.filter(l => l.have !== null && left(l) === 0).length
+  // "I'm getting this": one claim per item, shared with everyone (the shop section, rows keyed by item)
+  const shop: any[] = d.shop || [], claimId = (key: string) => key.slice(0, 64)
+  const claim = (key: string, mine: boolean) => save('shop', mine ? [...shop.filter(c => c.id !== claimId(key)), { id: claimId(key), uid: meId, ts: Date.now() }] : shop.filter(c => c.id !== claimId(key)))
+  const claimCell = (key: string) => {
+    const c = shop.find(x => x.id === claimId(key)), m = c && members.find((x: any) => x.id === c.uid)
+    if (m && c.uid === meId) return <span className="inl"><span className="pill t-blue">You</span>{edit && <button className="x" title="Stop getting this" onClick={() => claim(key, false)}>✕</button>}</span>
+    if (m) return <span className="pill t-gray">{m.name}</span>
+    return edit ? <button className="ghost small" onClick={() => claim(key, true)}>I'll get it</button> : <span className="mut">–</span>
+  }
   const flip = (fid: string) => setSkip(s => { const n = new Set(s); n.has(fid) ? n.delete(fid) : n.add(fid); return n })
 
   return <div className="card">
     <div className="row"><h2 className="grow">Shopping list</h2>
       <Chips label="Show" noAll value={show} opts={['Still needed', 'Everything']} onChange={setShow} /></div>
     <div className="roster">{members.map((m: any) => <button key={m.id} className={`fchip mem ${who === m.id ? 'on' : ''}`} onClick={() => setWho(m.id)}>{m.name}{m.id === meId ? ' (you)' : ''}</button>)}</div>
-    <p className="mut">{inv ? `Compared with ${who === meId ? 'your' : `${name}'s`} inventory from ${timeAgo(inv.ts)}, including shulker boxes and bundles.`
+    <p className="mut">{inv ? `Compared with ${who === meId ? 'your' : `${name}'s`} inventory from ${timeAgo(inv.ts)}, including shulker boxes and bundles${inv.ender ? `, and the ender chest as it was ${timeAgo(inv.ender.ts)}` : '. Open your ender chest in game to count it too'}.`
       : `No inventory from ${who === meId ? 'you' : name} yet. The mod sends it when Share inventory is on in its Settings.`}</p>
     {!!farms.length && <div className="filters"><span className="lbl">Farms counted</span>{farms.map(f => <button key={f.id} type="button" className={`fchip ${skip.has(f.id) ? '' : 'on'}`} onClick={() => flip(f.id)} title={blocks[f.file.id]?.error || f.file.name}>
       {f.icon && <McIcon name={f.icon} size={16} />}{f.name || 'Unnamed farm'}{blocks[f.file.id]?.error ? ' (unreadable)' : ''}</button>)}</div>}
@@ -62,12 +73,13 @@ export function Shopping({ id, d, members, meId, who, setWho, edit }: any) {
     {!lines.length && <div className="empty">Nothing to gather. Attach Litematica files to farms you haven't built, give to-dos a quantity, or plan gear that needs books.</div>}
     {!!lines.length && !view.length && <div className="empty">You have everything on the list.</div>}
     {!!view.length && <div className="tblwrap"><table>
-      <thead><tr><th>Item</th><th>Need</th><th>Have</th><th>Still need</th><th>For</th></tr></thead>
+      <thead><tr><th>Item</th><th>Need</th><th>Have</th><th>Still need</th><th>Getting it</th><th>For</th></tr></thead>
       <tbody>{view.map(l => <tr key={l.key} className={l.have !== null && !left(l) ? 'got' : ''}>
         <td><div className="inl">{l.icon && <McIcon name={l.icon} size={20} />}<b style={{ fontWeight: 500 }}>{l.label}</b></div></td>
         <td>{amount(l.need, UNSTACKABLE.test(l.key))}</td>
         <td className="mut">{l.have === null ? '–' : l.have.toLocaleString()}</td>
         <td>{l.have === null ? '–' : left(l) ? <b>{amount(left(l), UNSTACKABLE.test(l.key))}</b> : <span className="pill t-green">Got it</span>}</td>
+        <td>{claimCell(l.key)}</td>
         <td className="mut small">{l.from.join(', ')}</td></tr>)}</tbody></table></div>}
     {lines.length > 0 && inv && <p className="mut small">{doneN} of {lines.length} done.{!edit ? '' : ' Tick off a to-do or mark a farm built to take it off the list.'}</p>}
   </div>

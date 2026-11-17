@@ -4,7 +4,7 @@ import { deflateSync, gzipSync, inflateSync } from 'node:zlib'
 import { createApp } from '../src/app'
 import { loadConfig } from '../src/config'
 import { blockItems, litematicItems } from '../src/litematic'
-import { TILE_BYTES } from '../src/routes/map'
+import { TILE_BYTES, pruneMap } from '../src/routes/map'
 import type { PushMsg, PushSub } from '../src/push'
 
 // ---- a tiny NBT writer, just enough to build .litematic files for the tests
@@ -135,4 +135,49 @@ test('push: subscribe, assignment and invite notifications, dead subscriptions r
   await call('PUT', `/notebooks/${nb}/s/todos`, { data: [{ ...todo, assignee: b.id }] }, b.token); await tick()
   assert.equal(sent.length, 3)                                                                    // assigning yourself sends nothing
   assert.equal((await call('DELETE', '/push/subscribe', { endpoint: 'https://push.example/bob' }, b.token)).status, 200)
+})
+
+test('push: finished to-dos tell their maker, built farms and deaths tell everyone else', async () => {
+  const { call, user, notebook, sent, tick, db } = mk(), a = await user('alice'), b = await user('bob'), nb = await notebook(a.token)
+  await call('POST', `/notebooks/${nb}/members`, { email: 'bob@x.com', role: 'editor' }, a.token)
+  for (const u of [a, b]) await call('POST', '/push/subscribe', { endpoint: `https://push.example/${u.id}`, keys: { p256dh: 'p', auth: 'a' } }, u.token)
+  sent.length = 0
+  const to = (u: { id: string }) => sent.filter(x => x.sub.endpoint.endsWith(u.id)).map(x => x.msg.body)
+
+  await call('PUT', `/notebooks/${nb}/s/todos`, { data: [{ id: 't1', project: 'Glass', progress: 'To-Do' }] }, a.token)
+  const stored = (db.prepare("select data from sections where nb=? and name='todos'").get(nb) as { data: string }).data
+  assert.equal(JSON.parse(stored)[0].by, a.id)                                                              // the maker is remembered
+  await call('PUT', `/notebooks/${nb}/s/todos`, { data: [{ id: 't1', project: 'Glass', progress: 'Done' }] }, b.token); await tick()   // bob's copy has no "by"...
+  assert.deepEqual(to(a), ['bob finished “Glass”'])
+  assert.equal(JSON.parse((db.prepare("select data from sections where nb=? and name='todos'").get(nb) as { data: string }).data)[0].by, a.id)   // ...but it's kept
+
+  await call('PUT', `/notebooks/${nb}/s/farms`, { data: [{ id: 'f1', name: 'Iron farm', built: false }] }, a.token)
+  await call('PUT', `/notebooks/${nb}/s/farms`, { data: [{ id: 'f1', name: 'Iron farm', built: true }] }, a.token); await tick()
+  assert.deepEqual(to(b), ['alice built the farm “Iron farm”']); assert.equal(to(a).length, 1)
+
+  await call('PUT', `/notebooks/${nb}/s/deaths`, { data: [{ id: 'd1', uid: b.id, cause: 'bob was slain by Zombie', ow: '1 2 3' }] }, b.token); await tick()
+  assert.deepEqual(to(a), ['bob finished “Glass”', 'bob was slain by Zombie']); assert.equal(to(b).length, 1)
+})
+
+test('shop claims: anyone can claim, the mod too, and it stays out of the activity feed', async () => {
+  const { call, user, notebook, modToken } = mk(), a = await user('alice'), nb = await notebook(a.token)
+  const claim = [{ id: 'book:Sharpness:5', uid: a.id, ts: 1 }]
+  assert.equal((await call('PUT', `/notebooks/${nb}/s/shop`, { data: claim }, await modToken(a.token))).status, 200)
+  assert.deepEqual((await call('GET', `/notebooks/${nb}`, undefined, a.token)).json.sections.shop.data, claim)
+  assert.equal((await call('GET', `/notebooks/${nb}/activity`, undefined, a.token)).json.length, 0)
+})
+
+test('map clean-up: old tiles go unless near a place; the mod can read the map', async () => {
+  const { call, user, notebook, modToken, db } = mk(), a = await user('alice'), nb = await notebook(a.token), mod = await modToken(a.token)
+  const tile = deflateSync(Buffer.alloc(TILE_BYTES, 4))
+  for (const [tx, tz] of [[0, 0], [5, 5], [-3, 0]]) await call('PUT', `/notebooks/${nb}/map/ow/${tx}/${tz}`, undefined, mod, tile)
+  await call('PUT', `/notebooks/${nb}/map/nether/5/5`, undefined, mod, tile)
+  await call('PUT', `/notebooks/${nb}/s/coords`, { data: [{ id: 'p', name: 'Base', ow: '700 64 700', nether: '', end: '' }, { id: 'q', name: 'Hub', ow: '', nether: '-500 70 10', end: '' }] }, a.token)
+  db.prepare('update map_tiles set updated=0 where not (tx=-3)').run()           // everything but (-3,0) is old
+  assert.equal((await call('POST', `/notebooks/${nb}/map/prune`, undefined, mod)).status, 403)   // owner only, and not with a mod token
+  assert.equal((await call('POST', `/notebooks/${nb}/map/prune`, undefined, a.token)).json.removed, 2)
+  const left = (await call('GET', `/notebooks/${nb}/map`, undefined, mod)).json.map((t: any) => `${t.dim}/${t.tx}/${t.tz}`).sort()
+  assert.deepEqual(left, ['ow/-3/0', 'ow/5/5'])                                   // (5,5) holds Base at 700,700; (0,0) and the Nether tile were old and far from anything
+  assert.equal((await call('GET', `/notebooks/${nb}/map/ow/5/5`, undefined, mod)).status, 200)
+  assert.equal(pruneMap(db, { now: Date.now() + 200 * 86_400_000 }), 1)          // much later, the recent tile ages out too
 })

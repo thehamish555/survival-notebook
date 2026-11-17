@@ -83,7 +83,7 @@ final class PagePlaces {
 
 	/** The B key: jump to Places with a new place prefilled with where you're standing. */
 	static void addHere() {
-		NotebookScreen.tab = 1; NotebookScreen.scroll = 0;
+		NotebookScreen.tab = NotebookScreen.PLACES; NotebookScreen.scroll = 0;
 		importing = false;
 		openNew();
 	}

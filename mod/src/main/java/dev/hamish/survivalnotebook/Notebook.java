@@ -185,7 +185,7 @@ final class Notebook {
 	static void pickNotebook(String id, String name) {
 		NbConfig c = NbConfig.get();
 		c.notebookId = id; c.notebookTitle = name; NbConfig.save();
-		role = ""; MapRecorder.reset(); Live.restart(); refresh();
+		role = ""; MapRecorder.reset(); InventoryScanner.ender = null; Live.restart(); refresh();
 	}
 
 	// ---- generic row editing (places, to-dos, farms, your own gear)

@@ -217,6 +217,55 @@ final class Compat {
 		} catch (RuntimeException | LinkageError e) { return null; }
 	}
 
+	// ---- drawing map tiles (the in-game Map tab): one 128x128 texture per tile
+
+	private static final Map<String, net.minecraft.client.renderer.texture.DynamicTexture> TILE_TEX = new HashMap<>();
+
+	/** Creates or refreshes the texture for a tile from its packed map bytes. Render thread only. Returns its id, or null if this version can't. */
+	static Identifier tileTexture(String key, byte[] packed) {
+		try {
+			Identifier id = Identifier.fromNamespaceAndPath(SurvivalNotebookClient.ID, "map/" + key);
+			var tex = TILE_TEX.get(key);
+			if (tex == null) {
+				tex = new net.minecraft.client.renderer.texture.DynamicTexture(() -> "survival_notebook map " + key, new com.mojang.blaze3d.platform.NativeImage(128, 128, true));
+				Minecraft.getInstance().getTextureManager().register(id, tex);
+				TILE_TEX.put(key, tex);
+			}
+			var img = tex.getPixels();
+			for (int i = 0; i < 128 * 128; i++) {
+				int p = packed[i] & 0xFF, argb = 0;
+				if (p >= 4) { var c = net.minecraft.world.level.material.MapColor.byId(p >> 2); if (c != null) argb = c.calculateARGBColor(net.minecraft.world.level.material.MapColor.Brightness.byId(p & 3)) | 0xFF000000; }
+				img.setPixel(i & 127, i >> 7, argb);
+			}
+			tex.upload();
+			return id;
+		} catch (RuntimeException | LinkageError e) { return null; }
+	}
+
+	/** Frees a tile texture that's no longer needed. */
+	static void releaseTile(String key) {
+		try { if (TILE_TEX.remove(key) != null) Minecraft.getInstance().getTextureManager().release(Identifier.fromNamespaceAndPath(SurvivalNotebookClient.ID, "map/" + key)); } catch (RuntimeException | LinkageError ignored) { }
+	}
+
+	/** Draws a whole texture stretched over the rectangle (x0, y0)-(x1, y1). */
+	static void blitTile(GuiGraphicsExtractor g, Identifier id, int x0, int y0, int x1, int y1) {
+		try { g.blit(id, x0, y0, x1, y1, 0f, 1f, 0f, 1f); } catch (RuntimeException | LinkageError ignored) { }
+	}
+
+	/** The open screen, if it's the ender chest: its 27 slots. Null otherwise. Works in any language (compares with the game's own title). */
+	static List<ItemStack> enderChestSlots() {
+		try {
+			var screen = Minecraft.getInstance().gui.screen();
+			if (!(screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?> s)) return null;
+			if (!s.getTitle().getString().equals(net.minecraft.network.chat.Component.translatable("container.enderchest").getString())) return null;
+			var menu = s.getMenu();
+			if (menu.slots.size() < 27 + 36) return null;
+			List<ItemStack> out = new java.util.ArrayList<>();
+			for (int i = 0; i < 27; i++) out.add(menu.getSlot(i).getItem());
+			return out;
+		} catch (RuntimeException | LinkageError e) { return null; }
+	}
+
 	/** Chunks the player can currently see, as a radius in chunks. */
 	static int viewChunks() {
 		try { return Minecraft.getInstance().options.getEffectiveRenderDistance(); } catch (RuntimeException | LinkageError e) { return 8; }

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { deflateSync, inflateSync } from 'node:zlib'
 import { canEdit, getRole } from '../access'
 import { requireAuth } from '../middleware'
+import type { DB } from '../db'
 import type { AppEnv, Ctx } from '../types'
 
 // The map is made of 128x128-block tiles, one byte per block (vanilla map colour id * 4 + shade, 0 = not seen yet), zlib-compressed.
@@ -17,6 +18,36 @@ export function mergeTile(old: Buffer | undefined, next: Buffer): Buffer {
   const out = Buffer.from(old)
   for (let i = 0; i < TILE_BYTES; i++) if (next[i]) out[i] = next[i]
   return out
+}
+
+export const PRUNE_AGE = 90 * 86_400_000, PRUNE_KEEP = 256
+
+/**
+ * Removes map tiles nobody has updated for `maxAgeMs`, except tiles within `keep` blocks of a saved place in the same dimension.
+ * Runs daily for every notebook, and on demand for one (the owner's Clear old tiles button). Returns how many were removed.
+ */
+export function pruneMap(db: DB, { nb, now = Date.now(), maxAgeMs = PRUNE_AGE, keep = PRUNE_KEEP }: { nb?: string; now?: number; maxAgeMs?: number; keep?: number } = {}) {
+  const old = db.prepare(`select nb, dim, tx, tz from map_tiles where updated<?${nb ? ' and nb=?' : ''}`).all(...(nb ? [now - maxAgeMs, nb] : [now - maxAgeMs])) as { nb: string; dim: string; tx: number; tz: number }[]
+  const places = new Map<string, Record<string, [number, number][]>>()
+  const placesOf = (id: string) => {
+    if (!places.has(id)) {
+      const by: Record<string, [number, number][]> = { ow: [], nether: [], end: [] }
+      const row = db.prepare("select data from sections where nb=? and name='coords'").get(id) as { data: string } | undefined
+      try { for (const p of JSON.parse(row?.data || '[]')) for (const d of Object.keys(by)) { const n = String(p?.[d] || '').trim().split(/\s+/).map(Number); if (n.length === 3 && n.every(Number.isFinite)) by[d].push([n[0], n[2]]) } } catch { /* unreadable: keep nothing special */ }
+      places.set(id, by)
+    }
+    return places.get(id)!
+  }
+  const del = db.prepare('delete from map_tiles where nb=? and dim=? and tx=? and tz=?')
+  let n = 0
+  db.transaction(() => {
+    for (const t of old) {
+      const x0 = t.tx * TILE, z0 = t.tz * TILE
+      const near = (placesOf(t.nb)[t.dim] || []).some(([x, z]) => Math.hypot(Math.max(x0 - x, 0, x - (x0 + TILE - 1)), Math.max(z0 - z, 0, z - (z0 + TILE - 1))) <= keep)
+      if (!near) { del.run(t.nb, t.dim, t.tx, t.tz); n++ }
+    }
+  })()
+  return n
 }
 
 export const mapRoutes = (ctx: Ctx) => {
@@ -57,6 +88,13 @@ export const mapRoutes = (ctx: Ctx) => {
       .run(id, dim, tx, tz, data, data.length, Date.now(), uid)
     ping(id, uid)
     return c.json({ ok: true })
+  })
+
+  // Clear old tiles now (same rule as the daily clean-up)
+  r.post('/notebooks/:id/map/prune', auth, c => {
+    const id = c.req.param('id'); if (getRole(db, id, c.get('uid')) !== 'owner') return c.json({ error: 'Only the owner can clear the map' }, 403)
+    const removed = pruneMap(db, { nb: id }); if (removed) bus.emit(id, { map: true, by: c.get('uid'), cid: '' })
+    return c.json({ removed })
   })
 
   // The owner can wipe the map (it fills in again from anyone still sharing it).

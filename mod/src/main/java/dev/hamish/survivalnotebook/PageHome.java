@@ -27,8 +27,8 @@ final class PageHome {
 		for (JsonObject m : Notebook.memberList()) if (!Notebook.list("stats:" + Notebook.str(m, "id")).isEmpty()) withStats++;
 		// label, value, icon, tab to open (-1 = none)
 		Object[][] tiles = {
-			{"Places", String.valueOf(Notebook.list("coords").size()), "places", 1}, {"Items tracked", String.valueOf(mine.size() - planned), "gear", 2}, {"Items planned", String.valueOf(planned), "gear", 2},
-			{"Not recovered", String.valueOf(lost), "deaths", 3}, {"To-dos done", done + "/" + todos.size(), "todo", 4}, {"Farms built", built + "/" + farms.size(), "farms", 5},
+			{"Places", String.valueOf(Notebook.list("coords").size()), "places", NotebookScreen.PLACES}, {"Items tracked", String.valueOf(mine.size() - planned), "gear", NotebookScreen.GEAR}, {"Items planned", String.valueOf(planned), "gear", NotebookScreen.GEAR},
+			{"Not recovered", String.valueOf(lost), "deaths", NotebookScreen.DEATHS}, {"To-dos done", done + "/" + todos.size(), "todo", NotebookScreen.TODO}, {"Farms built", built + "/" + farms.size(), "farms", NotebookScreen.FARMS},
 			{"Notes", words == 0 ? "Empty" : words + " words", "notes", NotebookScreen.NOTES}, {"Players with stats", String.valueOf(withStats), "stats", -1}, {"Members", String.valueOf(Notebook.members.size()), "members", NotebookScreen.SETTINGS}};
 		int tw = (s.cw - 22) / 3;
 		for (int i = 0; i < tiles.length; i++) {
@@ -54,7 +54,7 @@ final class PageHome {
 			if (!(Notebook.userId.equals(Notebook.str(t, "assignee")) || Notebook.memberName(Notebook.str(t, "assignee")).isEmpty()) || Notebook.str(t, "progress").equals("Done")) continue;   // unassigned = for all users
 			final String id = Notebook.str(t, "id"), name = Notebook.str(t, "project"), prog = Notebook.str(t, "progress"), pr = Notebook.str(t, "priority");
 			final int yy = y;
-			s.row(s.cx, y, s.cw, 17, s.cw, shown, () -> { PageTodo.open(id); NotebookScreen.tab = 4; s.rebuild(); });
+			s.row(s.cx, y, s.cw, 17, s.cw, shown, () -> { PageTodo.open(id); NotebookScreen.tab = NotebookScreen.TODO; s.rebuild(); });
 			s.paint((g, mx, my) -> {
 				Ui.Tone pt = Ui.priority(pr);
 				g.fill(s.cx + 4, yy + 3, s.cx + 7, yy + 14, pt.fg());
@@ -68,7 +68,7 @@ final class PageHome {
 			if (!Notebook.userId.equals(Notebook.str(f, "assignee")) || Notebook.bool(f, "built")) continue;
 			final String id = Notebook.str(f, "id"), name = Notebook.str(f, "name");
 			final int yy = y;
-			s.row(s.cx, y, s.cw, 17, s.cw, shown, () -> { PageFarms.open(id); NotebookScreen.tab = 5; s.rebuild(); });
+			s.row(s.cx, y, s.cw, 17, s.cw, shown, () -> { PageFarms.open(id); NotebookScreen.tab = NotebookScreen.FARMS; s.rebuild(); });
 			s.paint((g, mx, my) -> {
 				g.fill(s.cx + 4, yy + 3, s.cx + 7, yy + 14, p.green.fg());
 				g.text(s.font(), Ui.clip(s.font(), name.isBlank() ? "Unnamed farm" : name, s.cw - 120), s.cx + 12, yy + 5, p.ink, false);

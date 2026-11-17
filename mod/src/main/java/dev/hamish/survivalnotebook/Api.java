@@ -135,6 +135,24 @@ final class Api {
 		}
 	}
 
+	/** GETs raw bytes (a compressed map tile). */
+	static byte[] getBytes(String path) throws ApiException {
+		NbConfig c = NbConfig.get();
+		if (!c.connected()) throw new ApiException(0, "No token");
+		try {
+			HttpRequest req = HttpRequest.newBuilder(URI.create(c.base() + path)).timeout(Duration.ofSeconds(20))
+				.header("authorization", "Bearer " + c.token).header("user-agent", UA).GET().build();
+			HttpResponse<byte[]> r = HTTP.send(req, HttpResponse.BodyHandlers.ofByteArray());
+			if (r.statusCode() / 100 != 2) throw new ApiException(r.statusCode(), "HTTP " + r.statusCode());
+			return r.body();
+		} catch (IllegalArgumentException | IOException e) {
+			throw new ApiException(0, "Can't reach the server");
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new ApiException(0, "Interrupted");
+		}
+	}
+
 	/** Deletes an uploaded file (used when a farm draft is cancelled after its file was already uploaded). */
 	static void deleteFile(String nb, String fileId) throws ApiException { ok(call("DELETE", "/notebooks/" + nb + "/files/" + fileId, null)); }
 

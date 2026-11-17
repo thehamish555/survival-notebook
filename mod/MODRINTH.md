@@ -31,8 +31,8 @@
 - **Safe merging** — edits from the website and the game combine instead of overwriting each other.
 - **Commands** — `/notebook` opens the notebook, `/notebook place <name>` saves where you're standing, `/notebook todo <text>` adds a to-do (`/notebook todo 64 glass` puts 64 glass on the shopping list).
 - **Paste coordinates** — press F3 + C and then Paste in the place editor. The dimension comes from what you copied; a plain `/tp x y z` uses the dimension you're in.
-- **Shopping list** — in game and on the website, the notebook adds up blocks for farms you haven't built (from their Litematica files), quantities on to-dos and books your gear needs, then compares them with what you're carrying, including shulker boxes and bundles.
-- **Map** — the mod draws a map of where you explore on the website, with your places as pins. No minimap mod needed. Turn off Share map in Settings if you'd rather not.
+- **Shopping list** — in game and on the website, the notebook adds up blocks for farms you haven't built (from their Litematica files), quantities on to-dos and books your gear needs, then compares them with what you're carrying (shulker boxes, bundles and your ender chest included). Press I'll get it so friends know who's gathering what.
+- **Map** — the mod draws a map of where you explore, shown on the website and in the Map tab in game, with your places as pins (click one to track it). No minimap mod needed. Turn off Share map in Settings if you'd rather not.
 
 ### Getting started
 1. Sign in with Google at **notebook.hamish555.com** and create a notebook (or get invited to one).
@@ -42,7 +42,7 @@
 ### Privacy — exactly what is sent
 Only to the notebook server you connect to (the official one by default; you can point it at your own):
 - the **names and enchantments of enchanted items** in your inventory,
-- if "Share inventory" is on (default), **the items you're carrying** (with what's inside shulker boxes and bundles), for the shopping list,
+- if "Share inventory" is on (default), **the items you're carrying** (with what's inside shulker boxes and bundles) and **what was in your ender chest** the last time you opened it, for the shopping list,
 - if "Share map" is on (default), **map colours of the chunks loaded around you**,
 - **coordinates you choose to save** (and, if "Save deaths" is on, your death position, the death message, and the enchanted items you were carrying),
 - **minimap waypoints from the world you choose to sync**, and **.litematic files you choose to attach**,
