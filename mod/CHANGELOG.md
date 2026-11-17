@@ -1,3 +1,6 @@
+## 1.4.2 – Fix
+- Coloured potions and tipped arrows are named like on the website, such as Potion of Fire Resistance.
+
 ## 1.4.1 – Feature
 - Map tab: the notebook's shared map in game. Drag to move, scroll to zoom, click a place (or its name) to track it and see the farms there, and right-click an empty spot to add a place there. Places use the same icons as on the Places tab, and a faint grid shows where nothing is mapped yet.
 - Your team on the map, in game and on the website: everyone shows live with their own face and a pointer for where they're looking, and their last spot stays after they log off, dimmed, with when they were last seen. Turn it off with Share position in Settings > Sync & privacy.
