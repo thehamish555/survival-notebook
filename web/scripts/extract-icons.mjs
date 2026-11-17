@@ -3,6 +3,7 @@
 //        npm run icons -- "C:\path\to\26.3.jar"
 import AdmZip from 'adm-zip'
 import sharp from 'sharp'
+import { renderModel } from './block-render.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
@@ -33,7 +34,7 @@ for (const n of [...names]) {
   if (m && !have0(m[1])) { fs.copyFileSync(path.join(out, n + '.png'), path.join(out, m[1] + '.png')); names.push(m[1]) }
 }
 function have0(n) { return names.includes(n) }
-// Block items have no flat item texture, so use the block's own flat texture (side or front face). Nothing is rendered or distorted.
+// Block items are drawn from their block model at the inventory angle (block-render.mjs); anything the game draws flat keeps a flat texture.
 const blockEntries = new Map(), entityEntries = new Map()
 for (const e of entries) {
   let m = e.entryName.match(/^assets\/minecraft\/textures\/block\/([a-z0-9_]+)\.png$/); if (m) blockEntries.set(m[1], e)
@@ -42,7 +43,7 @@ for (const e of entries) {
 const itemDefs = new Set(entries.map(e => e.entryName.match(/^assets\/minecraft\/items\/([a-z0-9_]+)\.json$/)?.[1]).filter(Boolean))
 const have = new Set(names)
 const GREEN = [0x7c, 0xbd, 0x6b], LEAF = [0x5a, 0x9c, 0x3a]
-const TINT = { grass_block_top: GREEN, short_grass: GREEN, tall_grass_top: GREEN, fern: GREEN, oak_leaves: LEAF, jungle_leaves: LEAF, acacia_leaves: LEAF, dark_oak_leaves: LEAF, vine: LEAF, birch_leaves: [0x80, 0xa7, 0x55], spruce_leaves: [0x61, 0x99, 0x61], lily_pad: [0x20, 0x80, 0x30] }
+const TINT = { grass_block_top: GREEN, grass_block_side_overlay: GREEN, mangrove_leaves: [0x8d, 0xb1, 0x27], short_grass: GREEN, tall_grass_top: GREEN, fern: GREEN, oak_leaves: LEAF, jungle_leaves: LEAF, acacia_leaves: LEAF, dark_oak_leaves: LEAF, vine: LEAF, birch_leaves: [0x80, 0xa7, 0x55], spruce_leaves: [0x61, 0x99, 0x61], lily_pad: [0x20, 0x80, 0x30] }
 const png = (w, h, data) => sharp(data, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer()
 const px = async (buf, rect, tint) => {   // RGBA pixels of (a region of) a png; animated strips use their first frame
   const meta = await sharp(buf).metadata(), w = rect ? rect[2] : meta.width, h = rect ? rect[3] : Math.min(meta.width, meta.height)
@@ -61,7 +62,7 @@ const modelRefs = (node, acc = []) => {   // every model named in an item defini
 }
 const modelTextures = ref => {   // a model's textures, with its parents' filling the gaps
   const tex = {}
-  for (let r = ref, i = 0; r && i < 20; i++) { const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break; for (const [k, v] of Object.entries(m.textures || {})) if (!(k in tex)) tex[k] = v; r = m.parent }
+  for (let r = ref, i = 0; r && i < 20; i++) { const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break; for (const [k, v] of Object.entries(m.textures || {})) if (!(k in tex)) tex[k] = v && typeof v === 'object' ? v.sprite : v; r = m.parent }   // 26.x can write a texture as { sprite, force_translucent }
   return tex
 }
 const resolveRef = (tex, v, depth = 0) => (typeof v === 'string' && v.startsWith('#') && depth < 10 ? resolveRef(tex, tex[v.slice(1)], depth + 1) : v)
@@ -76,6 +77,32 @@ const textureFor = n => {
     }
   }
   return null
+}
+// A block item's look: the first model in the item definition, its parents' elements, textures and "gui" display angle.
+const FLAT = /^(minecraft:)?(item\/generated|builtin\/generated|item\/handheld.*|builtin\/entity)$/
+const texCache = new Map()
+const loadTex = async t => {
+  if (!texCache.has(t)) { const e = zip.getEntry(`assets/minecraft/textures/${t.replace(/^minecraft:/, '')}.png`); texCache.set(t, e ? await px(e.getData()).catch(() => null) : null) }
+  return texCache.get(t)
+}
+async function render3d(n) {
+  const ref = modelRefs(readJson(`assets/minecraft/items/${n}.json`))[0]; if (!ref) return null
+  const tex = {}; let elements = null, gui = null
+  for (let r = ref, i = 0; r && i < 20; i++) {
+    if (FLAT.test(r)) return null
+    const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break
+    for (const [k, v] of Object.entries(m.textures || {})) if (!(k in tex)) tex[k] = v && typeof v === 'object' ? v.sprite : v   // 26.x can write a texture as { sprite, force_translucent }
+    if (!elements && m.elements) elements = m.elements
+    if (!gui && m.display?.gui) gui = m.display.gui
+    r = m.parent
+  }
+  if (!elements) return null
+  const names = new Map()
+  for (const el of elements) for (const f of Object.values(el.faces || {})) {
+    const t = resolveRef(tex, f.texture)
+    if (typeof t === 'string' && !t.startsWith('#') && !names.has(f.texture)) names.set(f.texture, { name: t.split('/').pop(), img: await loadTex(t) })
+  }
+  return renderModel({ elements, gui, texture: k => names.get(k)?.img ?? null, tint: k => TINT[names.get(k)?.name] ?? GREEN }, 64)
 }
 // Items the game draws as 3D models (heads, chests, banners, the shield) only name a stand-in texture, so cut a face from their real texture.
 const tex = p => zip.getEntry(`assets/minecraft/textures/${p}.png`)
@@ -110,6 +137,10 @@ for (const [n, make] of Object.entries(SPECIAL)) {
 const blocks = []
 for (const n of [...(itemDefs.size ? itemDefs : new Set([...blockEntries.keys()]))]) {
   if (have.has(n) || n === 'player_head' || n === 'dragon_head') continue   // the player head is drawn from Steve below; the dragon head has no flat face
+  try {
+    const cube = await render3d(n)
+    if (cube) { fs.writeFileSync(path.join(out, n + '.png'), await png(cube.w, cube.h, cube.data)); names.push(n); have.add(n); blocks.push(n); continue }
+  } catch { /* fall back to a flat texture */ }
   const found = textureFor(n), key = found ? null : [n, n + '_side', n + '_front', n + '_top'].find(k => blockEntries.has(k))
   if (!found && !key) continue
   try {
@@ -128,7 +159,7 @@ if (steve && !have.has('player_head')) {
 const missing = [...itemDefs].filter(n => !have.has(n) && n !== 'air')
 if (missing.length) console.log(`No icon for ${missing.length} item(s): ${missing.join(', ')}`)
 names.sort((a, b) => a.localeCompare(b)); fs.writeFileSync(path.join('public', 'mc', 'index.json'), JSON.stringify(names))
-console.log(`Extracted ${names.length} icons (${blocks.length} from block textures) to public/mc/`)
+console.log(`Extracted ${names.length} icons (${blocks.length} blocks) to public/mc/`)
 
 // UI sounds: copied from your game's own sound files (looked up through the asset index next to the versions folder).
 try {

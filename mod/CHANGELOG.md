@@ -1,3 +1,6 @@
+## 1.2.2 – Fix
+- Item icons now show on the main menu too (for example when you open the notebook from Mod Menu), not only once a world has loaded.
+
 ## 1.2.1 – Fix
 - Item icons show again. If the notebook had been opened before a world finished loading, they stayed blank for the whole session.
 - Map: dragging moves the map, and a slightly shaky click still counts. Clicking a place tracks it and shows the farms there, with Track, Edit and close buttons.

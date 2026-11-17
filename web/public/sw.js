@@ -1,6 +1,6 @@
 // The Survival Notebook service worker: lets the site install as an app, open offline (pages and scripts come from the cache;
 // notebook data comes from the read-only copy the page keeps), and show push notifications.
-const CACHE = 'sn-v1'
+const CACHE = 'sn-v2'
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/', '/account']).catch(() => {}))); self.skipWaiting() })
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())) })
@@ -21,7 +21,7 @@ self.addEventListener('fetch', e => {
 self.addEventListener('push', e => {
   let m = {}
   try { m = e.data ? e.data.json() : {} } catch { m = { body: e.data && e.data.text() } }
-  e.waitUntil(self.registration.showNotification(m.title || 'The Survival Notebook', { body: m.body || '', icon: '/brand/icon-128.png', badge: '/brand/icon-128.png', data: { url: m.url || '/' } }))
+  e.waitUntil(self.registration.showNotification(m.title || 'The Survival Notebook', { body: m.body || '', icon: '/brand/icon-128.png', badge: '/brand/badge-96.png', data: { url: m.url || '/' } }))
 })
 
 self.addEventListener('notificationclick', e => {

@@ -4,7 +4,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.component.DataComponentInitializers;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.data.registries.VanillaRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
@@ -28,15 +31,39 @@ final class Compat {
 	 */
 	static ItemStack stack(String path) {
 		if (path == null || path.isBlank()) return ItemStack.EMPTY;
+		Object level = Minecraft.getInstance().level;
+		if (level != stacksFor) { STACKS.clear(); stacksFor = level; }   // a new world binds its own item data, so make the stacks again
 		ItemStack hit = STACKS.get(path);
 		if (hit != null) return hit;
 		try {
 			Identifier id = Identifier.withDefaultNamespace(path);
 			if (!BuiltInRegistries.ITEM.containsKey(id)) { STACKS.put(path, ItemStack.EMPTY); return ItemStack.EMPTY; }   // not an item: that won't change
-			ItemStack s = new ItemStack(BuiltInRegistries.ITEM.getValue(id));
+			ItemStack s;
+			try { s = new ItemStack(BuiltInRegistries.ITEM.getValue(id)); }
+			catch (RuntimeException e) { if (level != null || !bindForMenu()) return ItemStack.EMPTY; s = new ItemStack(BuiltInRegistries.ITEM.getValue(id)); }
 			if (!s.isEmpty()) STACKS.put(path, s);
 			return s;
 		} catch (RuntimeException e) { return ItemStack.EMPTY; }
+	}
+	private static Object stacksFor;
+	private static int menuBind;   // 0 not tried, 1 bound, -1 failed
+
+	/**
+	 * On the main menu no world has loaded, so items have no data yet and can't be drawn. This binds the vanilla defaults
+	 * (built from the game's own registry code, the same data a new world starts with) so icons show there too.
+	 * Joining a world binds that world's real data over the top, as it always does.
+	 */
+	static boolean bindForMenu() {
+		if (menuBind != 0) return menuBind > 0;
+		menuBind = -1;
+		try {
+			HolderLookup.Provider world = VanillaRegistries.createWorldLookup();
+			HolderLookup.Provider lookup;
+			try { lookup = VanillaRegistries.createReloadableLookup(world); } catch (RuntimeException e) { lookup = world; }
+			BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(lookup).forEach(DataComponentInitializers.PendingComponents::apply);
+			menuBind = 1;
+		} catch (Throwable t) { com.mojang.logging.LogUtils.getLogger().warn("Couldn't prepare item icons for the main menu: {}", t.toString()); }
+		return menuBind > 0;
 	}
 
 	/** Makes a vanilla button fully transparent (it still takes clicks), so no texture or corner pixels show around our own painting. */
