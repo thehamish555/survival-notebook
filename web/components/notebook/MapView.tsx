@@ -95,7 +95,7 @@ export function MapView({ id, rev, places, role, onPlace }: { id: string; rev: n
     <div className="row"><h2 className="grow">Map</h2>
       {dims.length > 1 && <Chips label="Dimension" noAll value={dim} opts={dims.map(k => [k, DIM_LABEL[k]])} onChange={(v: Dim) => setDim(v)} />}
       <button className="ghost" onClick={() => zoom(1.5)} title="Zoom in">+</button><button className="ghost" onClick={() => zoom(1 / 1.5)} title="Zoom out">−</button></div>
-    <p className="mut">Drawn by the mod as players explore, for anyone who turned on Share map in its Settings. Pins are your saved places in {DIM_LABEL[dim]}. Click one to open it.</p>
+    <p className="mut">Drawn by the mod as players explore. Anyone can turn it off with Share map in the mod's Settings. Pins are your saved places in {DIM_LABEL[dim]}. Click one to open it.</p>
     {err && <p className="err">{err}</p>}
     <div className="mapwrap">
       <canvas ref={canvas} className="mapcanvas" onPointerDown={e => { drag.current = { x: e.clientX, y: e.clientY, moved: false }; (e.target as HTMLElement).setPointerCapture(e.pointerId) }}

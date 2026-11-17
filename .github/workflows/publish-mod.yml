@@ -33,6 +33,10 @@ jobs:
         if: steps.v.outputs.skip != 'true'
         working-directory: mod
         run: chmod +x gradlew && ./gradlew build
+      - name: This version's changelog only
+        if: steps.v.outputs.skip != 'true'
+        # The newest "## x.y.z" section of mod/CHANGELOG.md, without its heading (older versions are already on their own Modrinth pages)
+        run: awk '/^## /{n++; if (n==1) next} n==1' mod/CHANGELOG.md > mod/release-notes.md && cat mod/release-notes.md
       - uses: Kir-Antipov/mc-publish@v3.3
         if: steps.v.outputs.skip != 'true'
         with:
@@ -42,7 +46,7 @@ jobs:
           name: Survival Notebook ${{ steps.v.outputs.version }}
           version: ${{ steps.v.outputs.version }}
           version-type: release
-          changelog-file: mod/CHANGELOG.md
+          changelog-file: mod/release-notes.md
           loaders: fabric
           game-versions: "26.3"
           java: "25"

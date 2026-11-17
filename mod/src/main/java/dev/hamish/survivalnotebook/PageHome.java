@@ -29,7 +29,7 @@ final class PageHome {
 		Object[][] tiles = {
 			{"Places", String.valueOf(Notebook.list("coords").size()), "places", 1}, {"Items tracked", String.valueOf(mine.size() - planned), "gear", 2}, {"Items planned", String.valueOf(planned), "gear", 2},
 			{"Not recovered", String.valueOf(lost), "deaths", 3}, {"To-dos done", done + "/" + todos.size(), "todo", 4}, {"Farms built", built + "/" + farms.size(), "farms", 5},
-			{"Notes", words == 0 ? "Empty" : words + " words", "notes", 6}, {"Players with stats", String.valueOf(withStats), "stats", -1}, {"Members", String.valueOf(Notebook.members.size()), "members", 7}};
+			{"Notes", words == 0 ? "Empty" : words + " words", "notes", NotebookScreen.NOTES}, {"Players with stats", String.valueOf(withStats), "stats", -1}, {"Members", String.valueOf(Notebook.members.size()), "members", NotebookScreen.SETTINGS}};
 		int tw = (s.cw - 22) / 3;
 		for (int i = 0; i < tiles.length; i++) {
 			final int x = s.cx + (i % 3) * (tw + 6), yy = y + (i / 3) * 37, target = (Integer) tiles[i][3];

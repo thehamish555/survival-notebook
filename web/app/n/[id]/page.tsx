@@ -329,7 +329,7 @@ export default function Notebook() {
           cols={[{ k: 'name', l: 'Farm', icon: (r: any) => r.icon, pick: true }, { k: 'place', l: 'Location', t: 'pill', opts: placeOpts, tones: placeTones, norm: (v: string) => (coords.some((c: any) => c.id === v) ? v : ''), after: (r: any) => (r.place && coords.some((c: any) => c.id === r.place) ? <button className="x pin" title="Show this place on the Coordinates tab" onClick={() => showPlace(r.place)}><PinIcon /></button> : null) }, { k: 'tutorial', l: 'Tutorial video', t: 'yt' }, { k: 'file', l: 'Litematica', t: 'file' }, assignCol, { k: 'status', l: 'Status', t: 'pill', opts: ['To build', 'Building', 'Built'], tones: { 'To build': 'gray', Building: 'blue', Built: 'green' }, get: fstat, set: (v: string) => ({ built: v === 'Built', building: v === 'Building' }) }]} /></FS></div>}
 
       {tab === 'Map' && (mapTiles > 0 ? <MapView id={id} rev={mapRev} places={coords} role={role} onPlace={showPlace} />
-        : <div className="card"><h2>Map</h2><div className="empty">No map yet. It appears once someone turns on Share map in the mod's Settings and explores.</div></div>)}
+        : <div className="card"><h2>Map</h2><div className="empty">No map yet. It appears once someone explores with the mod connected (Share map is on in its Settings by default).</div></div>)}
 
       {tab === 'Shopping' && <Shopping id={id} d={d} members={members} meId={meId} who={gearUid} setWho={pickPlayer} edit={edit} />}
 
