@@ -5,6 +5,7 @@ import { secureHeaders } from 'hono/secure-headers'
 import { EventEmitter } from 'node:events'
 import type { Config } from './config'
 import { openDb, type DB } from './db'
+import { googleVerifier } from './google'
 import { originGuard, rateLimit, requestLog } from './middleware'
 import { accountRoutes } from './routes/account'
 import { authRoutes } from './routes/auth'
@@ -16,9 +17,9 @@ import { sectionRoutes } from './routes/sections'
 import { tokenRoutes } from './routes/tokens'
 import type { AppEnv, Ctx } from './types'
 
-export function createApp(config: Config, db: DB = openDb(config.DB_PATH)) {
+export function createApp(config: Config, db: DB = openDb(config.DB_PATH), verifyGoogle: Ctx['verifyGoogle'] = googleVerifier(config)) {
   const bus = new EventEmitter(); bus.setMaxListeners(0)
-  const ctx: Ctx = { db, config, bus, bcryptCost: config.NODE_ENV === 'test' ? 4 : 11 }
+  const ctx: Ctx = { db, config, bus, verifyGoogle }
   const app = new Hono<AppEnv>()
 
   app.use('*', secureHeaders())

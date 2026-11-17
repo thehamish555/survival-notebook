@@ -3,6 +3,7 @@ import { z } from 'zod'
 const Schema = z.object({
   NODE_ENV: z.string().default('development'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
+  GOOGLE_CLIENT_ID: z.string().optional(),   // the OAuth client ID from Google Cloud (required in production)
   ORIGIN_SECRET: z.string().min(16, 'ORIGIN_SECRET must be at least 16 characters').optional(),   // optional extra: only accept requests that carry this in x-origin-secret
   DB_PATH: z.string().default('./data/notebook.db'),
   PORT: z.coerce.number().int().default(8787),
@@ -18,5 +19,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const merged = prod ? env : { JWT_SECRET: 'dev-only-secret-do-not-use-in-production', CORS_ORIGIN: 'http://localhost:3000', ...env }
   const parsed = Schema.safeParse(merged)
   if (!parsed.success) throw new Error('Invalid configuration:\n' + parsed.error.issues.map(i => `  ${i.path.join('.')}: ${i.message}`).join('\n'))
+  if (prod && !parsed.data.GOOGLE_CLIENT_ID) throw new Error('Invalid configuration:\n  GOOGLE_CLIENT_ID is required in production')
   return parsed.data
 }

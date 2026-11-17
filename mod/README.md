@@ -24,7 +24,7 @@ A client-side Fabric mod for **Minecraft Java 26.3** that puts your Survival Not
 1. On the website's Account page, create a token and copy it.
 2. In game press `N`, open **Settings**, paste it and press **Save & connect**.
 
-The mod finds the server by itself. The token lets the mod act as you in your notebooks. It can't read your password or delete a notebook. It's stored in `config/survival-notebook.json`, so don't share that file.
+The mod finds the server by itself. The token lets the mod act as you in your notebooks. It can't delete a notebook or your account. It's stored in `config/survival-notebook.json`, so don't share that file.
 
 ## Building
 

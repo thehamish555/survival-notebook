@@ -16,6 +16,7 @@ You only need to do the setup below once. Allow about 45 minutes.
 |---|---|---|
 | `PORT` (45865) | Pelican allocation, Vercel `API_ORIGIN`, the mod (`NbConfig.API_PORT`) | Already chosen (step 1) |
 | `JWT_SECRET` | Pelican server variable | `openssl rand -hex 32` |
+| `GOOGLE_CLIENT_ID` | Pelican server variable **and** Vercel `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google Cloud (step 1) |
 | `PELICAN_URL`, `PELICAN_API_KEY`, `PELICAN_SERVER_ID` | GitHub secrets | Pelican (step 4) |
 | `API_ORIGIN` | Vercel env var | `http://lester.serveminecraft.net:45865` |
 | `MODRINTH_TOKEN` (secret), `MODRINTH_PROJECT_ID` (variable) | GitHub | Modrinth (step 5) |
@@ -26,14 +27,26 @@ You only need to do the setup below once. Allow about 45 minutes.
 2. **Item icons and sounds:** run `npm run icons` once on your PC (it reads your own Minecraft install) and commit `web/public/mc/`. Without it the site shows no item icons.
 3. Create a GitHub repository and push everything to `main`. Nothing in the repo is secret.
 
-## 1. The API on Pelican
+## 1. Google sign-in
+
+Sign-in uses Google only, so there are no passwords anywhere. You need one OAuth client ID (free, about 5 minutes).
+
+1. Go to console.cloud.google.com and create a project (call it Survival Notebook).
+2. **APIs & Services → OAuth consent screen:** choose *External*, fill in the app name and your email, then add the scopes `openid`, `email` and `profile`. Publish the app (**Publish app → In production**). Otherwise only test users you list can sign in.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID → Web application.**
+4. Under **Authorised JavaScript origins** add `https://notebook.hamish555.com`. For local work you can also add `http://localhost:3000`. You don't need a redirect URI.
+5. Copy the **Client ID** (it ends in `.apps.googleusercontent.com`). It's public, not a secret. You'll paste it in two places: the Pelican server and Vercel.
+
+Anyone who signed up before this change can sign in with Google using the same email and keeps their notebooks.
+
+## 2. The API on Pelican
 
 1. **Import the egg.** Admin → Eggs → Import, and upload `deploy/pelican-egg.json`. It runs Node 22, clones this repo and starts the API.
 2. **Add the port.** Admin → Nodes → your node → Allocations, add your public IP or `0.0.0.0` with the chosen port.
 3. **Create the server.** Admin → Servers → Create:
    - Egg: **Survival Notebook API**, and pick the allocation from step 2.
    - Memory 512 MB, disk 2 GB is plenty.
-   - Variables: `GIT_ADDRESS` = `https://github.com/<you>/<repo>.git`, `GIT_BRANCH` = `main`, `JWT_SECRET` = the value from `openssl rand -hex 32`. If the repo is private, make a fine-grained GitHub token with read access to *Contents* and put it in `GIT_TOKEN`.
+   - Variables: `GIT_ADDRESS` = `https://github.com/<you>/<repo>.git`, `GIT_BRANCH` = `main`, `JWT_SECRET` = the value from `openssl rand -hex 32`, `GOOGLE_CLIENT_ID` = the client ID from step 1. If the repo is private, make a fine-grained GitHub token with read access to *Contents* and put it in `GIT_TOKEN`.
 4. Start it. The console should end with `API listening on :45865 (production)`.
 5. **Open the port to the internet.** Forward `PORT` (TCP) on your router to the Pelican machine, and allow it in that machine's firewall.
 6. **Keep the hostname current.** lester.serveminecraft.net must point at your home IP. Keep No-IP's updater running, and confirm the hostname when No-IP asks (free hostnames expire if you don't).
@@ -41,12 +54,13 @@ You only need to do the setup below once. Allow about 45 minutes.
 
 Data lives in the server's `data/` folder. The API also writes a snapshot to `data/backups/` every 24 hours and keeps the newest 14. Restore by stopping the server and copying a snapshot over `data/notebook.db`.
 
-## 2. The website on Vercel
+## 3. The website on Vercel
 
 1. vercel.com → Add New → Project → import the GitHub repo.
 2. **Root Directory: `web`.** Framework: Next.js. Production branch: `main`.
 3. Environment Variables:
    - `API_ORIGIN` = `http://lester.serveminecraft.net:45865`
+   - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` = the same client ID
    - `NEXT_PUBLIC_SITE_URL` = `https://notebook.hamish555.com`
    - `NEXT_PUBLIC_MODRINTH_URL` = your Modrinth page, e.g. `https://modrinth.com/mod/survival-notebook`
 4. Deploy.
@@ -54,11 +68,11 @@ Data lives in the server's `data/` folder. The API also writes a snapshot to `da
 
 The site calls its own `/api` path and Vercel forwards it to `API_ORIGIN`, so the browser never sees the API address and nothing needs CORS. Changes that only touch `mod/` or `api/` don't trigger a site build.
 
-## 3. Check the site end to end
+## 4. Check the site end to end
 
-Open https://notebook.hamish555.com, create an account and a notebook. If sign-up says it can't reach the server, check step 1.7 and that `API_ORIGIN` has the right port (change it in Vercel, then redeploy).
+Open https://notebook.hamish555.com, click Continue with Google and create a notebook. If sign-up says it can't reach the server, check the API test in step 2 and that `API_ORIGIN` has the right port (change it in Vercel, then redeploy).
 
-## 4. Auto-restart the API on every push
+## 5. Auto-restart the API on every push
 
 1. In Pelican, click your name → **API Keys** → create a *client* key. Copy it.
 2. The server ID is the short code in the server's address (`…/server/abcd1234`), also shown in Settings.
@@ -69,7 +83,7 @@ Open https://notebook.hamish555.com, create an account and a notebook. If sign-u
 
 After this, a push that changes `api/` runs the tests, then restarts the server. On start it pulls the newest `main` and installs dependencies. You can also run it by hand: Actions → Deploy API → Run workflow.
 
-## 5. Publishing the mod to Modrinth
+## 6. Publishing the mod to Modrinth
 
 1. modrinth.com → create a project (it starts as a draft). Copy the text from `mod/MODRINTH.md` into the description, use `mod/src/main/resources/assets/survival_notebook/icon.png`, and set client-side only, Fabric, MIT.
 2. **Project ID:** the project page → ⋯ → Copy ID (or Settings, the ID is shown there).
@@ -93,7 +107,7 @@ From then on, a push that changes `mod/` builds it and publishes it, but only if
 
 ## Things to know
 
-- **The API is plain HTTP.** The mod's token, and passwords sent from the site, cross the internet unencrypted on that hop (the site itself is HTTPS, and Vercel carries the request the rest of the way over HTTP). That's fine for a small private group, but if it grows, put HTTPS in front of the API (a Cloudflare Tunnel on the Pelican machine is the easiest way) and change `API_ORIGIN` and the mod's address to `https://`.
+- **The API is plain HTTP.** The mod's token and the Google sign-in token cross the internet unencrypted on the hop to your server (the site itself is HTTPS, and Vercel carries the request the rest of the way over HTTP). There are no passwords to leak, and Google's token is short-lived, but a mod token is long-lived. If the group grows, put HTTPS in front of the API (a Cloudflare Tunnel on the Pelican machine is the easiest way) and change `API_ORIGIN` and the mod's address to `https://`.
 - **Live updates through Vercel** can drop and reconnect now and then. The site reconnects and refreshes by itself, and falls back to checking every 20 seconds.
 - **The mod's port is baked in.** Players on an old mod version keep using the old port, so avoid changing it often.
 - **Rate limiting** uses the visitor's address from Vercel's forwarded header. Everything works without it, it just makes the limits per person instead of per server.
@@ -102,7 +116,9 @@ From then on, a push that changes `mod/` builds it and publishes it, but only if
 
 | Symptom | Check |
 |---|---|
-| Pelican server stops straight away | The console. Usually `JWT_SECRET` is missing or shorter than 32 characters. |
+| Pelican server stops straight away | The console. Usually `JWT_SECRET` is missing or short (32+ characters), or `GOOGLE_CLIENT_ID` is empty. |
+| Google button shows an error or `origin_mismatch` | The site's address must be listed under Authorised JavaScript origins, and the client ID must match on Vercel and Pelican. |
+| `Could not locate the bindings file` (better-sqlite3) | Newer npm skips install scripts. The API now fetches the SQLite binary itself on start, so pull the latest code and restart. |
 | `/health` works on your network but not from outside | Router forward, firewall, and that the No-IP hostname points at your current IP. |
 | Site says it can't reach the server | `API_ORIGIN` in Vercel (port, no trailing slash), then redeploy. |
 | Deploy API action fails with 401/403/404 | The three Pelican secrets. The key must be a client key, and the ID the short server code. |

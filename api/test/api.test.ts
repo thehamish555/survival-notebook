@@ -11,17 +11,22 @@ function mk(extra: Record<string, string> = {}) {
     const text = await res.text(); let json: any; try { json = JSON.parse(text) } catch { json = null }
     return { status: res.status, json, text }
   }
-  const user = async (name: string) => { const r = await call('POST', '/auth/register', { email: `${name}@x.com`, name, password: 'password123' }); return { token: r.json.token as string, id: r.json.user.id as string } }
+  const user = async (name: string) => { const r = await call('POST', '/auth/google', { credential: `dev:${name}@x.com:${name}` }); return { token: r.json.token as string, id: r.json.user.id as string } }
   const notebook = async (token: string) => (await call('POST', '/notebooks', { title: 'World' }, token)).json.id as string
   return { app, db, call, user, notebook }
 }
 
-test('auth: register, duplicate, login, bad password, /me', async () => {
-  const { call, user } = mk(), a = await user('alice')
-  assert.equal((await call('POST', '/auth/register', { email: 'alice@x.com', name: 'A', password: 'password123' })).status, 409)
-  assert.equal((await call('POST', '/auth/register', { email: 'nope', name: 'A', password: 'password123' })).status, 400)
-  assert.equal((await call('POST', '/auth/login', { email: 'alice@x.com', password: 'password123' })).status, 200)
-  assert.equal((await call('POST', '/auth/login', { email: 'alice@x.com', password: 'wrong-password' })).status, 401)
+test('auth: google sign-in creates, reuses and links accounts', async () => {
+  const { call, user, db } = mk(), a = await user('alice')
+  const again = await call('POST', '/auth/google', { credential: 'dev:alice@x.com:Alice Again' })
+  assert.equal(again.status, 200); assert.equal(again.json.user.id, a.id)                               // same Google account, same user
+  assert.equal((db.prepare('select count(*) n from users').get() as { n: number }).n, 1)
+  db.prepare("insert into users(id,email,name,hash) values('old','old@x.com','Old','legacy-hash')").run()   // a pre-Google account
+  const linked = await call('POST', '/auth/google', { credential: 'dev:old@x.com:Old' })
+  assert.equal(linked.json.user.id, 'old')                                                              // matched by email, notebooks kept
+  assert.equal((await call('POST', '/auth/google', { credential: 'garbage-token-value' })).status, 401)
+  assert.equal((await call('POST', '/auth/google', {})).status, 400)
+  assert.equal((await call('POST', '/auth/login', { email: 'alice@x.com', password: 'x' })).status, 404)   // passwords are gone
   assert.equal((await call('GET', '/me', undefined, a.token)).json.name, 'alice')
   assert.equal((await call('GET', '/me')).status, 401)
 })
@@ -81,10 +86,10 @@ test('files: type, size, round-trip, access', async () => {
 test('origin secret and rate limiting', async () => {
   const guarded = mk({ ORIGIN_SECRET: 's'.repeat(32) })
   assert.equal((await guarded.call('GET', '/health')).status, 200)
-  assert.equal((await guarded.call('POST', '/auth/login', { email: 'a@x.com', password: 'x' })).status, 403)
-  assert.equal((await guarded.call('POST', '/auth/login', { email: 'a@x.com', password: 'x' }, undefined, { 'x-origin-secret': 's'.repeat(32) })).status, 401)
+  assert.equal((await guarded.call('POST', '/auth/google', { credential: 'dev:a@x.com:A' })).status, 403)
+  assert.equal((await guarded.call('POST', '/auth/google', { credential: 'dev:a@x.com:A' }, undefined, { 'x-origin-secret': 's'.repeat(32) })).status, 200)
   const { call } = mk(); let last = 0
-  for (let i = 0; i < 40; i++) last = (await call('POST', '/auth/login', { email: 'a@x.com', password: 'x' })).status
+  for (let i = 0; i < 40; i++) last = (await call('POST', '/auth/google', { credential: 'dev:a@x.com:A' })).status
   assert.equal(last, 429)
 })
 
@@ -131,18 +136,15 @@ test('activity feed coalesces edits and names people by nickname; list shows sta
   assert.equal(list[0].memberCount, 2); assert.ok(list[0].lastActive > 0)
 })
 
-test('account: rename, change password, delete cleans everything up', async () => {
+test('account: rename, delete cleans everything up', async () => {
   const { call, user, notebook } = mk(), a = await user('alice'), b = await user('bob'), nb = await notebook(a.token), mine = await notebook(b.token)
   await call('POST', `/notebooks/${nb}/members`, { email: 'bob@x.com', role: 'editor' }, a.token)
   await call('PUT', `/notebooks/${nb}/s/todos`, { data: [{ id: 't', assignee: b.id }] }, a.token)
   await call('PUT', `/notebooks/${nb}/s/gear:${b.id}`, { data: [{ id: 'g' }] }, b.token)
   assert.equal((await call('PATCH', '/me', { name: 'Robert' }, b.token)).status, 200)
   assert.equal((await call('GET', '/me', undefined, b.token)).json.name, 'Robert')
-  assert.equal((await call('POST', '/me/password', { current: 'nope-nope', next: 'brand-new-pass' }, b.token)).status, 403)
-  assert.equal((await call('POST', '/me/password', { current: 'password123', next: 'brand-new-pass' }, b.token)).status, 200)
-  assert.equal((await call('POST', '/auth/login', { email: 'bob@x.com', password: 'brand-new-pass' })).status, 200)
-  assert.equal((await call('DELETE', '/me', { password: 'wrong-password' }, b.token)).status, 403)
-  assert.equal((await call('DELETE', '/me', { password: 'brand-new-pass' }, b.token)).status, 200)
+  assert.equal((await call('DELETE', '/me', { email: 'someone@else.com' }, b.token)).status, 403)
+  assert.equal((await call('DELETE', '/me', { email: 'Bob@x.com' }, b.token)).status, 200)
   assert.equal((await call('GET', '/me', undefined, b.token)).status, 401)                               // session dies with the account
   const left = (await call('GET', `/notebooks/${nb}`, undefined, a.token)).json
   assert.equal(left.members.length, 1); assert.equal(left.sections.todos.data[0].assignee, '')            // unassigned, not dangling

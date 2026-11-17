@@ -31,7 +31,7 @@
 - **Safe merging** — edits from the website and the game combine instead of overwriting each other.
 
 ### Getting started
-1. Sign up at **notebook.hamish555.com** and create a notebook (or get invited to one).
+1. Sign in with Google at **notebook.hamish555.com** and create a notebook (or get invited to one).
 2. On the website open **Account & mod**, create a token and copy it.
 3. In game press **N → Settings**, paste the token, **Save & connect**, and pick your notebook.
 

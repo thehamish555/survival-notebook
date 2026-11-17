@@ -1,28 +1,29 @@
 import { Hono } from 'hono'
-import bcrypt from 'bcryptjs'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { rateLimit, requireAuth, signToken } from '../middleware'
-import { Email, readBody } from '../validate'
+import { readBody } from '../validate'
 import type { AppEnv, Ctx } from '../types'
 
-const Register = z.object({ email: Email, name: z.string().trim().min(1, 'Enter a display name').max(40), password: z.string().min(8, 'Password must be at least 8 characters').max(72) })
-const Login = z.object({ email: Email, password: z.string().max(72) })
+const Google = z.object({ credential: z.string().min(10, 'Missing Google sign-in').max(5000) })
+type U = { id: string; email: string; name: string; google_sub: string | null }
 
 export const authRoutes = (ctx: Ctx) => {
-  const r = new Hono<AppEnv>(), limit = rateLimit(30, 10 * 60_000), dummy = bcrypt.hashSync('dummy', ctx.bcryptCost)
-  r.post('/auth/register', limit, async c => {
-    const b = await readBody(c, Register); if (!b.ok) return b.res
-    const u = { id: randomUUID(), email: b.data.email, name: b.data.name }
-    try { ctx.db.prepare('insert into users(id,email,name,hash) values(?,?,?,?)').run(u.id, u.email, u.name, bcrypt.hashSync(b.data.password, ctx.bcryptCost)) }
-    catch { return c.json({ error: 'That email is already registered' }, 409) }
-    return c.json({ token: signToken(ctx.config.JWT_SECRET, u.id), user: u })
-  })
-  r.post('/auth/login', limit, async c => {
-    const b = await readBody(c, Login); if (!b.ok) return b.res
-    const u = ctx.db.prepare('select * from users where email=?').get(b.data.email) as { id: string; email: string; name: string; hash: string } | undefined
-    const ok = bcrypt.compareSync(b.data.password, u?.hash ?? dummy)   // constant-ish time whether or not the user exists
-    if (!u || !ok) return c.json({ error: 'Invalid email or password' }, 401)
+  const r = new Hono<AppEnv>(), limit = rateLimit(30, 10 * 60_000)
+  // Sign in (or sign up) with a Google ID token. The same email always lands on the same account.
+  r.post('/auth/google', limit, async c => {
+    const b = await readBody(c, Google); if (!b.ok) return b.res
+    let g; try { g = await ctx.verifyGoogle(b.data.credential) } catch { return c.json({ error: 'Google sign-in failed. Try again.' }, 401) }
+    const { db } = ctx
+    let u = db.prepare('select id,email,name,google_sub from users where google_sub=?').get(g.sub) as U | undefined
+    if (!u) {
+      u = db.prepare('select id,email,name,google_sub from users where email=?').get(g.email) as U | undefined
+      if (u) db.prepare('update users set google_sub=? where id=?').run(g.sub, u.id)   // an older account with this email: link it
+      else {
+        u = { id: randomUUID(), email: g.email, name: g.name.slice(0, 40), google_sub: g.sub }
+        db.prepare("insert into users(id,email,name,hash,google_sub) values(?,?,?,'',?)").run(u.id, u.email, u.name, g.sub)
+      }
+    }
     return c.json({ token: signToken(ctx.config.JWT_SECRET, u.id), user: { id: u.id, email: u.email, name: u.name } })
   })
   r.get('/me', requireAuth(ctx), c => c.json(ctx.db.prepare('select id,email,name from users where id=?').get(c.get('uid'))))

@@ -21,6 +21,8 @@ const MIGRATIONS: ((db: DB) => void)[] = [
     create table if not exists activity(id integer primary key autoincrement, nb text not null, user text not null, section text not null, detail text not null, via text not null default '', ts integer not null);
     create index if not exists idx_activity_nb on activity(nb, id desc);`),
   db => { if (!db.prepare("select 1 from pragma_table_info('api_tokens') where name='can_members'").get()) db.exec('alter table api_tokens add column can_members integer not null default 0') },
+  // Google sign-in: link an account to its Google id. Older password hashes stay in `hash` but are no longer used.
+  db => { if (!db.prepare("select 1 from pragma_table_info('users') where name='google_sub'").get()) db.exec("alter table users add column google_sub text; create unique index if not exists idx_users_google on users(google_sub)") },
 ]
 
 export function openDb(path: string): DB {

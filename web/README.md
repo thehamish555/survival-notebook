@@ -1,6 +1,6 @@
 # Website
 
-The Survival Notebook website. People sign up here, make a notebook for their world, and invite the others. It's the same notebook the mod shows in game, kept in sync live.
+The Survival Notebook website. People sign in with Google here, make a notebook for their world, and invite the others. It's the same notebook the mod shows in game, kept in sync live.
 
 ## What you can do on it
 
@@ -23,6 +23,7 @@ Item icons and sounds are extracted from your own copy of Minecraft (`npm run ic
 | Variable | What it does |
 |---|---|
 | `API_ORIGIN` | Where the API runs, e.g. `http://lester.serveminecraft.net:45865`. Set on Vercel. |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | The Google OAuth client ID (public). Without it, local development shows a simple dev sign-in form. |
 | `NEXT_PUBLIC_SITE_URL` | The site's own address. |
 | `NEXT_PUBLIC_MODRINTH_URL` | Where the "Minecraft mod" links go. |
 | `NEXT_PUBLIC_API_URL` | Local development only: points straight at the local API. |

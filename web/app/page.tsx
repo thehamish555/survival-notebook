@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Logo } from '@/components/PixelIcon'
-import { api, authCall, getToken, setToken } from '@/lib/api'
+import { GoogleSignIn } from '@/components/GoogleSignIn'
+import { api, getToken, setToken } from '@/lib/api'
 import { TONES, VERSION } from '@/lib/data'
 import { MODRINTH_URL, TAGLINE } from '@/lib/site'
 import { timeAgo } from '@/lib/time'
@@ -22,15 +23,9 @@ export default function Home() {
   const confirm = useConfirm(), toast = useToast()
   const [authed, setAuthed] = useState<boolean | null>(null)
   const [nbs, setNbs] = useState<any[]>([]), [title, setTitle] = useState('')
-  const [mode, setMode] = useState<'login' | 'register'>('login'), [f, setF] = useState({ email: '', name: '', password: '' }), [err, setErr] = useState(''), [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
   const load = () => api('/notebooks').then(setNbs).then(() => setAuthed(true)).catch((e: any) => { if (e.status === 401 || !getToken()) { setToken(''); setAuthed(false) } else { setErr(e.message); setAuthed(false) } })
   useEffect(() => { getToken() ? load() : setAuthed(false) }, [])
-  const submit = async () => {
-    if (busy) return
-    setBusy(true); setErr('')
-    try { const r = await authCall(mode, f); setToken(r.token); await load() } catch (e: any) { setErr(e.message) }
-    setBusy(false)
-  }
   const create = async () => { const { id } = await api('/notebooks', 'POST', { title: title.trim() || 'My World' }); location.href = `/n/${id}` }
   const logout = async () => { if (await confirm({ title: 'Log out?', ok: 'Log out' })) { setToken(''); setAuthed(false) } }
   const del = async (n: any) => {
@@ -61,14 +56,10 @@ export default function Home() {
         <div className="card"><h2>Welcome</h2>
           <p>Make a notebook for each world or server and invite your friends by email.</p>
           <p className="mut">Updated {VERSION.updated} for Minecraft Java {VERSION.java} · Bedrock {VERSION.bedrock}. Ideas or bugs? <a href="mailto:hamishlester555@gmail.com">hamishlester555@gmail.com</a></p></div>
-        <div className="card"><h2>{mode === 'login' ? 'Log in' : 'Create account'}</h2>
-          <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-            <input type="email" autoComplete="email" placeholder="Email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} />
-            {mode === 'register' && <input autoComplete="nickname" placeholder="Display name" maxLength={40} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} />}
-            <input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="Password (8+ characters)" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} onKeyDown={e => e.key === 'Enter' && submit()} />
-            <button disabled={busy} onClick={submit}>{busy ? 'One moment…' : mode === 'login' ? 'Log in' : 'Sign up'}</button>
-            <button className="ghost" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setErr('') }}>{mode === 'login' ? 'Need an account?' : 'Have an account?'}</button>
-            {err && <div className="err" role="alert">{err}</div>}</div></div>
+        <div className="card"><h2>Sign in</h2>
+          <p className="mut">One click with your Google account. New here? It creates your account.</p>
+          <GoogleSignIn onDone={load} onError={setErr} />
+          {err && <div className="err" role="alert">{err}</div>}</div>
       </div>
     </div>
     <Footer />

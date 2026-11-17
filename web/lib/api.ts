@@ -20,8 +20,8 @@ export const clientId = () => CID
 const auth = (extra: Record<string, string> = {}) => ({ authorization: `Bearer ${getToken()}`, 'x-client-id': CID, ...extra })
 export const api = (path: string, method = 'GET', body?: any) =>
   call(path, { method, headers: auth({ 'content-type': 'application/json' }), body: body ? JSON.stringify(body) : undefined })
-export const authCall = (mode: 'login' | 'register', body: any) =>
-  call(`/auth/${mode}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+export const googleLogin = (credential: string) =>
+  call('/auth/google', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ credential }) })
 export const uploadFile = (nb: string, f: File) =>
   call(`/notebooks/${nb}/files?name=${encodeURIComponent(f.name)}`, { method: 'POST', headers: auth({ 'content-type': 'application/octet-stream' }), body: f })
 export async function downloadFile(nb: string, file: { id: string; name: string }) {
