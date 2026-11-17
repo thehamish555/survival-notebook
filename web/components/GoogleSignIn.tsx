@@ -14,7 +14,7 @@ export function GoogleSignIn({ onDone, onError }: { onDone: () => void; onError:
     const start = () => {
       const g = (window as any).google?.accounts?.id; if (!g || !box.current) return
       g.initialize({ client_id: CLIENT_ID, callback: (r: any) => send(r.credential), ux_mode: 'popup' })
-      g.renderButton(box.current, { theme: 'filled_black', size: 'large', text: 'continue_with', shape: 'pill', width: 280 })
+      g.renderButton(box.current, { theme: 'filled_black', size: 'large', text: 'continue_with', shape: 'pill', width: 300 })
     }
     if ((window as any).google?.accounts) { start(); return }
     const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.onload = start
@@ -30,7 +30,8 @@ export function GoogleSignIn({ onDone, onError }: { onDone: () => void; onError:
       <input placeholder="Display name" value={dev.name} onChange={e => setDev({ ...dev, name: e.target.value })} />
       <button disabled={!dev.email.includes('@')} onClick={() => send(`dev:${dev.email.trim()}:${dev.name.trim()}`)}>Sign in</button></div>
   }
-  return <div ref={box} style={{ minHeight: 44, display: 'flex', justifyContent: 'center' }} />
+  // colorScheme: light stops the browser painting Google's iframe with an opaque white backdrop on the dark page
+  return <div ref={box} style={{ minHeight: 44, display: 'flex', justifyContent: 'flex-start', colorScheme: 'light', marginTop: 6 }} />
 }
 
 async function fetchLogin(credential: string) {
