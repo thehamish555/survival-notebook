@@ -1,4 +1,5 @@
-## 1.4.3 – Fix
+## 1.5.0 – Feature
+- Getting started: the first time you open the notebook, press Link this game. The website opens with a code to approve, and the game connects by itself, with no token to copy. Pasting a token in Settings still works.
 - Recent activity on the Home tab shows each change's section icon and marks changes made in game, and clicking one opens that section, like on the website.
 - Members show their own skin again instead of Steve.
 - Stats lists line up: every bar is the same length, whatever the number beside it.

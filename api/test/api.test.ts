@@ -221,3 +221,20 @@ test('positions: members share where they are, the last spot stays after they le
   await call('DELETE', `/notebooks/${nb}/members/${b.id}`, undefined, a.token)                                                        // removed from the notebook
   assert.equal((await call('GET', `/notebooks/${nb}/pos`, undefined, a.token)).json.length, 0)
 })
+
+test('linking the mod with a code: start, approve on the website, the game collects its token once', async () => {
+  const { call, user } = mk(), a = await user('alice')
+  const start = (await call('POST', '/link/start', { name: 'Minecraft (Alice_1)' })).json
+  assert.match(start.code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/)
+  assert.equal((await call('POST', '/link/poll', { secret: start.secret })).status, 202)                          // not approved yet
+  assert.equal((await call('GET', `/link/${start.code}`)).status, 401)                                            // the website needs you signed in
+  assert.equal((await call('GET', `/link/${start.code.toLowerCase().replace('-', ' ')}`, undefined, a.token)).json.name, 'Minecraft (Alice_1)')   // typed loosely still works
+  assert.equal((await call('POST', `/link/${start.code}/approve`, undefined, a.token)).status, 200)
+  const got = (await call('POST', '/link/poll', { secret: start.secret })).json
+  assert.match(got.token, /^snp_/)
+  assert.equal((await call('GET', '/me', undefined, got.token)).json.id, a.id)                                    // the token works as Alice
+  assert.equal((await call('POST', '/link/poll', { secret: start.secret })).status, 410)                          // handed over once only
+  assert.equal((await call('POST', '/link/poll', { secret: 'x'.repeat(40) })).status, 410)                       // a wrong secret gets nothing
+  assert.equal((await call('POST', `/link/ZZZZ-ZZZZ/approve`, undefined, a.token)).status, 404)
+  assert.ok((await call('GET', '/me/tokens', undefined, a.token)).json.some((t: any) => t.name === 'Minecraft (Alice_1)'))
+})

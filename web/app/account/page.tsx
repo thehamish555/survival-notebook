@@ -32,7 +32,7 @@ export default function Account() {
         <div className="row"><input className="grow" maxLength={40} value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveName()} /><button disabled={!name.trim() || name.trim() === me.name} onClick={saveName}>Save</button></div></div>
 
       <div className="card"><h2>Minecraft mod</h2>
-        <p>The mod syncs your enchanted gear, saves coordinates and shows your to-dos in game. Get it on <a href={MODRINTH_URL} target="_blank" rel="noreferrer noopener">Modrinth</a>, then create a token for each computer you play on and paste it into the mod (press <kbd>N</kbd> in game → Settings).</p>
+        <p>The mod syncs your enchanted gear, saves coordinates and shows your to-dos in game. Get it on <a href={MODRINTH_URL} target="_blank" rel="noreferrer noopener">Modrinth</a>, then press <kbd>N</kbd> in game and choose <b>Link this game</b>. It opens a page here to approve it, with nothing to copy. You can also make a token below and paste it into the mod’s Settings.</p>
         <div className="row"><input className="grow" placeholder="Token name, e.g. Gaming PC" maxLength={40} value={tokName} onChange={e => setTokName(e.target.value)} onKeyDown={e => e.key === 'Enter' && create()} /><button onClick={create}>Create token</button></div>
         {fresh && <div className="card" style={{ marginTop: 14, borderColor: '#f2c14e' }}><h3>Copy it now, it won’t be shown again</h3>
           <div className="row"><code className="grow" style={{ wordBreak: 'break-all' }}>{fresh.token}</code><button onClick={() => copy(fresh.token)}>Copy</button></div>

@@ -64,7 +64,7 @@ final class PageSettings {
 					s.btn(s.cx, base + 3 * ROW, t, "Get a token ↗", 1, () -> Compat.openUrl(s, c.web() + "/account"), true);
 					s.btn(s.cx + t + 4, base + 3 * ROW, t, "My notebook ↗", 1, () -> Compat.openUrl(s, c.notebookId.isBlank() ? c.web() : c.web() + "/n/" + c.notebookId), c.connected());
 				}
-				if (show.test(4)) s.text(c.connected() ? "Connected." : "Paste a token and press Save & connect.", s.cx + 2, base + 4 * ROW + 6, p.mut);
+				if (show.test(4)) s.text(c.connected() ? "Connected." : "Paste a token and press Save & connect, or use Link this game on Home.", s.cx + 2, base + 4 * ROW + 6, p.mut);
 			}
 			case "Overlays" -> {
 				if (show.test(0)) toggle(s, base, "To-do overlay", "Shows your to-dos in a corner", c.hud, () -> c.hud = !c.hud);

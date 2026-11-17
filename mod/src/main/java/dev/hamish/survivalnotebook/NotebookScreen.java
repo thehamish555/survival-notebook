@@ -41,7 +41,7 @@ final class NotebookScreen extends Screen {
 		super(Component.literal("Survival Notebook"));
 		this.parent = parent;
 		NbConfig c = NbConfig.get();
-		if (tab < 0) tab = c.connected() && !c.notebookId.isBlank() ? 0 : SETTINGS;   // first run -> Settings
+		if (tab < 0) tab = HOME;   // first run: Home shows the welcome page until the game is linked
 	}
 
 	@Override
@@ -70,7 +70,8 @@ final class NotebookScreen extends Screen {
 		paint((g, mx, my) -> chrome(g));
 		header();
 		tabBar();
-		switch (tab) {
+		if (!NbConfig.get().connected() && tab != SETTINGS) PageWelcome.build(this);   // not linked yet: the welcome page, whatever tab you pick
+		else switch (tab) {
 			case HOME -> PageHome.build(this);
 			case PLACES -> PagePlaces.build(this);
 			case MAP -> PageMap.build(this);

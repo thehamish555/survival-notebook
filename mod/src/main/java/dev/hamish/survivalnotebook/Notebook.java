@@ -101,7 +101,7 @@ final class Notebook {
 
 	private static void load() throws Api.ApiException {
 		NbConfig c = NbConfig.get();
-		if (!c.connected()) { ok = false; status = "Paste your token in Settings"; bump(); return; }
+		if (!c.connected()) { ok = false; status = "Not linked yet: press Link this game on Home"; bump(); return; }
 		if (userId.isEmpty()) userId = Api.me().get("id").getAsString();
 		if (c.notebookId.isBlank()) { ok = false; status = "Pick a notebook in Settings"; bump(); return; }
 		JsonObject r = Api.notebook(c.notebookId);

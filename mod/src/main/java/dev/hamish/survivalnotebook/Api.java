@@ -40,12 +40,26 @@ final class Api {
 
 	static Res call(String method, String path, JsonElement body) throws ApiException {
 		NbConfig c = NbConfig.get();
-		if (!c.connected()) throw new ApiException(0, "Paste your token in Settings (website: Account & mod)");
+		if (!c.connected()) throw new ApiException(0, "Not linked yet: press N and choose Link this game");
+		return send(method, path, body, c.token);
+	}
+
+	/** A request without a token: only for linking the game (getting a code and waiting for it to be approved). */
+	static Res anon(String method, String path, JsonElement body) throws ApiException { return send(method, path, body, ""); }
+
+	/** The server's error message for a failed reply. */
+	static String errorOf(Res r) {
+		return r.body().isJsonObject() && r.body().getAsJsonObject().has("error") ? r.body().getAsJsonObject().get("error").getAsString() : "HTTP " + r.status();
+	}
+
+	private static Res send(String method, String path, JsonElement body, String token) throws ApiException {
+		NbConfig c = NbConfig.get();
 		try {
-			HttpRequest req = HttpRequest.newBuilder(URI.create(c.base() + path)).timeout(Duration.ofSeconds(15))
-				.header("authorization", "Bearer " + c.token).header("user-agent", UA).header("content-type", "application/json")
-				.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
-				.build();
+			HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(c.base() + path)).timeout(Duration.ofSeconds(15))
+				.header("user-agent", UA).header("content-type", "application/json")
+				.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(GSON.toJson(body)));
+			if (!token.isBlank()) b.header("authorization", "Bearer " + token);
+			HttpRequest req = b.build();
 			HttpResponse<String> r = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
 			JsonElement json;
 			try { json = r.body().isBlank() ? JsonNull.INSTANCE : JsonParser.parseString(r.body()); }
