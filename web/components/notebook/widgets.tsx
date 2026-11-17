@@ -47,7 +47,7 @@ export function Table({ cols, rows, onChange, blank, extra, show, sort, empty, o
       <thead><tr>{canDrag && <th style={{ width: 22 }} />}{cols.map((c: any) => <th key={c.k}>{c.l}</th>)}<th /></tr></thead>
       <tbody>{view.map((r: any) => <tr key={r.id} id={'row-' + r.id} className={`${hl === r.id ? 'hl' : ''} ${over === r.id && drag ? 'dropat' : ''} ${drag === r.id ? 'dragging' : ''}`}
         onDragOver={canDrag ? e => { if (drag) { e.preventDefault(); setOver(r.id) } } : undefined} onDrop={canDrag ? e => { e.preventDefault(); drop(r.id); setDrag(''); setOver('') } : undefined}>
-        {canDrag && <td className="grip" draggable onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDrag(r.id) }} onDragEnd={() => { setDrag(''); setOver('') }} title="Drag to reorder">⋮⋮</td>}
+        {canDrag && <td className="grip" draggable onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDrag(r.id) }} onDragEnd={() => { setDrag(''); setOver('') }} title="Drag to reorder"><svg width="12" height="16" viewBox="0 0 12 16" aria-hidden fill="currentColor"><circle cx="3" cy="3" r="1.5" /><circle cx="9" cy="3" r="1.5" /><circle cx="3" cy="8" r="1.5" /><circle cx="9" cy="8" r="1.5" /><circle cx="3" cy="13" r="1.5" /><circle cx="9" cy="13" r="1.5" /></svg></td>}
         {cols.map((c: any) => <td key={c.k}>{
           c.t === 'custom' ? c.render(r, (o: any) => patch(r.id, o))
           : c.t === 'pill' ? <div className="inl"><Pill value={c.get ? c.get(r) : c.norm ? c.norm(r[c.k]) : r[c.k]} opts={c.opts} tones={c.tones} icons={c.icons} onChange={(v: string) => patch(r.id, c.set ? c.set(v) : { [c.k]: v })} />{c.after?.(r)}</div>

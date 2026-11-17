@@ -3,7 +3,7 @@
 //        npm run icons -- "C:\path\to\26.3.jar"
 import AdmZip from 'adm-zip'
 import sharp from 'sharp'
-import { renderModel } from './block-render.mjs'
+import { entityBox, renderModel } from './block-render.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
@@ -86,23 +86,84 @@ const loadTex = async t => {
   return texCache.get(t)
 }
 async function render3d(n) {
-  const ref = modelRefs(readJson(`assets/minecraft/items/${n}.json`))[0]; if (!ref) return null
-  const tex = {}; let elements = null, gui = null
-  for (let r = ref, i = 0; r && i < 20; i++) {
-    if (FLAT.test(r)) return null
-    const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break
-    for (const [k, v] of Object.entries(m.textures || {})) if (!(k in tex)) tex[k] = v && typeof v === 'object' ? v.sprite : v   // 26.x can write a texture as { sprite, force_translucent }
-    if (!elements && m.elements) elements = m.elements
-    if (!gui && m.display?.gui) gui = m.display.gui
-    r = m.parent
-  }
-  if (!elements) return null
-  const names = new Map()
-  for (const el of elements) for (const f of Object.values(el.faces || {})) {
-    const t = resolveRef(tex, f.texture)
-    if (typeof t === 'string' && !t.startsWith('#') && !names.has(f.texture)) names.set(f.texture, { name: t.split('/').pop(), img: await loadTex(t) })
+  const def = readJson(`assets/minecraft/items/${n}.json`)?.model
+  // A composite (beds: head + foot) is several models, each moved by its translation in blocks.
+  const parts = def?.type?.endsWith('composite') ? (def.models || []).map(m => ({ ref: modelRefs(m)[0], at: m.transformation?.translation || [0, 0, 0] }))
+    : [{ ref: modelRefs(def)[0], at: [0, 0, 0] }]
+  const elements = [], names = new Map(); let gui = null
+  for (const [pi, { ref, at }] of parts.entries()) {
+    if (!ref) return null
+    const tex = {}; let els = null
+    for (let r = ref, i = 0; r && i < 20; i++) {
+      if (FLAT.test(r)) return null
+      const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break
+      for (const [k, v] of Object.entries(m.textures || {})) if (!(k in tex)) tex[k] = v && typeof v === 'object' ? v.sprite : v   // 26.x can write a texture as { sprite, force_translucent }
+      if (!els && m.elements) els = m.elements
+      if (!gui && m.display?.gui) gui = m.display.gui
+      r = m.parent
+    }
+    if (!els) return null
+    const sh = at.map(v => v * 16), move = p => [p[0] + sh[0], p[1] + sh[1], p[2] + sh[2]]
+    for (const el of els) {
+      const faces = {}
+      for (const [dir, f] of Object.entries(el.faces || {})) {
+        const key = `${pi}:${f.texture}`, t = resolveRef(tex, f.texture)
+        if (typeof t === 'string' && !t.startsWith('#') && !names.has(key)) names.set(key, { name: t.split('/').pop(), img: await loadTex(t) })
+        faces[dir] = { ...f, texture: key }
+      }
+      elements.push({ ...el, from: move(el.from), to: move(el.to), faces, rotation: el.rotation ? { ...el.rotation, origin: move(el.rotation.origin || [8, 8, 8]) } : undefined })
+    }
   }
   return renderModel({ elements, gui, texture: k => names.get(k)?.img ?? null, tint: k => TINT[names.get(k)?.name] ?? GREEN }, 64)
+}
+
+// Block entities (chests, shulker boxes, heads, banners) are drawn by the game from entity models, not block models.
+// Their boxes are copied from the game's model code; each lists its texture, size and where its UVs start.
+const guiOf = ref => { for (let r = ref, i = 0; r && i < 20; i++) { const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break; if (m.display?.gui) return m.display.gui; r = m.parent } return null }
+const DYE = { white: 0xF9FFFE, orange: 0xF9801D, magenta: 0xC74EBD, light_blue: 0x3AB3DA, yellow: 0xFED83D, lime: 0x80C71F, pink: 0xF38BAA, gray: 0x474F52, light_gray: 0x9D9D97,
+  cyan: 0x169C9C, purple: 0x8932B8, blue: 0x3C44AA, brown: 0x835432, green: 0x5E7C16, red: 0xB02E26, black: 0x1D1D21 }
+const rgb = c => [c >> 16 & 255, c >> 8 & 255, c & 255]
+const entity = (gui, boxes) => async () => {
+  const imgs = new Map(); for (const b of boxes) if (!imgs.has(b.texture)) imgs.set(b.texture, await loadTex(`minecraft:entity/${b.texture}`))
+  if ([...imgs.values()].some(x => !x)) return null
+  return renderModel({ quads: boxes.flatMap(b => entityBox({ ...b, texW: imgs.get(b.texture).w, texH: imgs.get(b.texture).h })), gui: guiOf(gui), texture: k => imgs.get(k) }, 64)
+}
+const asIs = p => p, flipX180 = (dx, dy, dz) => p => [p[0] + dx, dy - p[1], dz - p[2]]   // the item's 180 degree turn about X, then its translation (pixels)
+const chest3d = t => entity('item/chest', [
+  { texture: `chest/${t}`, u: 0, v: 19, from: [1, 0, 1], size: [14, 10, 14], place: asIs },
+  { texture: `chest/${t}`, u: 0, v: 0, from: [1, 0, 0], size: [14, 5, 14], offset: [0, 9, 1], place: asIs },
+  { texture: `chest/${t}`, u: 0, v: 0, from: [7, -2, 14], size: [2, 4, 1], offset: [0, 9, 1], place: asIs }])
+const head3d = (t, hat) => entity('item/template_skull', [
+  { texture: t, u: 0, v: 0, from: [-4, -8, -4], size: [8, 8, 8], place: flipX180(8, 0, 8) },
+  ...(hat ? [{ texture: t, u: 32, v: 0, from: [-4, -8, -4], size: [8, 8, 8], inflate: 0.25, place: flipX180(8, 0, 8) }] : [])])
+const shulker3d = t => entity('item/template_shulker_box', [
+  { texture: t, u: 0, v: 28, from: [-8, -8, -8], size: [16, 8, 16], offset: [0, 24, 0], place: flipX180(8, 24, 8) },
+  { texture: t, u: 0, v: 0, from: [-8, -16, -8], size: [16, 12, 16], offset: [0, 24, 0], place: flipX180(8, 24, 8) }])
+const banner3d = c => {   // the item scales by 2/3 and flips Y and Z
+  const k = 2 / 3, place = p => [p[0] * k + 8, -p[1] * k, -p[2] * k + 8]
+  return entity('item/template_banner', [
+    { texture: 'banner/banner_base', u: 44, v: 0, from: [-1, -42, -1], size: [2, 42, 2], place },
+    { texture: 'banner/banner_base', u: 0, v: 42, from: [-10, -44, -1], size: [20, 2, 2], place },
+    { texture: 'banner/base', u: 0, v: 0, from: [-10, 0, -2], size: [20, 40, 1], offset: [0, -44, 0], place, tint: rgb(DYE[c]) }])
+}
+const ENTITY = {
+  chest: chest3d('normal'), trapped_chest: chest3d('trapped'), ender_chest: chest3d('ender'), copper_chest: chest3d('copper'),
+  exposed_copper_chest: chest3d('copper_exposed'), weathered_copper_chest: chest3d('copper_weathered'), oxidized_copper_chest: chest3d('copper_oxidized'),
+  skeleton_skull: head3d('skeleton/skeleton'), wither_skeleton_skull: head3d('skeleton/wither_skeleton'), zombie_head: head3d('zombie/zombie', true),
+  creeper_head: head3d('creeper/creeper'), player_head: head3d('player/wide/steve', true), shulker_box: shulker3d('shulker/shulker'),
+  piglin_head: entity('item/template_skull', [
+    { texture: 'piglin/piglin', u: 0, v: 0, from: [-5, -8, -4], size: [10, 8, 8], place: flipX180(8, 0, 8) },
+    { texture: 'piglin/piglin', u: 31, v: 1, from: [-2, -4, -5], size: [4, 4, 1], place: flipX180(8, 0, 8) },
+    { texture: 'piglin/piglin', u: 2, v: 4, from: [2, -2, -5], size: [1, 2, 1], place: flipX180(8, 0, 8) },
+    { texture: 'piglin/piglin', u: 2, v: 0, from: [-3, -2, -5], size: [1, 2, 1], place: flipX180(8, 0, 8) },
+    { texture: 'piglin/piglin', u: 51, v: 6, from: [0, 0, -2], size: [1, 5, 4], offset: [4.5, -6, 0], rot: [0, 0, -Math.PI / 6], place: flipX180(8, 0, 8) },
+    { texture: 'piglin/piglin', u: 39, v: 6, from: [-1, 0, -2], size: [1, 5, 4], offset: [-4.5, -6, 0], rot: [0, 0, Math.PI / 6], place: flipX180(8, 0, 8) }]),
+}
+for (const w of ['', 'exposed_', 'weathered_', 'oxidized_']) ENTITY[`waxed_${w}copper_chest`] = ENTITY[`${w}copper_chest`]
+for (const c of Object.keys(DYE)) { ENTITY[`${c}_shulker_box`] = shulker3d(`shulker/shulker_${c}`); ENTITY[`${c}_banner`] = banner3d(c) }
+for (const [n, make] of Object.entries(ENTITY)) {
+  if (have.has(n) || !itemDefs.has(n)) continue
+  try { const t = await make(); if (t) { fs.writeFileSync(path.join(out, n + '.png'), await png(t.w, t.h, t.data)); names.push(n); have.add(n) } } catch (e) { console.log(`Couldn't draw ${n}: ${e.message}`) }
 }
 // Items the game draws as 3D models (heads, chests, banners, the shield) only name a stand-in texture, so cut a face from their real texture.
 const tex = p => zip.getEntry(`assets/minecraft/textures/${p}.png`)
@@ -129,7 +190,7 @@ const SPECIAL = {
 }
 for (const w of ['', 'exposed_', 'weathered_', 'oxidized_']) SPECIAL[`waxed_${w}copper_chest`] = SPECIAL[`${w}copper_chest`]
 for (const c of ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'])
-  SPECIAL[`${c}_banner`] = SPECIAL[`${c}_bed`] = async () => { const e = tex(`block/${c}_wool`); return e ? px(e.getData()) : null }   // banners and beds: their colour
+  SPECIAL[`${c}_banner`] = async () => { const e = tex(`block/${c}_wool`); return e ? px(e.getData()) : null }   // banners if the 3D one fails: their colour
 for (const [n, make] of Object.entries(SPECIAL)) {
   if (have.has(n) || !itemDefs.has(n)) continue
   try { const t = await make(); if (t) { fs.writeFileSync(path.join(out, n + '.png'), await png(t.w, t.h, t.data)); names.push(n); have.add(n) } } catch { /* leave it to the steps below */ }

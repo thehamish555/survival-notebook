@@ -39,9 +39,10 @@ function elementRot(p, r) {
   return [q[0] + o[0], q[1] + o[1], q[2] + o[2]]
 }
 
-/** model: { elements, textures(name -> {w,h,data} | null), gui: {rotation, translation, scale}, tint(textureName, tintindex) -> [r,g,b] | null }
+/** model: { elements?, quads?, texture(name) -> {w,h,data} | null, gui: {rotation, translation, scale}, tint(textureName, tintindex) -> [r,g,b] | null }
+ *  quads are for entity models (chests, heads, banners): { pts: four [x,y,z] in block pixels, uv: four [u,v] in 0..16, texture, tint? }.
  *  Returns { w, h, data } RGBA at size x size, or null if nothing was drawn. */
-export function renderModel({ elements, texture, gui, tint }, size = 64) {
+export function renderModel({ elements, quads: extra, texture, gui, tint }, size = 64) {
   const rot = gui?.rotation || [30, 225, 0], tr = gui?.translation || [0, 0, 0], sc = gui?.scale || [0.625, 0.625, 0.625]
   // Model space (0..16) -> centred -> gui scale and rotation (Z, then Y, then X, as the game applies them) -> screen pixels.
   const view = p => {
@@ -52,23 +53,36 @@ export function renderModel({ elements, texture, gui, tint }, size = 64) {
     return [size / 2 + q[0] * k, size / 2 - q[1] * k, q[2]]   // screen y goes down
   }
   const turn = n => rotX(rad(rot[0]), rotY(rad(rot[1]), rotZ(rad(rot[2]), n)))
-  const data = Buffer.alloc(size * size * 4), depth = new Float32Array(size * size).fill(-Infinity)
-  let drawn = 0
+  // Every face becomes a quad: four corners in model space with their UVs, plus which way it points.
+  const quads = []
   for (const el of elements || []) {
     for (const dir of DIRS) {
       const f = el.faces?.[dir]; if (!f) continue
-      const tex = texture(f.texture); if (!tex) continue
-      const pts = corners(dir, el.from, el.to).map(p => view(elementRot(p, el.rotation)))
-      // Lighting by where the face points after turning: tops brightest, the left side a little darker, the right side darker still.
-      let n = NORMAL[dir]; if (el.rotation?.angle) { const o = elementRot([0, 0, 0], { ...el.rotation, origin: [0, 0, 0], rescale: false }); n = elementRot(n, { ...el.rotation, origin: [0, 0, 0], rescale: false }).map((v, i) => v - o[i]) }
-      const nn = turn(n)
-      if (nn[2] < -1e-4) continue   // facing away
-      const shade = el.shade === false ? 1 : Math.min(1, 0.6 + 0.4 * Math.max(0, nn[1]) + 0.25 * Math.max(0, -nn[0]))
-      const tc = f.tintindex !== undefined && f.tintindex >= 0 ? tint(f.texture, f.tintindex) : null
+      let n = NORMAL[dir]; if (el.rotation?.angle) n = elementRot(n, { ...el.rotation, origin: [0, 0, 0], rescale: false })
       const uv = f.uv || defaultUv(dir, el.from, el.to)
       let uvc = [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]]
       const steps = ((f.rotation || 0) / 90) & 3
       for (let i = 0; i < steps; i++) uvc = [uvc[3], uvc[0], uvc[1], uvc[2]]   // a rotated face turns its texture clockwise
+      quads.push({ pts: corners(dir, el.from, el.to).map(p => elementRot(p, el.rotation)), uv: uvc, texture: f.texture, normal: n, shade: el.shade !== false,
+        tint: f.tintindex !== undefined && f.tintindex >= 0 ? tint(f.texture, f.tintindex) : null })
+    }
+  }
+  for (const q of extra || []) {   // entity boxes: work out which way each face points from its corners
+    const [a, b, , d] = q.pts, u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]]
+    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+    const len = Math.hypot(...n) || 1; n = n.map(x => x / len)
+    quads.push({ ...q, normal: n, shade: true, twoSided: true })
+  }
+  const data = Buffer.alloc(size * size * 4), depth = new Float32Array(size * size).fill(-Infinity)
+  let drawn = 0
+  for (const qd of quads) {
+      const tex = texture(qd.texture); if (!tex) continue
+      const pts = qd.pts.map(view)
+      let nn = turn(qd.normal)
+      if (nn[2] < -1e-4) { if (!qd.twoSided) continue; nn = nn.map(x => -x) }   // facing away (entity faces just light the side we see)
+      // Lighting by where the face points after turning: tops brightest, the left side a little darker, the right side darker still.
+      const shade = !qd.shade ? 1 : Math.min(1, 0.6 + 0.4 * Math.max(0, nn[1]) + 0.25 * Math.max(0, -nn[0]))
+      const tc = qd.tint, uvc = qd.uv
       // The face is a parallelogram on screen: p = p0 + s*(p1-p0) + t*(p3-p0).
       const [p0, p1, , p3] = pts, ax = p1[0] - p0[0], ay = p1[1] - p0[1], bx = p3[0] - p0[0], by = p3[1] - p0[1], det = ax * by - ay * bx
       if (Math.abs(det) < 1e-6) continue
@@ -92,7 +106,22 @@ export function renderModel({ elements, texture, gui, tint }, size = 64) {
         data[o + 3] = a
         drawn++
       }
-    }
   }
   return drawn ? { w: size, h: size, data } : null
+}
+
+/** The faces of one box from an entity model, laid out on the texture the way the game does it (texOffs u,v; size w,h,d).
+ *  place maps a corner from the model's own space to block pixels (0..16). inflate grows the box without moving its UVs (hat layers). */
+export function entityBox({ texture, texW, texH, u, v, from, size, offset = [0, 0, 0], rot = [0, 0, 0], inflate = 0, place, tint }) {
+  const [w, h, d] = size, o = offset
+  const x0 = from[0] - inflate, y0 = from[1] - inflate, z0 = from[2] - inflate, x1 = from[0] + w + inflate, y1 = from[1] + h + inflate, z1 = from[2] + d + inflate
+  // A part turns about its own pivot (X, then Y, then Z, like the game's parts) and then moves to it.
+  const pose = p => { let q = rotX(rot[0], p); q = rotY(rot[1], q); q = rotZ(rot[2], q); return [q[0] + o[0], q[1] + o[1], q[2] + o[2]] }
+  const V = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]].map(pose)
+  const l = u, m = u + d, n = u + d + w, oo = u + d + w + w, p = u + d + w + d, q = u + d + w + d + w, r = v, s = v + d, t = v + d + h
+  // [corner indices, u1, v1, u2, v2]: corner 0 gets (u2,v1), 1 (u1,v1), 2 (u1,v2), 3 (u2,v2)
+  const faces = [[[5, 4, 0, 1], m, r, n, s], [[2, 3, 7, 6], n, s, oo, r], [[0, 4, 7, 3], l, s, m, t], [[1, 0, 3, 2], m, s, n, t], [[5, 1, 2, 6], n, s, p, t], [[4, 5, 6, 7], p, s, q, t]]
+  const U = x => x * 16 / texW, W = y => y * 16 / texH
+  return faces.filter(([, u1, v1, u2, v2]) => u1 !== u2 && v1 !== v2).map(([ix, u1, v1, u2, v2]) => ({
+    pts: ix.map(i => place(V[i])), uv: [[U(u2), W(v1)], [U(u1), W(v1)], [U(u1), W(v2)], [U(u2), W(v2)]], texture, tint }))
 }

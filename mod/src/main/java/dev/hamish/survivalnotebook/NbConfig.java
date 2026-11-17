@@ -25,6 +25,8 @@ final class NbConfig {
 		if (inst == null) {
 			try { if (Files.exists(file())) inst = GSON.fromJson(Files.readString(file()), NbConfig.class); } catch (Exception ignored) { }
 			if (inst == null) inst = new NbConfig();
+			// Early versions saved localhost here as a default. It was ignored until 1.2.1 started honouring apiUrl, which cut those players off.
+			if (inst.apiUrl != null && inst.apiUrl.trim().replaceAll("/+$", "").equalsIgnoreCase(LOCAL_API)) { inst.apiUrl = ""; save(); }
 		}
 		return inst;
 	}

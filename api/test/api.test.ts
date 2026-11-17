@@ -130,7 +130,7 @@ test('activity feed coalesces edits and names people by nickname; list shows sta
   await call('PUT', `/notebooks/${nb}/s/notes`, { data: 'hi' }, a.token)
   await call('PUT', `/notebooks/${nb}/s/gear:${a.id}`, { data: [{ id: 'g1' }] }, a.token)
   const feed = (await call('GET', `/notebooks/${nb}/activity`, undefined, a.token)).json
-  assert.deepEqual(feed.map((x: any) => `${x.name}: ${x.text}`), ['alice: added 1 gear item', 'alice: edited the notes', 'Builder Bob: added 2 places'])
+  assert.deepEqual(feed.map((x: any) => `${x.name}: ${x.text}`), ['alice: added a gear item', 'alice: edited the notes', 'Builder Bob: added 2 places: AB, C'])
   assert.equal((await call('GET', `/notebooks/${nb}/activity`, undefined, (await user('carol')).token)).status, 404)
   const list = (await call('GET', '/notebooks', undefined, a.token)).json
   assert.equal(list[0].memberCount, 2); assert.ok(list[0].lastActive > 0)
@@ -161,7 +161,7 @@ test('deaths + prefs sections: mod can write deaths, prefs are owner-only, every
   assert.equal((await call('PUT', `/notebooks/${nb}/s/prefs:${a.id}`, { data: [{ id: 'prefs', global: ['thorns'], kinds: { sword: ['fire_aspect'] } }] }, plain.token)).status, 200)
   assert.equal((await call('PUT', `/notebooks/${nb}/s/prefs:${a.id}`, { data: [] }, b.token)).status, 403)            // someone else's prefs
   const feed = (await call('GET', `/notebooks/${nb}/activity`, undefined, a.token)).json
-  assert.ok(feed.some((x: any) => x.text === 'added 1 death') && !feed.some((x: any) => /prefs/.test(x.text)))        // deaths are logged, prefs aren't
+  assert.ok(feed.some((x: any) => x.text === 'added a death') && !feed.some((x: any) => /prefs/.test(x.text)))        // deaths are logged, prefs aren't
   assert.equal((await call('POST', `/notebooks/${nb}/members`, { email: 'bob@x.com', role: 'viewer' }, admin.token)).status, 200)
   assert.equal((await call('DELETE', `/notebooks/${nb}/members/${b.id}`, undefined, admin.token)).status, 200)
   assert.equal((await call('DELETE', `/notebooks/${nb}`, undefined, admin.token)).status, 403)                        // still can't delete the notebook

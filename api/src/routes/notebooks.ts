@@ -8,8 +8,9 @@ import { SECTIONS, seed } from '../seed'
 import { readBody } from '../validate'
 import type { AppEnv, Ctx } from '../types'
 
-const Create = z.object({ title: z.string().trim().max(80).optional() })
-const Rename = z.object({ title: z.string().trim().min(1, 'Title can’t be empty').max(80) })
+export const TITLE_MAX = 40
+const Create = z.object({ title: z.string().trim().max(200).transform(t => t.slice(0, TITLE_MAX).trim()).optional() })   // long world names from the mod are cut, not refused
+const Rename = z.object({ title: z.string().trim().min(1, 'Title can’t be empty').max(TITLE_MAX, `Keep the title to ${TITLE_MAX} characters`) })
 
 export const notebookRoutes = (ctx: Ctx) => {
   const { db, bus } = ctx, r = new Hono<AppEnv>(), auth = requireAuth(ctx)

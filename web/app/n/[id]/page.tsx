@@ -205,8 +205,8 @@ export default function Notebook() {
 
   return <NbId.Provider value={id}>
     <div className="hero"><div className="grow">
-      <Link href="/">← All notebooks</Link>
-      <input className="titlein" defaultValue={nb.title} disabled={!edit} onBlur={e => e.target.value !== nb.title && api(`/notebooks/${id}`, 'PATCH', { title: e.target.value })} />
+      <Link href="/" className="back">← All notebooks</Link>
+      <NbTitle title={nb.title} canEdit={edit} onSave={(t: string) => api(`/notebooks/${id}`, 'PATCH', { title: t })} />
     </div><button className="ghost" onClick={() => setShareOpen(true)} title="Settings and members (m)"><TabIcon name="settings" size={16} /> Settings<span className={`dot ${live ? '' : 'off'}`} title={live ? 'Live sync connected' : 'Offline. Reconnecting'} /></button></div>
 
     <div className="shell">
@@ -244,7 +244,7 @@ export default function Notebook() {
         <div className="card"><div className="row"><h2 className="grow">Recent activity</h2>{activity.length > 0 && <button type="button" className="ghost" onClick={openAct}>See all</button>}</div>
           {since > 0 && <p className="mut">{since} change{since === 1 ? '' : 's'} by others since you were last here.</p>}
           {!activity.length && <div className="empty">Nothing yet. Changes show up here.</div>}
-          {activity.slice(0, 8).map((a: any) => <div className="ench" key={a.id}><b style={{ minWidth: 0 }}>{a.name}</b><span>{a.text}</span><span className="grow" /><span className="mut small">{timeAgo(a.ts)}</span></div>)}</div>
+          {activity.slice(0, 8).map((a: any) => <ActRow key={a.id} a={a} go={go} />)}</div>
         <div className="card"><h2>Team</h2><div style={{ overflowX: 'auto' }}><table>
           <thead><tr><th>Member</th><th>Open to-dos</th><th>Farms to build</th><th>Gear items</th></tr></thead>
           <tbody>{members.map(m => <tr key={m.id}><td>{m.name}{m.id === meId ? ' (you)' : ''} <span className={`pill t-${TONES.role[m.role]}`}>{m.role}</span></td>
@@ -373,9 +373,9 @@ export default function Notebook() {
       <div className="row"><h2 className="grow">Activity</h2><button className="x" onClick={() => setActOpen(false)}>✕</button></div>
       <div className="row" style={{ marginBottom: 8 }}>
         <Chips label="Person" value={actUser} opts={[...new Map(allAct.map((a: any) => [a.user, a.name])).entries()]} onChange={setActUser} />
-        <Chips label="Section" value={actSec} opts={[...new Set(allAct.map((a: any) => a.section))].map(x => [x, x === 'members' ? 'Members' : String(x)[0].toUpperCase() + String(x).slice(1)])} onChange={setActSec} /></div>
+        <Chips label="Section" value={actSec} opts={[...new Set(allAct.map((a: any) => a.section))].map(x => [x, ACT_SECTION[x]?.[0] || String(x)])} onChange={setActSec} /></div>
       {allAct.filter((a: any) => (actUser === 'All' || a.user === actUser) && (actSec === 'All' || a.section === actSec)).map((a: any) =>
-        <div className="ench" key={a.id}><b style={{ minWidth: 0 }}>{a.name}</b><span>{a.text}</span><span className="grow" /><span className="mut small">{timeAgo(a.ts)}</span></div>)}
+        <ActRow key={a.id} a={a} go={(t: string) => { setActOpen(false); go(t) }} />)}
       {!allAct.length && <div className="empty">Nothing yet.</div>}</div></div>}
     {paste && <div className="modal" onClick={() => setPaste(null)}><div className="card" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
       <div className="row"><h2 className="grow">Paste from game</h2><button className="x" onClick={() => setPaste(null)}>✕</button></div>
@@ -396,4 +396,38 @@ export default function Notebook() {
       {[['1 – 9, 0', 'Switch tab'], ['/', 'Search this tab'], ['m', 'Settings & backup'], ['?', 'This help'], ['Esc', 'Close any window']].map(([k, v]) => <div className="ench" key={k}><kbd>{k}</kbd><span>{v}</span></div>)}
     </div></div>}
   </NbId.Provider>
+}
+
+const TITLE_MAX = 40
+/** The notebook's name: plain text, with a pencil button for editors that swaps it for a text box (40 characters at most). */
+function NbTitle({ title, canEdit, onSave }: { title: string; canEdit: boolean; onSave: (t: string) => Promise<any> }) {
+  const [editing, setEditing] = useState(false), [draft, setDraft] = useState(title), [err, setErr] = useState('')
+  useEffect(() => { if (!editing) setDraft(title) }, [title, editing])
+  const save = async () => {
+    const t = draft.trim()
+    if (!t) { setErr("The title can't be empty"); return }
+    if (t === title) { setEditing(false); return }
+    try { await onSave(t); setEditing(false); setErr('') } catch (e: any) { setErr(e?.message || "Couldn't rename") }
+  }
+  if (!editing) return <div className="nbtitle"><h1>{title}</h1>
+    {canEdit && <button type="button" className="ghost iconbtn" onClick={() => { setDraft(title); setEditing(true) }} title="Rename notebook" aria-label="Rename notebook">✎</button>}</div>
+  return <div className="nbtitle editing">
+    <input className="titlein" value={draft} maxLength={TITLE_MAX} autoFocus aria-label="Notebook title" onChange={e => { setDraft(e.target.value); setErr('') }}
+      onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { setEditing(false); setErr('') } }} />
+    <div className="row"><button type="button" className="btn" onClick={save}>Save</button><button type="button" className="ghost" onClick={() => { setEditing(false); setErr('') }}>Cancel</button>
+      <span className="small titlecount">{draft.length}/{TITLE_MAX}</span>{err && <span className="err small">{err}</span>}</div></div>
+}
+
+/** Which tab and icon each activity section belongs to. */
+const ACT_SECTION: Record<string, [string, string]> = { coords: ['Coordinates', 'places'], todos: ['To-Do', 'todo'], farms: ['Farms', 'farms'], gear: ['Enchantments', 'gear'],
+  deaths: ['Deaths', 'deaths'], notes: ['Notes', 'notes'], members: ['Members', 'members'] }
+/** One line of recent activity: the section's icon, who, what they did (with names), whether it came from the game, and when. Click to open that section. */
+function ActRow({ a, go }: { a: any; go: (tab: string) => void }) {
+  const [tab, icon] = ACT_SECTION[a.section] || ['', 'notes']
+  const open = tab && tab !== 'Members' ? () => go(tab) : undefined
+  return <div className={`actrow ${open ? 'link' : ''}`} onClick={open} role={open ? 'button' : undefined} tabIndex={open ? 0 : undefined} onKeyDown={e => { if (open && e.key === 'Enter') open() }}
+    title={open ? `Open ${tab}` : undefined}>
+    <TabIcon name={icon} size={18} />
+    <span className="acttext"><b>{a.name}</b> {a.text}{a.via === 'mod' && <span className="pill t-green actvia">in game</span>}</span>
+    <span className="mut small actwhen" title={new Date(a.ts).toLocaleString()}>{timeAgo(a.ts)}</span></div>
 }

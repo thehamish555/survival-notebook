@@ -11,7 +11,9 @@
   "shopping",
   "notes",
   "members",
-  "settings"
+  "settings",
+  "sound",
+  "mute"
  ],
  "icons": {
   "home": {
@@ -248,6 +250,46 @@
     "obbbttbbdo",
     "obbbbbbddo",
     ".oooooooo."
+   ]
+  },
+  "sound": {
+   "pal": {
+    "o": "#1E2A33",
+    "x": "#9AA7B0",
+    "w": "#7CC4F2",
+    "r": "#E0584A"
+   },
+   "rows": [
+    ".....o....",
+    "....oo..w.",
+    "...oxo...w",
+    "ooooxo.w.w",
+    "oxxxxo..ww",
+    "oxxxxo..ww",
+    "ooooxo.w.w",
+    "...oxo...w",
+    "....oo..w.",
+    ".....o...."
+   ]
+  },
+  "mute": {
+   "pal": {
+    "o": "#1E2A33",
+    "x": "#9AA7B0",
+    "w": "#7CC4F2",
+    "r": "#E0584A"
+   },
+   "rows": [
+    ".....o....",
+    "....oo....",
+    "...oxo....",
+    "ooooxor..r",
+    "oxxxxo.rr.",
+    "oxxxxo.rr.",
+    "ooooxor..r",
+    "...oxo....",
+    "....oo....",
+    ".....o...."
    ]
   }
  }

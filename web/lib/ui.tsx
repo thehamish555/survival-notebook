@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { downloadFile, uploadFile } from '@/lib/api'
 import Link from 'next/link'
-import { Logo } from '@/components/PixelIcon'
+import { Logo, TabIcon } from '@/components/PixelIcon'
 import { MODRINTH_URL } from '@/lib/site'
 import { CHANGELOG, LINKS, clipWords } from '@/lib/data'
 import { getVolume, play, setSound, setVolume, soundOn } from '@/lib/sound'
@@ -62,7 +62,7 @@ export function ThemeToggle() {
   }, [])
   return <div className="themebtns">
     <button className="ghost themebtn" onClick={flip} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} aria-label="Toggle light or dark mode">{theme === 'dark' ? '☀' : '☾'}</button>
-    <button className="ghost themebtn" onClick={() => setPop(!pop)} title="Sound" aria-label="Sound settings">{snd && vol > 0 ? '🔊' : '🔇'}</button>
+    <button className="ghost themebtn" onClick={() => setPop(!pop)} title="Sound" aria-label="Sound settings"><TabIcon name={snd && vol > 0 ? 'sound' : 'mute'} size={20} /></button>
     {pop && <div className="volume volpop">
       <button className="x" onClick={() => { setSound(!snd); setSnd(!snd) }}>{snd ? 'Mute' : 'Unmute'}</button>
       <input type="range" min={0} max={100} value={Math.round(vol * 100)} aria-label="Volume" onChange={e => { const v = Number(e.target.value) / 100; setVol(v); setVolume(v); if (!snd && v > 0) { setSound(true); setSnd(true) } }} onMouseUp={() => play('ok')} onKeyUp={() => play('ok')} />

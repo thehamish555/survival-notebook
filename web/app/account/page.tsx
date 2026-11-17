@@ -26,7 +26,7 @@ export default function Account() {
   }
 
   return <>
-    <div className="hero" style={{ minHeight: 170 }}><div><Link href="/">← All notebooks</Link><h1>Account</h1></div></div>
+    <div className="hero" style={{ minHeight: 170 }}><div><Link href="/" className="back">← All notebooks</Link><h1>Account</h1></div></div>
     <div className="wrap">
       <div className="card"><h2>Profile</h2><p className="mut">Signed in with Google as {me.email}. Your display name is what people see unless you set a nickname inside a notebook.</p>
         <div className="row"><input className="grow" maxLength={40} value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveName()} /><button disabled={!name.trim() || name.trim() === me.name} onClick={saveName}>Save</button></div></div>

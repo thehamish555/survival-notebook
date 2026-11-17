@@ -6,7 +6,7 @@ const EMAIL = 'hamishlester555@gmail.com'
 
 export default function Privacy() {
   return <>
-    <div className="hero" style={{ minHeight: 170 }}><div><Link href="/">← Home</Link><h1>Privacy</h1></div></div>
+    <div className="hero" style={{ minHeight: 170 }}><div><Link href="/" className="back">← Home</Link><h1>Privacy</h1></div></div>
     <div className="wrap legal">
       <div className="card"><p className="mut">Last updated 17 November 2026</p>
         <p>The Survival Notebook is a hobby project run by Hamish Lester in New Zealand. This page explains what it keeps about you and why. If something here is unclear, email <a href={`mailto:${EMAIL}`}>{EMAIL}</a>.</p></div>

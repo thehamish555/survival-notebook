@@ -6,7 +6,7 @@ const EMAIL = 'hamishlester555@gmail.com'
 
 export default function Terms() {
   return <>
-    <div className="hero" style={{ minHeight: 170 }}><div><Link href="/">← Home</Link><h1>Terms</h1></div></div>
+    <div className="hero" style={{ minHeight: 170 }}><div><Link href="/" className="back">← Home</Link><h1>Terms</h1></div></div>
     <div className="wrap legal">
       <div className="card"><p className="mut">Last updated 17 November 2026</p>
         <p>The Survival Notebook is a free hobby project by Hamish Lester. By signing in or using the website or the mod, you agree to these terms.</p></div>

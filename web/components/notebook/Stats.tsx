@@ -23,7 +23,7 @@ const ROWS = 10   // every box shows the same number of rows so they all line up
 function Box({ title, empty, children }: any) { return <div className="card statbox"><h3>{title}</h3>{children}{empty && <p className="mut">Nothing yet.</p>}</div> }
 function Top({ title, rows, icons, mobs }: { title: string; rows?: [string, number][]; icons?: boolean; mobs?: boolean }) {
   const list = (rows || []).slice(0, ROWS), max = list[0]?.[1] || 1
-  return <Box title={title} empty={!list.length}>{Array.from({ length: ROWS }, (_, i) => list[i] ? <div className="statrow" key={i}>
+  return <Box title={title} empty={!list.length}>{Array.from({ length: ROWS }, (_, i) => list[i] ? <div className="statrow" key={i}><span className="rk">{i + 1}</span>
     <span className="sname">{icons && <Ico name={list[i][0].replace(/^minecraft[:.]/, '')} />}{mobs && <Ico name={mobIcon(list[i][0])} />}{pretty(list[i][0])}</span>
     <span className="sbar"><i style={{ width: `${Math.max(3, (list[i][1] / max) * 100)}%` }} /></span><b>{n(list[i][1])}</b></div> : <div className="statrow ghostrow" key={i} />)}</Box>
 }
@@ -43,7 +43,7 @@ export function Stats({ row, members, who, setWho }: { row?: StatsRow; members: 
           ...(row.advancements != null ? [['Advancements', n(row.advancements)]] : [])].map(([l, v]) => <div className="card statcard" key={l}><Ico name={CARD_ICON[l]} size={28} /><div><div className="lbl">{l}</div><div className="big">{v}</div></div></div>)}
       </div>
       <div className="grid2">
-        <Box title="How you travel" empty={!dist.length}>{Array.from({ length: ROWS }, (_, i) => dist[i] ? <div className="statrow" key={i}><span className="sname"><Ico name={TRAVEL_ICON[dist[i][0]]} />{DIST[dist[i][0]] || pretty(dist[i][0])}</span>
+        <Box title="How you travel" empty={!dist.length}>{Array.from({ length: ROWS }, (_, i) => dist[i] ? <div className="statrow" key={i}><span className="rk">{i + 1}</span><span className="sname"><Ico name={TRAVEL_ICON[dist[i][0]]} />{DIST[dist[i][0]] || pretty(dist[i][0])}</span>
           <span className="sbar"><i style={{ width: `${Math.max(3, (dist[i][1] / dist[0][1]) * 100)}%` }} /></span><b>{blocks(dist[i][1])}</b></div> : <div className="statrow ghostrow" key={i} />)}</Box>
         <Top title="Most mined" rows={row.mined} icons /><Top title="Most killed" rows={row.mobs} mobs /><Top title="Killed by" rows={row.killedBy} mobs /><Top title="Most crafted" rows={row.crafted} icons /><Top title="Most used" rows={row.used} icons />
       </div></>}

@@ -440,3 +440,34 @@ button.fsel.swap:hover{background:var(--hover);color:var(--ink)}button.fsel.swap
 .mapcoord{position:absolute;left:8px;bottom:8px;background:#000a;color:#fff;font:12px var(--font-mono),monospace;padding:2px 8px;pointer-events:none}
 input.num{width:72px}
 tr.got td{opacity:.6}
+
+/* 3.4.1: popup titles wrap, readable hero in both themes, title editing, activity rows, stat rows, drag handle */
+.ytcard{max-width:min(420px,100%)}.ytcard h3{overflow-wrap:anywhere;white-space:normal}
+[data-theme=dark] img.mc{filter:drop-shadow(0 0 1px #fff6)}   /* dark outlines (iron armour) vanish on a dark page without it */
+.hero a.back{display:flex;align-items:center;gap:6px;width:fit-content;padding:5px 12px;margin-bottom:10px;border-radius:99px;border:1px solid #ffffff26;
+  background:#000000a0;color:#f4efe2;font-weight:600;font-size:14px;text-decoration:none;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.hero a.back:hover{background:#000000d0;text-decoration:none}
+[data-theme=light] .hero a.back{background:#ffffffd9;color:#1f2421;border-color:#00000018}[data-theme=light] .hero a.back:hover{background:#fff}
+[data-theme=light] .hero{color:var(--ink)}
+[data-theme=light] .hero h1,[data-theme=light] .hero input.titlein{color:var(--ink);text-shadow:0 0 20px #ffffffe6,0 0 6px #ffffffb3}
+[data-theme=light] .hero .mut{color:var(--mut)}[data-theme=light] .hero .tag{text-shadow:0 0 14px #fff}
+[data-theme=light] .hero::after{background:linear-gradient(180deg,#0000 0%,color-mix(in srgb,var(--bg) 12%,transparent) 25%,color-mix(in srgb,var(--bg) 40%,transparent) 50%,color-mix(in srgb,var(--bg) 75%,transparent) 72%,color-mix(in srgb,var(--bg) 93%,transparent) 88%,var(--bg) 100%)}
+.nbtitle{display:flex;align-items:center;gap:10px;min-width:0}.nbtitle h1{min-width:0;overflow-wrap:anywhere}
+.nbtitle .iconbtn{flex:none;width:36px;height:36px;padding:0;border-radius:10px;font-size:17px;line-height:1}
+.nbtitle.editing{display:block;max-width:900px}.nbtitle.editing input.titlein{font-size:clamp(24px,3.4vw,38px)}.nbtitle.editing .row{margin-top:8px}
+.nbtitle.editing input.titlein{background:#000000a0;border-radius:10px;padding:4px 12px;outline:2px solid var(--gold)}
+[data-theme=light] .nbtitle.editing input.titlein{background:#ffffffe0}
+.titlecount{opacity:.8}
+.actrow{display:flex;align-items:flex-start;gap:10px;padding:8px 6px;border-bottom:1px solid var(--line);border-radius:6px}
+.actrow:last-child{border-bottom:0}.actrow.link{cursor:pointer}.actrow.link:hover{background:var(--hover)}
+.actrow>.pxi,.actrow>img,.actrow>svg{margin-top:2px;flex:none}
+.acttext{flex:1;min-width:0;overflow-wrap:anywhere}.acttext b{font-weight:600}.actvia{margin-left:8px;font-size:11px;padding:1px 8px;vertical-align:1px}
+.actwhen{flex:none;white-space:nowrap;margin-top:2px}
+.statrow{display:grid;grid-template-columns:20px minmax(0,1fr) auto;grid-template-areas:"rk nm v" ". bar bar";column-gap:8px;row-gap:5px;align-items:center;padding:7px 0}
+.statrow .rk{grid-area:rk;color:var(--mut);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.statrow .sname{grid-area:nm}.statrow b{grid-area:v;font-variant-numeric:tabular-nums}
+.statrow .sbar{grid-area:bar;height:5px}
+.statbox .statrow{min-height:44px}
+td.grip{width:26px;letter-spacing:0;font-size:0;line-height:0}td.grip svg{opacity:.75}td.grip:hover svg{opacity:1}
+
+[data-theme=light] .bar,[data-theme=light] .statrow .sbar{background:#0000001c}   /* the empty part of a progress bar shows in light mode too */

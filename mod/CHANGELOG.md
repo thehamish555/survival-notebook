@@ -1,3 +1,6 @@
+## 1.2.3 – Fix
+- The mod can reach the notebook again. Some older setups had a leftover local server address saved in the config, which 1.2.1 started using by mistake. It's cleared on start now.
+
 ## 1.2.2 – Fix
 - Item icons now show on the main menu too (for example when you open the notebook from Mod Menu), not only once a world has loaded.
 

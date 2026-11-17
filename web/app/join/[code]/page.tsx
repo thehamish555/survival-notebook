@@ -18,7 +18,7 @@ export default function Join() {
   }
   if (!info && !err) return <Loading />
   return <>
-    <div className="hero" style={{ minHeight: 170 }}><div><Link href="/">← Home</Link><h1>Join a notebook</h1></div></div>
+    <div className="hero" style={{ minHeight: 170 }}><div><Link href="/" className="back">← Home</Link><h1>Join a notebook</h1></div></div>
     <div className="wrap" style={{ maxWidth: 560 }}>
       {err && <div className="card"><div className="err">{err}</div><p className="mut">Ask the owner for a new link.</p></div>}
       {info && <div className="card">
