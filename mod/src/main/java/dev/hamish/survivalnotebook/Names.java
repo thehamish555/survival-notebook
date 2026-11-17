@@ -39,8 +39,10 @@ final class Names {
 		return sb.toString();
 	}
 
-	/** netherite_pickaxe -> Netherite Pickaxe */
+	/** netherite_pickaxe -> Netherite Pickaxe; potion_fire_resistance -> Potion of Fire Resistance, tipped_arrow_poison -> Arrow of Poison (like the website) */
 	static String pretty(String path) {
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(potion|splash_potion|lingering_potion|tipped_arrow)_(.+)$").matcher(path == null ? "" : path);
+		if (m.matches()) return (m.group(1).equals("tipped_arrow") ? "Arrow" : pretty(m.group(1))) + " of " + pretty(m.group(2));
 		StringBuilder sb = new StringBuilder();
 		for (String w : path.split("_")) if (!w.isEmpty()) sb.append(sb.length() > 0 ? " " : "").append(Character.toUpperCase(w.charAt(0))).append(w.substring(1));
 		return sb.toString();

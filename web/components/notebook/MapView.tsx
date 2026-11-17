@@ -13,6 +13,14 @@ type TileInfo = { dim: Dim; tx: number; tz: number; updated: number }
 type View = { x: number; z: number; scale: number }   // block at the centre, pixels per block
 const COLOURS = ['#5aa9ff', '#ff7a6b', '#b07cff', '#f2c14e', '#4fd1c5', '#ff9ad5', '#9be15d', '#ffa94d']
 /** Each player keeps the same colour everywhere (the arrow on the map and their chip). */
+// The game's default skins, in its own order: a player with no skin gets DEFAULT[floorMod(uuid.hashCode(), 18)] (slim, then wide; the heads match).
+const DEFAULT_FACES = ['alex', 'ari', 'efe', 'kai', 'makena', 'noor', 'steve', 'sunny', 'zuri']
+export function defaultFace(uuid: string): string | null {
+  const hex = uuid.replace(/-/g, ''); if (!/^[0-9a-f]{32}$/i.test(hex)) return null
+  const hilo = BigInt.asIntN(64, BigInt('0x' + hex.slice(0, 16)) ^ BigInt('0x' + hex.slice(16)))
+  const hash = Number(BigInt.asIntN(32, hilo >> 32n)) ^ Number(BigInt.asIntN(32, hilo))   // java.util.UUID.hashCode()
+  return DEFAULT_FACES[(((hash % 18) + 18) % 18) % 9]
+}
 export const playerColour = (uid: string) => COLOURS[[...String(uid)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % COLOURS.length]
 
 async function inflate(buf: ArrayBuffer): Promise<Uint8Array> {
@@ -43,6 +51,7 @@ export function MapView({ id, rev, places, role, onPlace, players = [], meId = '
     if (!pics.current.has(key)) { pics.current.set(key, null); load().then(img => { pics.current.set(key, img); redraw(n => n + 1) }).catch(() => {}) }
     return pics.current.get(key) || null
   }
+  const facePic = (name: string) => pic('face:' + name, () => new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = `/mc/face/${name}.png` }))
   const iconPic = (name: string) => pic('icon:' + name, () => new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = `/mc/item/${name}.png` }))
   // A face: the skin's head front plus its hat layer. Old 64x32 skins fill the hat with solid colour, and the game skips a hat with no see-through pixels, so we do too.
   const skinPic = (uuid: string) => (uuid ? pic('skin:' + uuid, () => apiBytes(`/notebooks/${id}/skin/${uuid}`).then(b => createImageBitmap(new Blob([b], { type: 'image/png' }))).then(img => {
@@ -100,7 +109,8 @@ export function MapView({ id, rev, places, role, onPlace, players = [], meId = '
       }
       ctx.fillStyle = '#000'; ctx.fillRect(x - f / 2 - 3 * d, y - f / 2 - 3 * d, f + 6 * d, f + 6 * d)
       ctx.fillStyle = col; ctx.fillRect(x - f / 2 - 2 * d, y - f / 2 - 2 * d, f + 4 * d, f + 4 * d)
-      const skin = skinPic(pl.mcUuid)
+      const fallback = pl.mcUuid ? defaultFace(pl.mcUuid) : null
+      const skin = skinPic(pl.mcUuid) || (fallback ? facePic(fallback) : null)   // no skin (offline-mode servers): the same default face the game shows
       if (skin) ctx.drawImage(skin, x - f / 2, y - f / 2, f, f)
       else { ctx.fillStyle = '#20232a'; ctx.fillRect(x - f / 2, y - f / 2, f, f); ctx.fillStyle = col; ctx.font = `700 ${11 * d}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.fillText((pl.name || '?')[0].toUpperCase(), x, y + 4 * d); ctx.textAlign = 'left' }
       const label = (pl.uid === meId ? `${pl.name} (you)` : pl.name) + (pl.online ? '' : ` · ${timeAgo(pl.ts)}`)

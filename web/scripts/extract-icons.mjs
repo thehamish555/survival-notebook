@@ -385,6 +385,18 @@ if (missing.length) console.log(`No icon for ${missing.length} item(s): ${missin
 if (!ONLY) fs.writeFileSync(path.join('public', 'mc', 'index.json'), JSON.stringify(names))
 console.log(`Wrote ${names.length} item icons to public/mc/item: ${counts['3d']} 3D, ${counts.flat} flat, ${counts.animated} animated`)
 
+// Default player faces (the game gives a player without a skin one of these, picked from their UUID): head plus hat layer, 8x8.
+{
+  const fdir = path.join('public', 'mc', 'face'); fs.mkdirSync(fdir, { recursive: true }); let made = 0
+  for (const n of ['alex', 'ari', 'efe', 'kai', 'makena', 'noor', 'steve', 'sunny', 'zuri']) {
+    const e = zip.getEntry(`assets/minecraft/textures/entity/player/wide/${n}.png`); if (!e) continue
+    const base = await px(e.getData(), [8, 8, 8, 8]), hat = await px(e.getData(), [40, 8, 8, 8])
+    for (let i = 0; i < base.data.length; i += 4) if (hat.data[i + 3] > 8) for (let k = 0; k < 4; k++) base.data[i + k] = hat.data[i + k]
+    fs.writeFileSync(path.join(fdir, n + '.png'), await png(8, 8, base.data)); made++
+  }
+  console.log(`Wrote ${made} default player faces to public/mc/face`)
+}
+
 // UI sounds: copied from your game's own sound files (looked up through the asset index next to the versions folder).
 try {
   const assets = path.join(path.dirname(path.dirname(jar)), '..', 'assets')
