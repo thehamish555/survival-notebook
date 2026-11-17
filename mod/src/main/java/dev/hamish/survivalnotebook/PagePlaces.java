@@ -223,14 +223,14 @@ final class PagePlaces {
 			}, true);
 			y += 26;
 			if (i == 0 && !asking) {   // between the Overworld and Nether rows: fills whichever of the two is empty
-				s.btn(bx, y - 2, 120, "\u21C5 Convert", 1, () -> {
+				s.btn(bx, y, 120, "\u21C5 Convert", 1, () -> {
 					String ow = Notebook.str(draft, "ow"), ne = Notebook.str(draft, "nether");
 					if (Names.isXyz(ow) && ne.isBlank()) draft.addProperty("nether", Names.convert(ow, 1 / 8.0));
 					else if (Names.isXyz(ne) && ow.isBlank()) draft.addProperty("ow", Names.convert(ne, 8));
 					else { Notebook.msg("Leave the other side empty to convert."); return; }
 					s.rebuild();
 				}, true);
-				y += 24;
+				y += 26;
 			}
 		}
 		if (asking) y += 78;

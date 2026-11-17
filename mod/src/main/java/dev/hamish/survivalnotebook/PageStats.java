@@ -98,6 +98,8 @@ final class PageStats {
 		s.setScroll(list.size(), vis);
 		if (list.isEmpty()) s.text("Nothing yet.", s.cx + 4, listTop + 4, p.mut);
 		final long max = list.isEmpty() ? 1 : Math.max(1, (long) list.get(0)[3]);
+		int widest = 0; for (Object[] r0 : list) widest = Math.max(widest, s.font().width((String) r0[2]));
+		final int valCol = widest;
 		for (int i = 0; i < vis && NotebookScreen.scroll + i < list.size(); i++) {
 			final Object[] row = list.get(NotebookScreen.scroll + i);
 			final int ry = listTop + i * rowH;
@@ -106,7 +108,7 @@ final class PageStats {
 				Compat.drawItem(g, (String) row[0], s.cx + 3, ry);
 				int nameW = Math.min(150, rowW / 3), valW = s.font().width((String) row[2]);
 				g.text(s.font(), Ui.clip(s.font(), (String) row[1], nameW), s.cx + 22, ry + 5, p.ink, false);
-				int bx = s.cx + 26 + nameW, bw = Math.max(10, rowW - nameW - valW - 40);
+				int bx = s.cx + 26 + nameW, bw = Math.max(10, rowW - nameW - valCol - 40);
 				g.fill(bx, ry + 6, bx + bw, ry + 11, p.panel2);
 				g.fill(bx, ry + 6, bx + Math.max(2, (int) (bw * (long) row[3] / max)), ry + 11, p.grass);
 				g.text(s.font(), (String) row[2], s.cx + rowW - 6 - valW, ry + 5, p.ink, false);

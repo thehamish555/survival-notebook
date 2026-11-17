@@ -1,3 +1,12 @@
+## 1.4.3 – Fix
+- Recent activity on the Home tab shows each change's section icon and marks changes made in game, and clicking one opens that section, like on the website.
+- Members show their own skin again instead of Steve.
+- Stats lists line up: every bar is the same length, whatever the number beside it.
+- Settings: the text and the On/Off buttons sit in the middle of each row.
+- The icon picker is much smoother, and the icons sit in the middle of their boxes.
+- Places: the Convert button has room around it, and the move up and down arrows are closer together.
+- The notebook's own logo in the corner instead of a book and quill.
+
 ## 1.4.2 – Fix
 - Coloured potions and tipped arrows are named like on the website, such as Potion of Fire Resistance.
 

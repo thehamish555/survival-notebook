@@ -85,6 +85,8 @@ maskable(512, 18).save('public/brand/maskable-512.png'); badge(96).save('public/
 maskable(180, 9).save('app/apple-icon.png')   # iOS rounds the corners itself
 os.makedirs('../mod/src/main/resources/assets/survival_notebook', exist_ok=True)
 tile(128, 6).save('../mod/src/main/resources/assets/survival_notebook/icon.png')
+os.makedirs('../mod/src/main/resources/assets/survival_notebook/textures/gui', exist_ok=True)
+render(LOGO, 1).save('../mod/src/main/resources/assets/survival_notebook/textures/gui/logo.png')   # the notebook's header icon in game, 16x16
 # The Open Graph card (public/og.png) is made from the real home page now: npm run og
 
 print('ok')

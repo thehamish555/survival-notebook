@@ -109,19 +109,27 @@ final class Players {
 		return COLOURS[(int) (h % COLOURS.length)];
 	}
 
-	/** A player's face (their real skin, fetched by the game) with a frame in their colour; dimmed when they're offline. */
+	/** A member's Minecraft UUID, if their mod has shared a position. */
+	static String uuidOf(String uid) { Pos p = people.get(uid); return p == null ? "" : p.mcUuid(); }
+
+	/** A player's face, from their real skin (the game fetches it, by UUID or else by Minecraft name). False if there's nothing to go on. */
 	private static final Map<String, net.minecraft.world.item.component.ResolvableProfile> PROFILES = new ConcurrentHashMap<>();
+	static boolean head(net.minecraft.client.gui.GuiGraphicsExtractor g, String mcUuid, String mcName, int x, int y, int size) {
+		try {
+			net.minecraft.world.item.component.ResolvableProfile prof;
+			if (mcUuid != null && !mcUuid.isBlank()) { java.util.UUID id = java.util.UUID.fromString(mcUuid); prof = PROFILES.computeIfAbsent(mcUuid, k -> net.minecraft.world.item.component.ResolvableProfile.createUnresolved(id)); }
+			else if (mcName != null && mcName.matches("[A-Za-z0-9_]{3,16}")) prof = PROFILES.computeIfAbsent("name:" + mcName, k -> net.minecraft.world.item.component.ResolvableProfile.createUnresolved(mcName));
+			else return false;
+			net.minecraft.client.gui.components.PlayerFaceExtractor.extractRenderState(g, prof, x, y, size);
+			return true;
+		} catch (RuntimeException e) { return false; }
+	}
+
+	/** The same face with a frame in their colour, for the map; dimmed when they're offline. */
 	static void face(net.minecraft.client.gui.GuiGraphicsExtractor g, String mcUuid, int x, int y, int size, int frame, boolean dim) {
 		g.fill(x - 2, y - 2, x + size + 2, y + size + 2, 0xFF000000);
 		g.fill(x - 1, y - 1, x + size + 1, y + size + 1, frame);
-		boolean drawn = false;
-		try {
-			java.util.UUID id = java.util.UUID.fromString(mcUuid);
-			var prof = PROFILES.computeIfAbsent(mcUuid, k -> net.minecraft.world.item.component.ResolvableProfile.createUnresolved(id));
-			net.minecraft.client.gui.components.PlayerFaceExtractor.extractRenderState(g, prof, x, y, size);
-			drawn = true;
-		} catch (RuntimeException ignored) { }
-		if (!drawn) g.fill(x, y, x + size, y + size, frame);
+		if (!head(g, mcUuid, "", x, y, size)) g.fill(x, y, x + size, y + size, frame);
 		if (dim) g.fill(x, y, x + size, y + size, 0x99202020);
 	}
 }

@@ -345,15 +345,24 @@ async function iconFor(n) {
 const GLINT = new Set(['enchanted_book', 'written_book', 'enchanted_golden_apple', 'experience_bottle', 'nether_star', 'end_crystal', 'debug_stick'])
 async function glint(buf) {
   const g = await loadTex('minecraft:misc/enchanted_glint_item'); if (!g) return buf
-  const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  let { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  if (info.width < 64) {   // flat items: scale up (keeping their pixels sharp) so the glint can be smooth across them, like in game
+    const up = await sharp(buf).ensureAlpha().resize(64, 64, { kernel: 'nearest' }).raw().toBuffer({ resolveWithObject: true }); data = up.data; info = up.info
+  }
   const w = info.width, h = info.height, N = 48, cos = Math.cos(0.1745), sin = Math.sin(0.1745), frames = []
+  const texel = (x, y) => { const k = ((((y % g.h) + g.h) % g.h) * g.w + (((x % g.w) + g.w) % g.w)) * 4; return [g.data[k], g.data[k + 1], g.data[k + 2]] }
+  const sample = (u, v) => {   // smooth (bilinear) like the game's blurred glint texture, wrapping at the edges
+    const x = u * g.w - 0.5, y = v * g.h - 0.5, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0
+    const a = texel(x0, y0), b = texel(x0 + 1, y0), c = texel(x0, y0 + 1), d = texel(x0 + 1, y0 + 1)
+    return [0, 1, 2].map(i => (a[i] * (1 - fx) + b[i] * fx) * (1 - fy) + (c[i] * (1 - fx) + d[i] * fx) * fy)
+  }
   for (let f = 0; f < N; f++) {
     const out2 = Buffer.from(data), shift = f / N
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4; if (!data[i + 3]) continue
-      const u = x / w * 0.5, v = y / h * 0.5, ru = u * cos - v * sin + shift, rv = u * sin + v * cos   // tilted 10 degrees, like the game's
-      const gx = Math.floor(((ru % 1) + 1) % 1 * g.w), gy = Math.floor(((rv % 1) + 1) % 1 * g.h), k = (gy * g.w + gx) * 4
-      for (let c = 0; c < 3; c++) out2[i + c] = Math.min(255, data[i + c] + g.data[k + c] * g.data[k + c] / 255 * 0.9)
+      const u = (x + 0.5) / w * 0.5, v = (y + 0.5) / h * 0.5, ru = u * cos - v * sin + shift, rv = u * sin + v * cos   // tilted 10 degrees, like the game's
+      const s2 = sample(ru, rv)
+      for (let c = 0; c < 3; c++) out2[i + c] = Math.min(255, data[i + c] + s2[c] * s2[c] / 255 * 0.9)
     }
     frames.push({ w, h, data: out2 })
   }

@@ -27,30 +27,40 @@ final class IconPicker {
 		s.setScroll((shown.size() + cols - 1) / cols, rowsVis);
 		final String cur = Notebook.str(draft, "icon");
 		if (shown.isEmpty()) s.text("No matching items.", s.cx + 2, y + 4, p.mut);
-		final int gy = y;
-		for (int i = 0; i < rowsVis * cols; i++) {
-			int idx = NotebookScreen.scroll * cols + i;
-			if (idx >= shown.size()) break;
-			final String n = shown.get(idx);
-			final int ix = s.cx + (i % cols) * cell, iy = gy + (i / cols) * cell;
-			s.hit(ix, iy, cell - 1, cell - 1, () -> { draft.addProperty("icon", n); done.run(); }, true);
-			s.paint((g, mx, my) -> {
-				Ui.rounded(g, ix, iy, cell - 1, cell - 1, n.equals(cur) ? p.gold : Ui.over(mx, my, ix, iy, cell - 1, cell - 1) ? p.hover : p.row, n.equals(cur) ? p.gold : p.row);
-				Compat.drawItem(g, n, ix + 2, iy + 2);
-			});
-		}
+		final int gy = y, first = NotebookScreen.scroll * cols, count = Math.max(0, Math.min(rowsVis * cols, shown.size() - first));
+		final int box = cell - 2, pad = (box - 16) / 2;   // the 16px item sits in the middle of its box
+		s.hit(s.cx, gy, cols * cell, rowsVis * cell, () -> {
+			var mc = net.minecraft.client.Minecraft.getInstance();
+			int i = at(mc.mouseHandler.getScaledXPos(mc.getWindow()) - s.cx, mc.mouseHandler.getScaledYPos(mc.getWindow()) - gy, cell, cols);
+			if (i >= 0 && i < count) { draft.addProperty("icon", shown.get(first + i)); done.run(); }
+		}, true);
+		s.paint((g, mx, my) -> {
+			int hov = at(mx - s.cx, my - gy, cell, cols);
+			for (int i = 0; i < count; i++) {
+				String n = shown.get(first + i);
+				int ix = s.cx + (i % cols) * cell, iy = gy + (i / cols) * cell;
+				boolean picked = n.equals(cur);
+				Ui.rounded(g, ix, iy, box, box, picked ? p.gold : i == hov ? p.hover : p.row, picked ? p.gold : p.row);
+				Compat.drawItem(g, n, ix + pad, iy + pad);
+			}
+		});
 		// name of the item under the mouse + how many match
 		final int by = s.bottom - 20;
 		s.paint((g, mx, my) -> {
 			String hint = shown.size() + (shown.size() == 1 ? " item" : " items");
-			for (int i = 0; i < rowsVis * cols; i++) {
-				int idx = NotebookScreen.scroll * cols + i;
-				if (idx >= shown.size()) break;
-				if (Ui.over(mx, my, s.cx + (i % cols) * cell, gy + (i / cols) * cell, cell - 1, cell - 1)) { hint = Names.titleCase(shown.get(idx)); break; }
-			}
+			int i = at(mx - s.cx, my - gy, cell, cols);
+			if (i >= 0 && i < count) hint = Names.titleCase(shown.get(first + i));
 			g.text(s.font(), hint, s.cx + 100, by + 6, p.mut, false);
 		});
 		s.btn(s.cx, by, 90, "No icon", 1, () -> { draft.addProperty("icon", ""); done.run(); }, true);
 		s.btn(s.cx + s.cw - 70, by, 64, "Back", 1, done, true);
+	}
+
+	/** Which cell of the grid a point falls in (-1 if it's in a gap or outside). */
+	private static int at(double x, double y, int cell, int cols) {
+		if (x < 0 || y < 0) return -1;
+		int c = (int) (x / cell), r = (int) (y / cell);
+		if (c >= cols || x - c * cell >= cell - 2 || y - r * cell >= cell - 2) return -1;
+		return r * cols + c;
 	}
 }

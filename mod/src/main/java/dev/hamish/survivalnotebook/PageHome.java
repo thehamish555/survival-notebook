@@ -9,6 +9,15 @@ import java.util.List;
 final class PageHome {
 	private PageHome() { }
 
+	/** Which tab and icon an activity entry's section belongs to (the same as the website). */
+	private static int tabFor(String section) {
+		return switch (section) { case "coords" -> NotebookScreen.PLACES; case "todos" -> NotebookScreen.TODO; case "farms" -> NotebookScreen.FARMS; case "gear" -> NotebookScreen.GEAR;
+			case "deaths" -> NotebookScreen.DEATHS; case "notes" -> NotebookScreen.NOTES; case "members" -> NotebookScreen.SETTINGS; default -> -1; };
+	}
+	private static String iconFor(String section) {
+		return switch (section) { case "coords" -> "places"; case "todos" -> "todo"; case "farms" -> "farms"; case "gear" -> "gear"; case "deaths" -> "deaths"; case "members" -> "members"; default -> "notes"; };
+	}
+
 	static void build(NotebookScreen s) {
 		Ui.Pal p = Ui.pal();
 		int y = s.top;
@@ -88,16 +97,25 @@ final class PageHome {
 		for (var e : Notebook.activity) if (e.isJsonObject()) acts.add(e.getAsJsonObject());
 		int n = 0;
 		for (JsonObject a : acts) {
-			if (y + 12 > s.bottom) break;
-			String who = Notebook.str(a, "name"), what = Notebook.str(a, "text");
+			if (y + 15 > s.bottom) break;
+			String who = Notebook.str(a, "name"), what = Notebook.str(a, "text"), section = Notebook.str(a, "section");
+			final boolean inGame = Notebook.str(a, "via").equals("mod");
 			long ts = a.has("ts") ? a.get("ts").getAsLong() : 0;
-			final int yy = y;
+			final int yy = y, target = tabFor(section);
+			final String icon = iconFor(section);
+			s.row(s.cx, yy, s.cw, 14, s.cw, n, target < 0 ? null : () -> { if (target == NotebookScreen.SETTINGS) PageSettings.cat = "Members"; NotebookScreen.tab = target; NotebookScreen.resetEditors(); s.rebuild(); });
 			s.paint((g, mx, my) -> {
 				String ago = Ui.ago(ts);
-				g.text(s.font(), Ui.clip(s.font(), who + " " + what, s.cw - s.font().width(ago) - 16), s.cx + 4, yy, p.ink, false);
-				g.text(s.font(), ago, s.cx + s.cw - s.font().width(ago) - 4, yy, p.mut, false);
+				TabIcons.draw(g, icon, s.cx + 4, yy + 2, 1);
+				int tagW = inGame ? s.font().width("in game") + 8 : 0, room = s.cw - s.font().width(ago) - tagW - 30;
+				String line = Ui.clip(s.font(), who + " " + what, room);
+				int wx = s.cx + 18;
+				g.text(s.font(), line, wx, yy + 3, p.mut, false);
+				g.text(s.font(), Ui.clip(s.font(), who, room), wx, yy + 3, p.ink, false);   // the name stands out, like the website's bold
+				if (inGame) { int tx = wx + Math.min(s.font().width(line), room) + 6; Ui.tag(g, s.font(), tx, yy + 1, tagW, 12, "in game", p.green, false); }
+				g.text(s.font(), ago, s.cx + s.cw - s.font().width(ago) - 4, yy + 3, p.mut, false);
 			});
-			y += 12; n++;
+			y += 15; n++;
 		}
 		if (n == 0) s.text("Nothing yet.", s.cx + 4, y, p.mut);
 	}

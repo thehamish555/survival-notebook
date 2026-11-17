@@ -167,7 +167,7 @@ final class NotebookScreen extends Screen {
 	private void header() {
 		paint((g, mx, my) -> {
 			Ui.Pal p = Ui.pal();
-			Compat.drawItem(g, "writable_book", x0 + 8, y0 + 6);
+			Compat.blitTile(g, net.minecraft.resources.Identifier.fromNamespaceAndPath(SurvivalNotebookClient.ID, "textures/gui/logo.png"), x0 + 8, y0 + 6, x0 + 24, y0 + 22);   // the notebook logo
 			g.text(font, "Survival Notebook", x0 + 28, y0 + 9, p.gold, false);
 			int tx = x0 + 28 + font.width("Survival Notebook") + 6;
 			g.text(font, "\u203A " + TABS[Math.min(tab, TABS.length - 1)], tx, y0 + 9, p.mut, false);
@@ -291,8 +291,8 @@ final class NotebookScreen extends Screen {
 			Ui.Pal p = Ui.pal();
 			for (Zone z : zones) {
 				int half = z.h() / 2, mid = cx - 5;
-				if (z.up()) { boolean hov = Ui.over(mx, my, cx - 10, z.y(), 10, half); int c = hov ? p.gold : p.mut, ty = z.y() + half / 2 - 2; for (int i = 0; i < 4; i++) g.fill(mid - i, ty + i, mid + i + 1, ty + i + 1, c); }
-				if (z.down()) { boolean hov = Ui.over(mx, my, cx - 10, z.y() + half, 10, z.h() - half); int c = hov ? p.gold : p.mut, ty = z.y() + half + (z.h() - half) / 2 - 2; for (int i = 0; i < 4; i++) g.fill(mid - 3 + i, ty + i, mid + 4 - i, ty + i + 1, c); }
+				if (z.up()) { boolean hov = Ui.over(mx, my, cx - 10, z.y(), 10, half); int c = hov ? p.gold : p.mut, ty = z.y() + half - 6; for (int i = 0; i < 4; i++) g.fill(mid - i, ty + i, mid + i + 1, ty + i + 1, c); }
+				if (z.down()) { boolean hov = Ui.over(mx, my, cx - 10, z.y() + half, 10, z.h() - half); int c = hov ? p.gold : p.mut, ty = z.y() + half + 2; for (int i = 0; i < 4; i++) g.fill(mid - 3 + i, ty + i, mid + 4 - i, ty + i + 1, c); }
 			}
 		});
 	}

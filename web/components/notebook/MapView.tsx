@@ -151,7 +151,7 @@ export function MapView({ id, rev, places, role, onPlace, players = [], meId = '
     <div className="row"><h2 className="grow">Map</h2>
       {dims.length > 1 && <Chips label="Dimension" noAll value={dim} opts={dims.map(k => [k, DIM_LABEL[k]])} onChange={(v: Dim) => setDim(v)} />}
       <button className="ghost" onClick={() => zoom(1.5)} title="Zoom in">+</button><button className="ghost" onClick={() => zoom(1 / 1.5)} title="Zoom out">−</button></div>
-    <p className="mut">Drawn by the mod as players explore. Anyone can turn it off with Share map in the mod's Settings. Pins are your saved places in {DIM_LABEL[dim]}. Click one to open it. Faces are your team: bright while they're in game, dimmed where they last were (each can turn it off with Share position in the mod).</p>
+    <p className="mut">Everywhere your team has explored, with your places and where everyone is. Click a place to open it.</p>
     {err && <p className="err">{err}</p>}
     {players.length > 0 && <div className="row" style={{ marginBottom: 8 }}><span className="mut small">Team</span>
       {[...players].sort((a, b) => Number(b.online) - Number(a.online) || b.ts - a.ts).map(p => <button key={p.uid} type="button" className={`chip playerchip ${p.online ? '' : 'off'}`} title={`${p.online ? 'Online now' : `Offline, last seen ${timeAgo(p.ts)}`}. ${DIM_LABEL[p.dim as Dim]} ${Math.floor(p.x)} ${p.y} ${Math.floor(p.z)}. Click to find them on the map.`}

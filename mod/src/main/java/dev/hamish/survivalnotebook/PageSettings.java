@@ -19,13 +19,13 @@ final class PageSettings {
 	/** One toggle row: a label with a short hint and an on/off button. */
 	private static void toggle(NotebookScreen s, int y, String label, String hint, boolean on, Runnable flip) {
 		Ui.Pal p = Ui.pal();
-		s.row(s.cx, y - 3, s.cw - 8, ROW - 2, 0, 0, null);
+		s.row(s.cx, y - 1, s.cw - 8, ROW - 2, 0, 0, null);   // y-1 .. y+23: the text and the pill are centred on y+11
 		s.paint((g, mx, my) -> {
-			g.fill(s.cx + 1, y, s.cx + 4, y + ROW - 8, on ? p.green.fg() : p.mut);
+			g.fill(s.cx + 1, y + 2, s.cx + 4, y + 20, on ? p.green.fg() : p.mut);
 			g.text(s.font(), label, s.cx + 10, y + 2, p.ink, false);
 			g.text(s.font(), Ui.clip(s.font(), hint, s.cw - 110), s.cx + 10, y + 13, p.mut, false);
 		});
-		s.pill(s.cx + s.cw - 84, y + 2, 66, 18, on ? "On" : "Off", on ? p.green : p.gray, () -> { flip.run(); NbConfig.save(); s.rebuild(); }, true);
+		s.pill(s.cx + s.cw - 84, y + 3, 66, 16, on ? "On" : "Off", on ? p.green : p.gray, () -> { flip.run(); NbConfig.save(); s.rebuild(); }, true);
 	}
 
 	static void build(NotebookScreen s) {

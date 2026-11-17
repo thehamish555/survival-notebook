@@ -28,8 +28,9 @@ final class PageMembers {
 			s.row(s.cx, ry, rowW, 25, rowW, i, null);
 			s.paint((g, mx, my) -> {
 				String[] mc = Notebook.mcOf(id);
-				String uuid = mc == null ? "" : mc[0], mcName = mc == null ? real.isBlank() ? Notebook.str(m, "name") : real : mc[1];
-				if (!Heads.draw(g, uuid, mcName, s.cx + 6, ry + 4, 16)) Compat.drawItem(g, "player_head", s.cx + 6, ry + 4);
+				String uuid = mc == null ? Players.uuidOf(id) : mc[0], mcName = mc == null ? "" : mc[1];
+				if (id.equals(Notebook.userId) && net.minecraft.client.Minecraft.getInstance().player != null) uuid = net.minecraft.client.Minecraft.getInstance().player.getUUID().toString();
+				if (!Players.head(g, uuid, mcName, s.cx + 6, ry + 4, 16)) Compat.drawItem(g, "player_head", s.cx + 6, ry + 4);
 				g.text(s.font(), name, s.cx + 30, ry + 9, p.ink, false);
 				if (nicked) g.text(s.font(), Ui.clip(s.font(), "· " + real, rowW - right - 36 - s.font().width(name)), s.cx + 36 + s.font().width(name), ry + 9, p.mut, false);
 				Ui.tag(g, s.font(), s.cx + rowW - 62, ry + 6, 56, 14, mrole, Ui.role(mrole), false);
