@@ -36,6 +36,13 @@ Everything lives in this one repo, and a push to `main` does the rest:
 - **API:** GitHub tests `api/`, then restarts the Pelican server, which pulls the newest code when it starts.
 - **Mod:** GitHub builds `mod/` and publishes it to Modrinth when the version in `mod/gradle.properties` is new.
 
+Day-to-day work happens on the `dev` branch, and `main` is only for releases:
+
+- A push to `dev` runs the tests, builds a Vercel preview of the site (it uses the live API), and attaches a test mod jar to the GitHub Actions run. Nothing reaches players.
+- Each release gets one changelog entry (website: `web/lib/data.ts`, mod: `mod/CHANGELOG.md`) and one version bump, updated as work on `dev` goes on rather than a new entry per change.
+- Merging `dev` into `main` releases it: the site, the API and the mod all go out together.
+- API changes can't be tried on a preview (previews share the live API), so test them locally first.
+
 ## Working on it
 
 Needs Node 22 (and Java 25 for the mod).

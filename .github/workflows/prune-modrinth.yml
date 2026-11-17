@@ -1,0 +1,47 @@
+# One-off clean-up: removes old mod versions from Modrinth and gives the kept version the newest changelog section.
+# Run it by hand from the Actions tab. It only lists what it would do unless you type "delete" in the confirm box.
+# Needs repo secret MODRINTH_TOKEN (with permission to delete versions) and repo variable MODRINTH_PROJECT_ID.
+name: Prune Modrinth versions
+on:
+  workflow_dispatch:
+    inputs:
+      remove:
+        description: Version numbers to remove, separated by spaces
+        default: "1.2.0 1.2.1 1.2.2 1.2.3 1.3.0 1.4.0"
+      keep:
+        description: Version whose changelog is replaced with the newest section of mod/CHANGELOG.md (blank to skip)
+        default: "1.4.1"
+      confirm:
+        description: Type delete to really do it (anything else just lists what would happen)
+        default: ""
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prune
+        env:
+          TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          PROJECT: ${{ vars.MODRINTH_PROJECT_ID }}
+          REMOVE: ${{ inputs.remove }}
+          KEEP: ${{ inputs.keep }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          UA="survival-notebook-release-tools"
+          api() { curl -sSf -A "$UA" -H "Authorization: $TOKEN" "$@"; }
+          versions=$(api "https://api.modrinth.com/v2/project/${PROJECT}/version")
+          echo "On Modrinth now: $(echo "$versions" | jq -r 'map(.version_number) | join(", ")')"
+          for v in $REMOVE; do
+            for id in $(echo "$versions" | jq -r --arg v "$v" '.[] | select(.version_number == $v) | .id'); do
+              if [ "$CONFIRM" = "delete" ]; then api -X DELETE "https://api.modrinth.com/v2/version/$id" && echo "Removed $v ($id)"; else echo "Would remove $v ($id)"; fi
+            done
+          done
+          if [ -n "$KEEP" ]; then
+            id=$(echo "$versions" | jq -r --arg v "$KEEP" '.[] | select(.version_number == $v) | .id' | head -1)
+            if [ -z "$id" ]; then echo "::warning::$KEEP isn't on Modrinth"; exit 0; fi
+            awk '/^## /{n++; if (n==1) next} n==1' mod/CHANGELOG.md > notes.md
+            if [ "$CONFIRM" = "delete" ]; then
+              jq -n --rawfile c notes.md '{changelog: $c}' | api -X PATCH -H 'Content-Type: application/json' --data-binary @- "https://api.modrinth.com/v2/version/$id" && echo "Updated the notes on $KEEP"
+            else echo "Would set the notes on $KEEP to:"; cat notes.md; fi
+          fi

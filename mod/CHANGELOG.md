@@ -1,36 +1,11 @@
-## 1.4.1 – Fix
-- Map: clicking and dragging work again. Minecraft 26.3 numbers mouse buttons differently, so the map never saw a left click.
-- Map: right-click an empty spot to add a place there. It opens in the Places editor with the coordinates filled in, ready to name.
-
-## 1.4.0 – Feature
-- Team on the map: players show with their own face in their colour and a pointer for where they're looking. Everyone's last spot stays after they log off, dimmed, with when they were last seen.
-- Places on the map use the same icons as on the Places tab.
-- Shopping list: potions and tipped arrows count exactly, so a Potion of Fire Resistance only counts towards fire resistance.
-- Turning Share position off removes you from the map completely; just leaving the world leaves you there as offline.
-
-## 1.3.0 – Feature
-- See your team on the map: everyone with the mod shows on the Map tab as an arrow with their name, live, and on the website too. Turn it off with Share position in Settings > Sync & privacy.
-- Map: a faint grid moves with the map, so dragging shows even where nothing is mapped yet, and clicking a place's name picks it, not just its square.
-- Coloured potions and tipped arrows from the website (Potion of Healing and so on) show in their colours in game.
-
-## 1.2.3 – Fix
-- The mod can reach the notebook again. Some older setups had a leftover local server address saved in the config, which 1.2.1 started using by mistake. It's cleared on start now.
-
-## 1.2.2 – Fix
-- Item icons now show on the main menu too (for example when you open the notebook from Mod Menu), not only once a world has loaded.
-
-## 1.2.1 – Fix
-- Item icons show again. If the notebook had been opened before a world finished loading, they stayed blank for the whole session.
-- Map: dragging moves the map, and a slightly shaky click still counts. Clicking a place tracks it and shows the farms there, with Track, Edit and close buttons.
-- Map and Shopping have their own pixel icons, like the other tabs.
-- New Stats tab, the same as the website's: time played, deaths, distance and more, plus lists like Most mined and Killed by. Vanilla statistics only.
+## 1.4.1 – Feature
+- Map tab: the notebook's shared map in game. Drag to move, scroll to zoom, click a place (or its name) to track it and see the farms there, and right-click an empty spot to add a place there. Places use the same icons as on the Places tab, and a faint grid shows where nothing is mapped yet.
+- Your team on the map, in game and on the website: everyone shows live with their own face and a pointer for where they're looking, and their last spot stays after they log off, dimmed, with when they were last seen. Turn it off with Share position in Settings > Sync & privacy.
+- Shopping tab: what you're carrying, including shulker boxes, bundles and your ender chest, against what the notebook needs. Press I'll get it so everyone can see who's gathering it. Potions and tipped arrows count exactly.
+- Stats tab, the same as the website's: time played, deaths, distance and more, plus lists like Most mined and Killed by. Vanilla statistics only.
+- Item icons show everywhere, including the main menu, and coloured potions and tipped arrows from the website show in their colours.
+- Map and Shopping have their own pixel icons, and small screens no longer overlap the map hint and shopping list header.
 - You can point the mod at your own server with apiUrl in config/survival-notebook.json.
-- Small screens: the map hint and the shopping list header no longer overlap the buttons.
-
-## 1.2.0 – Feature
-- Map tab: the notebook's shared map in game, with your places as pins and a marker showing where you are and which way you face. Drag to move, scroll to zoom, and click a pin to track it. What you've just explored shows straight away.
-- Ender chest: the mod remembers what's in it each time you open it, and the shopping list counts it as Have (on the website too).
-- Shopping tab: press I'll get it on an item so everyone can see who's gathering it. It's shared with the website.
 
 ## 1.1.0 – Feature
 - New commands: `/notebook` opens the notebook, `/notebook place <name>` saves where you're standing, and `/notebook todo <text>` adds a to-do for you. `/notebook todo 64 glass` also puts 64 glass on the shopping list.

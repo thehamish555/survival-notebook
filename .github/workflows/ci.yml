@@ -1,5 +1,6 @@
 name: CI
 # Checks every push and pull request. Deploys are separate: Vercel builds the site, deploy-api.yml restarts the API, publish-mod.yml ships the mod.
+# Branches: work happens on dev (a Vercel preview site, plus a test mod jar attached to this run); merging dev into main is a release.
 on: [push, pull_request]
 jobs:
   api:
@@ -32,6 +33,13 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 25 }
       - run: chmod +x gradlew && ./gradlew build
+      - name: Test jar for dev builds (download it from the run's Artifacts; main releases go to Modrinth instead)
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: survival-notebook-${{ github.ref_name }}-${{ github.sha }}
+          path: mod/build/libs/*.jar
+          retention-days: 14
   shared:
     runs-on: ubuntu-latest
     steps:
