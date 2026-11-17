@@ -1,9 +1,12 @@
 import { mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { serve } from '@hono/node-server'
-import { createApp } from './app'
-import { loadConfig } from './config'
-import { sweepFiles } from './routes/files'
+import { ensureNative } from './native'
+
+ensureNative()   // before anything loads the database library
+const { createApp } = await import('./app')
+const { loadConfig } = await import('./config')
+const { sweepFiles } = await import('./routes/files')
 
 const config = loadConfig()
 if (config.NODE_ENV !== 'production') console.warn('⚠ Running with development defaults (not for production)')
