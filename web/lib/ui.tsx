@@ -61,7 +61,7 @@ export function ThemeToggle() {
     document.addEventListener('click', h); return () => document.removeEventListener('click', h)
   }, [])
   return <div className="themebtns">
-    <button className="ghost themebtn" onClick={flip} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} aria-label="Toggle light or dark mode">{theme === 'dark' ? '☀' : '☾'}</button>
+    <button className="ghost themebtn" onClick={flip} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} aria-label="Toggle light or dark mode"><TabIcon name={theme === 'dark' ? 'sun' : 'moon'} size={20} /></button>
     <button className="ghost themebtn" onClick={() => setPop(!pop)} title="Sound" aria-label="Sound settings"><TabIcon name={snd && vol > 0 ? 'sound' : 'mute'} size={20} /></button>
     {pop && <div className="volume volpop">
       <button className="x" onClick={() => { setSound(!snd); setSnd(!snd) }}>{snd ? 'Mute' : 'Unmute'}</button>

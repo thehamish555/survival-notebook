@@ -165,6 +165,45 @@ for (const [n, make] of Object.entries(ENTITY)) {
   if (have.has(n) || !itemDefs.has(n)) continue
   try { const t = await make(); if (t) { fs.writeFileSync(path.join(out, n + '.png'), await png(t.w, t.h, t.data)); names.push(n); have.add(n) } } catch (e) { console.log(`Couldn't draw ${n}: ${e.message}`) }
 }
+// Some flat items are coloured by the game: leather armour is stored grey and dyed brown, potions get their liquid colour, and so on.
+// Their item definition lists a tint per layer, so stack the layers and colour each one the way the game would by default.
+const plainModel = node => {   // the model an item shows normally: skip "select" cases and take the fallback
+  if (!node || typeof node !== 'object') return null
+  if (node.type === 'minecraft:model') return node
+  return plainModel(node.fallback) || plainModel(node.on_false) || plainModel(node.model) || (Array.isArray(node.cases) ? plainModel(node.cases[0]?.model) : null)
+}
+const tintColour = t => {
+  if (!t) return null
+  const v = t.type === 'minecraft:constant' ? t.value : t.type === 'minecraft:grass' ? null : t.default
+  if (t.type === 'minecraft:grass') return GREEN
+  return typeof v === 'number' ? [v >> 16 & 255, v >> 8 & 255, v & 255] : null
+}
+let tinted = 0
+for (const n of itemDefs) {
+  const m = plainModel(readJson(`assets/minecraft/items/${n}.json`)?.model)
+  if (!m?.tints?.length || typeof m.model !== 'string') continue
+  const tx = modelTextures(m.model), layers = []
+  for (let i = 0; i < 8; i++) { const t = resolveRef(tx, tx[`layer${i}`]); if (typeof t !== 'string') break; layers.push(t) }
+  if (!layers.length) continue   // a block (grass, leaves): drawn in 3D with its own tint
+  try {
+    let out16 = null
+    for (const [i, t] of layers.entries()) {
+      const img = await loadTex(t); if (!img) throw new Error('missing ' + t)
+      const c = tintColour(m.tints[i])
+      if (!out16) out16 = { w: img.w, h: img.h, data: Buffer.alloc(img.w * img.h * 4) }
+      if (img.w !== out16.w || img.h !== out16.h) continue
+      for (let k = 0; k < img.data.length; k += 4) {
+        const a = img.data[k + 3] / 255; if (!a) continue
+        for (let ch = 0; ch < 3; ch++) { const v = img.data[k + ch] * (c ? c[ch] / 255 : 1); out16.data[k + ch] = Math.round(v * a + out16.data[k + ch] * (1 - a)) }
+        out16.data[k + 3] = Math.max(out16.data[k + 3], img.data[k + 3])
+      }
+    }
+    fs.writeFileSync(path.join(out, n + '.png'), await png(out16.w, out16.h, out16.data))
+    if (!have.has(n)) { names.push(n); have.add(n) }
+    tinted++
+  } catch { /* keep whatever flat texture it already had */ }
+}
+console.log(`Coloured ${tinted} tinted items`)
 // Items the game draws as 3D models (heads, chests, banners, the shield) only name a stand-in texture, so cut a face from their real texture.
 const tex = p => zip.getEntry(`assets/minecraft/textures/${p}.png`)
 const face = (p, rect, hat) => async () => {   // a rectangle of an entity texture, with an optional overlay layer on top

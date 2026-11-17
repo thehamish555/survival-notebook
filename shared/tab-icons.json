@@ -13,7 +13,9 @@
   "members",
   "settings",
   "sound",
-  "mute"
+  "mute",
+  "sun",
+  "moon"
  ],
  "icons": {
   "home": {
@@ -290,6 +292,44 @@
     "...oxo....",
     "....oo....",
     ".....o...."
+   ]
+  },
+  "sun": {
+   "pal": {
+    "o": "#B8741A",
+    "Y": "#FFD54A",
+    "y": "#F2C14E"
+   },
+   "rows": [
+    "....yy....",
+    ".y..yy..y.",
+    "..oooooo..",
+    "..oYYYYo..",
+    "yyoYYYYoyy",
+    "yyoYYYYoyy",
+    "..oYYYYo..",
+    "..oooooo..",
+    ".y..yy..y.",
+    "....yy...."
+   ]
+  },
+  "moon": {
+   "pal": {
+    "o": "#5B6B8C",
+    "M": "#DDE6F5",
+    "s": "#F2C14E"
+   },
+   "rows": [
+    "...oooo...",
+    "..oMMo....",
+    ".oMMo.....",
+    ".oMMo...s.",
+    "oMMo......",
+    "oMMo......",
+    "oMMMo....o",
+    ".oMMMoooo.",
+    "..oMMMMo..",
+    "...oooo..."
    ]
   }
  }

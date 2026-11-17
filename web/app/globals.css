@@ -443,7 +443,6 @@ tr.got td{opacity:.6}
 
 /* 3.4.1: popup titles wrap, readable hero in both themes, title editing, activity rows, stat rows, drag handle */
 .ytcard{max-width:min(420px,100%)}.ytcard h3{overflow-wrap:anywhere;white-space:normal}
-[data-theme=dark] img.mc{filter:drop-shadow(0 0 1px #fff6)}   /* dark outlines (iron armour) vanish on a dark page without it */
 .hero a.back{display:flex;align-items:center;gap:6px;width:fit-content;padding:5px 12px;margin-bottom:10px;border-radius:99px;border:1px solid #ffffff26;
   background:#000000a0;color:#f4efe2;font-weight:600;font-size:14px;text-decoration:none;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .hero a.back:hover{background:#000000d0;text-decoration:none}
