@@ -296,7 +296,7 @@ export default function Notebook() {
       <p className="mut">Leave blank to use your account name.</p>
       {role === 'owner' && <><h3>Invite someone</h3><div className="row">
         <input className="grow" placeholder="Their account email" value={inv.email} onChange={e => setInv({ ...inv, email: e.target.value })} onKeyDown={e => e.key === 'Enter' && share()} />
-        <select value={inv.role} onChange={e => setInv({ ...inv, role: e.target.value })}><option value="editor">Can edit</option><option value="viewer">View only</option></select>
+        <button type="button" className="ghost" onClick={() => setInv({ ...inv, role: inv.role === 'editor' ? 'viewer' : 'editor' })}>{inv.role === 'editor' ? 'Can edit' : 'View only'}</button>
         <button onClick={share}>Invite</button></div></>}
       {err && <p className="err">{err}</p>}
       <h3 style={{ marginTop: 18 }}>Backup</h3>

@@ -431,3 +431,6 @@ button.icobtn.compact{width:30px;height:30px;padding:2px;flex:none}
 }
 
 .legal p{margin:8px 0;line-height:1.65}.legal h2{margin-bottom:6px}
+
+button.fsel.swap{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;padding:5px 12px;border-radius:8px;background:var(--field);color:var(--ink);border:2px solid var(--ghost-lo)}
+button.fsel.swap:hover{background:var(--hover);color:var(--ink)}button.fsel.swap.on{border-color:var(--grass);color:var(--grass-hi)}[data-theme=light] button.fsel.swap.on{color:#2f7a14}

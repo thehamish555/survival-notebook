@@ -1,3 +1,7 @@
+## 1.0.1 – Fix
+- Anything with only two choices (Show: Mine or Everyone, Theme, Items or Book list, and so on) is now a button that swaps between them. Dropdowns are only used for three or more.
+- Farm tutorial links open the video with a click, and have a separate Edit button.
+
 ## 1.0.0 – First release
 
 Survival Notebook puts your shared world notebook in Minecraft.

@@ -141,9 +141,8 @@ final class PageFarms {
 		s.text("Tutorial", s.cx, y + 6, p.mut);
 		if (Names.ytId(tut) != null && !editingLink) {   // a valid link shows as its title on one line; press it to watch or edit
 			String shown = Notebook.str(draft, "ttl").isBlank() ? "YouTube video" : Notebook.str(draft, "ttl");
-			s.dropdown("farm-yt", bx, y, bw, "", List.of("Watch video", "Edit link"), Ui.clip(s.font(), shown, bw - 30), p.red, v -> {
-				if (v.equals("Watch video")) Compat.openUrl(s, tut); else editingLink = true;
-			});
+			s.pill(bx, y, bw - 46, 20, Ui.clip(s.font(), shown, bw - 60), p.red, () -> Compat.openUrl(s, tut), true);
+			s.pill(bx + bw - 42, y, 42, 20, "Edit", p.gray, () -> { editingLink = true; s.rebuild(); }, true);
 		} else {
 			final int vy = y;
 			s.box(bx, y, bw, "Paste a YouTube link", tut, v -> { draft.addProperty("tutorial", v); draft.addProperty("ttl", ""); });

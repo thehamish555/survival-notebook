@@ -13,6 +13,10 @@ export function FS({ edit, children }: any) { return <fieldset disabled={!edit} 
 /** A labelled dropdown filter (replaces the old row of chips). */
 export function Chips({ label, value, opts, onChange, all = 'All', noAll }: any) {
   const items = [...(noAll ? [] : [['All', all]]), ...opts.map((o: any) => (Array.isArray(o) ? o : [o, o]))]
+  if (items.length === 2) {   // two choices: one click swaps them
+    const cur = items.find(([v]: any) => v === value) || items[0], nxt = items.find(([v]: any) => v !== cur[0])
+    return <button type="button" className={`fsel swap ${value !== 'All' && !noAll ? 'on' : ''}`} onClick={() => onChange(nxt[0])}><span className="lbl">{label}</span> {cur[1]}</button>
+  }
   return <label className={`fsel ${value !== 'All' && !noAll ? 'on' : ''}`}><span className="lbl">{label}</span>
     <select value={value} onChange={e => onChange(e.target.value)}>{items.map(([v, l]: any) => <option key={v} value={v}>{l}</option>)}</select></label>
 }

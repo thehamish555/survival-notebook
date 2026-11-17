@@ -281,11 +281,17 @@ final class NotebookScreen extends Screen {
 
 	private static final int DD_ROWS = 9, DD_ROW_H = 14;
 
-	/** A labelled dropdown, e.g. "Category: Farms ▾". Opens a list of options instead of making you click through them. */
+	/** A labelled dropdown, e.g. "Category: Farms ▾". Opens a list of options instead of making you click through them. With exactly two options it becomes a swap button. */
 	void dropdown(String id, int x, int y, int w, String label, List<String> opts, String cur, Ui.Tone tone, Consumer<String> pick) { dropdown(id, x, y, w, 20, label, opts, cur, tone, pick); }
 
 	/** Same, with a custom height and no label when {@code label} is empty (for use inside list rows). */
 	void dropdown(String id, int x, int y, int w, int h, String label, List<String> opts, String cur, Ui.Tone tone, Consumer<String> pick) {
+		if (opts.size() == 2 && opts.contains(cur)) {   // two choices: one press swaps them, no list needed
+			final String other = opts.get(0).equals(cur) ? opts.get(1) : opts.get(0), shown = (label.isEmpty() ? "" : label + ": ") + cur;
+			hit(x, y, w, h, () -> { pick.accept(other); this.rebuildWidgets(); }, true);
+			paint((g, mx, my) -> Ui.tag(g, font, x, y, w, h, Ui.clip(font, shown, w - 6), tone, Ui.over(mx, my, x, y, w, h)));
+			return;
+		}
 		boolean open = ddKey.equals(id);
 		String text = (label.isEmpty() ? "" : label + ": ") + cur + " \u25BE";
 		Button opener = hit(x, y, w, h, () -> { ddKey = open ? "" : id; ddScroll = 0; this.rebuildWidgets(); }, true);

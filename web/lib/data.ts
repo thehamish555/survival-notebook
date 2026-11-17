@@ -1,5 +1,5 @@
 // Enchantments as of Java 26.3 / Bedrock 26.60 (spear + Lunge added in 1.21.11).
-export const VERSION = { java: '26.3', bedrock: '26.60', updated: 'November 10th, 2026' }
+export const VERSION = { java: '26.3', bedrock: '26.60', updated: 'November 17th, 2026' }
 export type Ench = [string, number]
 export const ENCHANTS: Record<string, Ench[]> = {
   'All Purpose': [['Unbreaking', 3], ['Mending', 1], ['Curse of Binding', 1], ['Curse of Vanishing', 1]],
@@ -21,6 +21,7 @@ export const LINKS: [string, [string, string, string][]][] = [
 ]
 
 export const CHANGELOG: [string, string, string[]][] = [
+  ['3.0.1', 'November 17th, 2026', ['Fix:', 'Filters and settings with only two choices are now a single button that swaps between them, instead of a dropdown.']],
   ['3.0', 'November 10th, 2026', ['Website release.']],
   ['2.3', 'November 21st, 2024', ['Table Updates:', 'Standardized table widths across the document.', 'Adjusted table heights for consistency (except on the Enchantments page).', 'Removed extra rows from the Farms Tabs.', 'Other Changes:', 'Minor tweaks to improve document appearance and usability.']],
   ['2.2', 'November 14th, 2024', ['New Features:', 'Added "Notebook" to the tab list, allowing multiple notebooks within a single document for different worlds or servers.', 'Introduced a To-Do List Tab.', 'Improvements:', 'Added placeholder files for Java farm Litematicas.', 'Darkened table headers for improved readability.', 'Centered some table headers.', 'Updated text on the Home Page for clarity.', 'Notes:', 'Subtabs in duplicated notebooks must still be created manually, as Google does not duplicate them.']],
