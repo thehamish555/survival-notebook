@@ -123,7 +123,7 @@ export function Footer() {
       {ls.map(([n, u, desc]) => <div key={u}><a href={u} target="_blank" rel="noreferrer noopener">{n}</a> <span className="mut">· {desc}</span></div>)}</div>)}</div>
     <div className="fcol"><h3>Changelog</h3><div className="lbl">Version {v} · {date}</div><p className="clip">{text}</p>
       <Link href="/changelog">{cut ? 'Read more →' : 'Full changelog →'}</Link></div>
-    <div className="fnav"><Logo size={22} /><Link href="/">Home</Link><Link href="/changelog">Changelog</Link><Link href="/account">Account</Link>
+    <div className="fnav"><Logo size={22} /><Link href="/">Home</Link><Link href="/changelog">Changelog</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/account">Account</Link>
       <a href={MODRINTH_URL} target="_blank" rel="noreferrer noopener">Minecraft mod</a></div>
     <p className="mut small">The Survival Notebook v{v} · by Hamish Lester · Not an official Minecraft product. Not approved by or associated with Mojang Studios or Microsoft.</p>
   </div></footer>

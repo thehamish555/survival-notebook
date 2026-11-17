@@ -43,7 +43,7 @@ input.titlein:focus{background:#0009;outline:2px solid var(--gold)}
 .card.nb{border-top-width:5px;transition:transform .12s,box-shadow .12s}.card.nb:hover{transform:translateY(-3px);box-shadow:inset 0 2px 0 var(--hi),0 6px 0 var(--shadow)}
 .empty{border:2px dashed var(--line);padding:22px;text-align:center;color:var(--mut);margin:8px 0}
 .features{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;margin-bottom:22px}.feat h3{margin:.7em 0 .2em}.feat p{margin:0}
-.landing{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;align-items:start}@media(max-width:780px){.landing{grid-template-columns:1fr}}
+.landing{display:grid;grid-template-columns:1.3fr 1fr;gap:20px;align-items:stretch;margin-bottom:20px}.landing>.card{display:flex;flex-direction:column}@media(max-width:780px){.landing{grid-template-columns:1fr}}
 .loading{flex:1;min-height:70vh;display:grid;place-content:center;justify-items:center;gap:14px;text-align:center;padding:20px}
 .loadbar{width:220px;height:14px;border:2px solid var(--edge);background:var(--field);box-shadow:inset 2px 2px 0 var(--field-shadow)}
 .loadbar>i{display:block;height:100%;background:var(--grass);box-shadow:inset 0 4px 0 var(--grass-hi);animation:loadfill 1.4s steps(8) infinite}
@@ -429,3 +429,5 @@ button.icobtn.compact{width:30px;height:30px;padding:2px;flex:none}
   .statgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .filters{flex-wrap:wrap}
 }
+
+.legal p{margin:8px 0;line-height:1.65}.legal h2{margin-bottom:6px}

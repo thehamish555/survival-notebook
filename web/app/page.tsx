@@ -51,7 +51,6 @@ export default function Home() {
               <b>{n}</b>{[o, ne, e].map((c, k) => <code key={k} className={c ? '' : 'none'}>{c || '·'}</code>)}</div>)}
           </div></div></div></div></div>
     <div className="wrap">
-      <div className="features">{FEATURES.map(([icon, head, text]) => <div className="card feat" key={head}><span className="fi"><TabIcon name={icon} size={30} /></span><h3>{head}</h3><p className="mut">{text}</p></div>)}</div>
       <div className="landing" id="join">
         <div className="card"><h2>Welcome</h2>
           <p>Make a notebook for each world or server and invite your friends by email.</p>
@@ -59,8 +58,10 @@ export default function Home() {
         <div className="card"><h2>Sign in</h2>
           <p className="mut">One click with your Google account. New here? It creates your account.</p>
           <GoogleSignIn onDone={load} onError={setErr} />
+          <p className="mut small" style={{ marginTop: 12 }}>By signing in you agree to the <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy</Link> page.</p>
           {err && <div className="err" role="alert">{err}</div>}</div>
       </div>
+      <div className="features">{FEATURES.map(([icon, head, text]) => <div className="card feat" key={head}><span className="fi"><TabIcon name={icon} size={30} /></span><h3>{head}</h3><p className="mut">{text}</p></div>)}</div>
     </div>
     <Footer />
   </>
