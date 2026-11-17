@@ -4,6 +4,7 @@
 import AdmZip from 'adm-zip'
 import sharp from 'sharp'
 import { entityBox, renderModel } from './block-render.mjs'
+import { apng } from './apng.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
@@ -20,28 +21,11 @@ if (!jar) {
 }
 console.log('Reading', jar)
 const zip = new AdmZip(jar), entries = zip.getEntries()
-const animated = new Set(entries.filter(e => e.entryName.endsWith('.png.mcmeta')).map(e => e.entryName.replace('.mcmeta', '')))
-const out = path.join('public', 'mc', 'item'); fs.mkdirSync(out, { recursive: true })
-const names = []
-for (const e of entries) {
-  const m = e.entryName.match(/^assets\/minecraft\/textures\/item\/([a-z0-9_]+)\.png$/)
-  if (!m || animated.has(e.entryName)) continue   // skip animated strips
-  fs.writeFileSync(path.join(out, m[1] + '.png'), e.getData()); names.push(m[1])
-}
-// Clocks and compasses are stored as clock_00 ... clock_63 frames: use the first frame under the plain name.
-for (const n of [...names]) {
-  const m = n.match(/^(.+)_00$/)
-  if (m && !have0(m[1])) { fs.copyFileSync(path.join(out, n + '.png'), path.join(out, m[1] + '.png')); names.push(m[1]) }
-}
-function have0(n) { return names.includes(n) }
-// Block items are drawn from their block model at the inventory angle (block-render.mjs); anything the game draws flat keeps a flat texture.
-const blockEntries = new Map(), entityEntries = new Map()
-for (const e of entries) {
-  let m = e.entryName.match(/^assets\/minecraft\/textures\/block\/([a-z0-9_]+)\.png$/); if (m) blockEntries.set(m[1], e)
-  m = e.entryName.match(/^assets\/minecraft\/textures\/entity\/(?:player\/wide\/)?(steve)\.png$/); if (m) entityEntries.set(m[1], e)
-}
-const itemDefs = new Set(entries.map(e => e.entryName.match(/^assets\/minecraft\/items\/([a-z0-9_]+)\.json$/)?.[1]).filter(Boolean))
-const have = new Set(names)
+// Only real items get an icon. The folder is cleared first, so parts like overlays, open bundle halves and clock frames never end up in it.
+// ONLY=chest,bow redraws just those (handy while tuning a model) and leaves the rest and the index alone.
+const ONLY = process.env.ONLY ? new Set(process.env.ONLY.split(',')) : null
+const out = path.join('public', 'mc', 'item'); if (!ONLY) fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true })
+const itemDefs = entries.map(e => e.entryName.match(/^assets\/minecraft\/items\/([a-z0-9_]+)\.json$/)?.[1]).filter(n => n && n !== 'air' && (!ONLY || ONLY.has(n))).sort()
 const GREEN = [0x7c, 0xbd, 0x6b], LEAF = [0x5a, 0x9c, 0x3a]
 const TINT = { grass_block_top: GREEN, grass_block_side_overlay: GREEN, mangrove_leaves: [0x8d, 0xb1, 0x27], short_grass: GREEN, tall_grass_top: GREEN, fern: GREEN, oak_leaves: LEAF, jungle_leaves: LEAF, acacia_leaves: LEAF, dark_oak_leaves: LEAF, vine: LEAF, birch_leaves: [0x80, 0xa7, 0x55], spruce_leaves: [0x61, 0x99, 0x61], lily_pad: [0x20, 0x80, 0x30] }
 const png = (w, h, data) => sharp(data, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer()
@@ -51,82 +35,177 @@ const px = async (buf, rect, tint) => {   // RGBA pixels of (a region of) a png;
   if (tint) for (let i = 0; i < data.length; i += 4) { data[i] = data[i] * tint[0] / 255; data[i + 1] = data[i + 1] * tint[1] / 255; data[i + 2] = data[i + 2] * tint[2] / 255 }
   return { w, h, data }
 }
-// Which texture an item shows is worked out the way the game does it: items/<id>.json names a model, models name parents and textures.
-// That finds the right texture for blocks named differently from their texture (oak_slab -> oak_planks, chest -> its particle texture, and so on).
 const jsonCache = new Map()
 const readJson = p => { if (!jsonCache.has(p)) { const e = zip.getEntry(p); let v = null; try { v = e ? JSON.parse(e.getData().toString('utf8')) : null } catch { v = null } jsonCache.set(p, v) } return jsonCache.get(p) }
-const modelRefs = (node, acc = []) => {   // every model named in an item definition (plain, conditional, select, special "base")
-  if (Array.isArray(node)) node.forEach(x => modelRefs(x, acc))
-  else if (node && typeof node === 'object') for (const [k, v] of Object.entries(node)) { if ((k === 'model' || k === 'base') && typeof v === 'string') acc.push(v); else modelRefs(v, acc) }
-  return acc
-}
-const modelTextures = ref => {   // a model's textures, with its parents' filling the gaps
-  const tex = {}
-  for (let r = ref, i = 0; r && i < 20; i++) { const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break; for (const [k, v] of Object.entries(m.textures || {})) if (!(k in tex)) tex[k] = v && typeof v === 'object' ? v.sprite : v; r = m.parent }   // 26.x can write a texture as { sprite, force_translucent }
-  return tex
-}
-const resolveRef = (tex, v, depth = 0) => (typeof v === 'string' && v.startsWith('#') && depth < 10 ? resolveRef(tex, tex[v.slice(1)], depth + 1) : v)
-const PREFER = ['layer0', 'all', 'side', 'texture', 'front', 'top', 'end', 'cross', 'plant', 'pattern', 'wool', 'particle']
-const textureFor = n => {
-  for (const ref of modelRefs(readJson(`assets/minecraft/items/${n}.json`))) {
-    const tex = modelTextures(ref)
-    for (const k of PREFER) {
-      const t = resolveRef(tex, tex[k]); if (typeof t !== 'string' || t.startsWith('#')) continue
-      const entry = zip.getEntry(`assets/minecraft/textures/${t.replace(/^minecraft:/, '')}.png`)
-      if (entry) return { entry, base: t.split('/').pop() }
+const tpath = t => t.replace(/^minecraft:/, '')
+const rgbOf = v => [v >> 16 & 255, v >> 8 & 255, v & 255]
+
+// ---- textures, with their animation (a strip of frames plus a .mcmeta saying how long each shows, in game ticks)
+const anims = new Map()
+async function anim(t) {
+  const p = tpath(t)
+  if (anims.has(p)) return anims.get(p)
+  let a = null
+  const e = zip.getEntry(`assets/minecraft/textures/${p}.png`)
+  if (e) {
+    const { data, info } = await sharp(e.getData()).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    const meta = readJson(`assets/minecraft/textures/${p}.png.mcmeta`)?.animation
+    if (!meta) a = { frames: [{ w: info.width, h: info.height, data }], times: [1], total: 1 }
+    else {
+      const fw = meta.width || Math.min(info.width, info.height), fh = meta.height || fw, n = Math.max(1, Math.floor(info.height / fh))
+      const strip = Array.from({ length: n }, (_, i) => ({ w: fw, h: fh, data: Buffer.from(data.subarray(i * fh * info.width * 4, (i + 1) * fh * info.width * 4)) }))
+      const seq = (meta.frames || strip.map((_, i) => i)).map(f => (typeof f === 'number' ? { index: f, time: meta.frametime || 1 } : { index: f.index, time: f.time || meta.frametime || 1 }))
+      const frames = seq.map(f => strip[f.index] || strip[0]), times = seq.map(f => f.time)
+      a = { frames, times, total: times.reduce((s, x) => s + x, 0), interpolate: !!meta.interpolate }
     }
   }
-  return null
+  anims.set(p, a)
+  return a
 }
-// A block item's look: the first model in the item definition, its parents' elements, textures and "gui" display angle.
+const loadTex = async t => (await anim(t))?.frames[0] ?? null   // the first frame, for things that don't animate
+function frameAt(a, tick) {   // which frame shows at a given tick, blended with the next one for textures that interpolate
+  if (a.frames.length === 1) return a.frames[0]
+  let t = tick % a.total, i = 0
+  while (t >= a.times[i]) { t -= a.times[i]; i++ }
+  if (!a.interpolate) return a.frames[i]
+  const f = a.frames[i], g = a.frames[(i + 1) % a.frames.length], k = t / a.times[i], data = Buffer.alloc(f.data.length)
+  for (let j = 0; j < data.length; j++) data[j] = Math.round(f.data[j] * (1 - k) + g.data[j] * k)
+  return { w: f.w, h: f.h, data }
+}
+/** When to take each frame of an icon: often enough to catch its quickest texture, at most 32 frames. */
+function timeline(list) {
+  const moving = list.filter(a => a && a.total > 1)
+  if (!moving.length) return [{ tick: 0, ms: 0 }]
+  const total = Math.max(...moving.map(a => a.total))
+  let step = Math.max(1, Math.min(...moving.map(a => Math.min(...a.times) / (a.interpolate ? 4 : 1))))
+  if (total / step > 32) step = Math.ceil(total / 32)
+  return Array.from({ length: Math.ceil(total / step) }, (_, i) => ({ tick: Math.round(i * step), ms: step * 50 }))
+}
+/** Draws an icon once per frame of its textures and encodes it: a plain PNG if nothing moves, an animated PNG if it does. */
+async function encode(textures, draw) {
+  const list = await Promise.all(textures.map(anim)), byName = new Map(textures.map((t, i) => [tpath(t), list[i]]))
+  const frames = [], delays = []
+  for (const { tick, ms } of timeline(list)) {
+    const img = await draw(t => { const a = byName.get(tpath(t)); return a ? frameAt(a, tick) : null })
+    if (!img) return null
+    const last = frames[frames.length - 1]
+    if (last && last.data.equals(img.data)) { delays[delays.length - 1] += ms; continue }   // nothing changed: hold the last frame longer
+    frames.push(img); delays.push(ms)
+  }
+  return frames.length > 1 ? apng(frames, delays) : png(frames[0].w, frames[0].h, frames[0].data)
+}
+
+// ---- models: which one an item shows in the inventory, and what it's made of
 const FLAT = /^(minecraft:)?(item\/generated|builtin\/generated|item\/handheld.*|builtin\/entity)$/
-const texCache = new Map()
-const loadTex = async t => {
-  if (!texCache.has(t)) { const e = zip.getEntry(`assets/minecraft/textures/${t.replace(/^minecraft:/, '')}.png`); texCache.set(t, e ? await px(e.getData()).catch(() => null) : null) }
-  return texCache.get(t)
+/** The model an item shows in an inventory slot: its "gui" case if it has one (tridents, spears, spyglass), otherwise its plain look. */
+function pick(node) {
+  if (!node || typeof node !== 'object') return null
+  switch (String(node.type).replace(/^minecraft:/, '')) {
+    case 'model': case 'composite': case 'special': return node
+    case 'select': {
+      if (node.property === 'minecraft:display_context') { const c = (node.cases || []).find(c => [].concat(c.when).includes('gui')); if (c) return pick(c.model) }
+      return pick(node.fallback) || pick(node.cases?.[0]?.model)
+    }
+    case 'condition': return pick(node.on_false) || pick(node.on_true)
+    case 'range_dispatch': return pick(node.entries?.[0]?.model) || pick(node.fallback)
+    default: return pick(node.fallback) || pick(node.model)
+  }
 }
-async function render3d(n) {
-  const def = readJson(`assets/minecraft/items/${n}.json`)?.model
-  // A composite (beds: head + foot) is several models, each moved by its translation in blocks.
-  const parts = def?.type?.endsWith('composite') ? (def.models || []).map(m => ({ ref: modelRefs(m)[0], at: m.transformation?.translation || [0, 0, 0] }))
-    : [{ ref: modelRefs(def)[0], at: [0, 0, 0] }]
+/** A model's textures (its parents fill the gaps), elements, inventory angle, and whether it's a flat item model. */
+function chain(ref) {
+  const textures = {}; let elements = null, gui = null, flat = false
+  for (let r = ref, i = 0; r && i < 20; i++) {
+    if (FLAT.test(r)) flat = true
+    const m = readJson(`assets/minecraft/models/${tpath(r)}.json`); if (!m) break
+    for (const [k, v] of Object.entries(m.textures || {})) if (!(k in textures)) textures[k] = v && typeof v === 'object' ? v.sprite : v   // 26.x can write { sprite, force_translucent }
+    if (!elements && m.elements) elements = m.elements
+    if (!gui && m.display?.gui) gui = m.display.gui
+    r = m.parent
+  }
+  return { textures, elements, gui, flat }
+}
+const resolveRef = (tex, v, depth = 0) => {   // '#side' (or plain 'side' in newer models) points at another texture variable
+  if (typeof v !== 'string' || depth >= 10) return v
+  if (v.startsWith('#')) return resolveRef(tex, tex[v.slice(1)], depth + 1)
+  return /^[a-z0-9_]+$/.test(v) && v in tex ? resolveRef(tex, tex[v], depth + 1) : v
+}
+const guiOf = ref => chain(ref).gui
+const lightOf = ref => { for (let r = ref, i = 0; r && i < 20; i++) { const m = readJson(`assets/minecraft/models/${tpath(r)}.json`); if (!m) break; if (m.gui_light) return m.gui_light; r = m.parent } return 'side' }
+const tintColour = t => {
+  if (!t) return null
+  if (t.type === 'minecraft:grass') return GREEN
+  const v = t.type === 'minecraft:constant' ? t.value : t.default
+  return typeof v === 'number' ? rgbOf(v) : null
+}
+
+/** A flat item: its layers stacked bottom to top, each coloured by its tint (leather is dyed brown, potions get their liquid colour). */
+async function flatIcon(ref, tints = []) {
+  const { textures } = chain(ref), layers = []
+  for (let i = 0; i < 8; i++) { const t = resolveRef(textures, textures[`layer${i}`]); if (typeof t !== 'string' || t.startsWith('#')) break; layers.push(t) }
+  if (!layers.length || !(await anim(layers[0]))) return null
+  return encode(layers, get => {
+    let img = null
+    for (const [i, t] of layers.entries()) {
+      const f = get(t); if (!f) continue
+      const c = tintColour(tints[i]) || TINT[t.split('/').pop()]
+      if (!img) img = { w: f.w, h: f.h, data: Buffer.alloc(f.data.length) }
+      if (f.w !== img.w || f.h !== img.h) continue
+      for (let k = 0; k < f.data.length; k += 4) {
+        const a = f.data[k + 3] / 255; if (!a) continue
+        for (let ch = 0; ch < 3; ch++) img.data[k + ch] = Math.round(f.data[k + ch] * (c ? c[ch] / 255 : 1) * a + img.data[k + ch] * (1 - a))
+        img.data[k + 3] = Math.max(img.data[k + 3], f.data[k + 3])
+      }
+    }
+    return img
+  })
+}
+/** A block item: its block model (or several, for a composite like a bed) drawn at the inventory angle by block-render.mjs. */
+async function blockIcon(parts) {
   const elements = [], names = new Map(); let gui = null
   for (const [pi, { ref, at }] of parts.entries()) {
-    if (!ref) return null
-    const tex = {}; let els = null
-    for (let r = ref, i = 0; r && i < 20; i++) {
-      if (FLAT.test(r)) return null
-      const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break
-      for (const [k, v] of Object.entries(m.textures || {})) if (!(k in tex)) tex[k] = v && typeof v === 'object' ? v.sprite : v   // 26.x can write a texture as { sprite, force_translucent }
-      if (!els && m.elements) els = m.elements
-      if (!gui && m.display?.gui) gui = m.display.gui
-      r = m.parent
-    }
-    if (!els) return null
+    const c = chain(ref); if (c.flat || !c.elements) return null
+    gui = gui || c.gui
     const sh = at.map(v => v * 16), move = p => [p[0] + sh[0], p[1] + sh[1], p[2] + sh[2]]
-    for (const el of els) {
+    for (const el of c.elements) {
       const faces = {}
       for (const [dir, f] of Object.entries(el.faces || {})) {
-        const key = `${pi}:${f.texture}`, t = resolveRef(tex, f.texture)
-        if (typeof t === 'string' && !t.startsWith('#') && !names.has(key)) names.set(key, { name: t.split('/').pop(), img: await loadTex(t) })
+        const key = `${pi}:${f.texture}`, t = resolveRef(c.textures, f.texture)
+        if (typeof t === 'string' && !t.startsWith('#')) names.set(key, t)
         faces[dir] = { ...f, texture: key }
       }
       elements.push({ ...el, from: move(el.from), to: move(el.to), faces, rotation: el.rotation ? { ...el.rotation, origin: move(el.rotation.origin || [8, 8, 8]) } : undefined })
     }
   }
-  return renderModel({ elements, gui, texture: k => names.get(k)?.img ?? null, tint: k => TINT[names.get(k)?.name] ?? GREEN }, 64)
+  const textures = [...new Set(names.values())]
+  return encode(textures, get => renderModel({ elements, gui, texture: k => (names.has(k) ? get(names.get(k)) : null), tint: k => TINT[names.get(k)?.split('/').pop()] ?? GREEN }, 64))
+}
+
+// Items the game shows as a sequence: the clock's face turning, compasses spinning, the bow and crossbow being drawn, light levels.
+const pad = i => String(i).padStart(2, '0')
+const SERIES = {
+  clock: Array.from({ length: 64 }, (_, i) => [`item/clock_${pad(i)}`, 100]),
+  compass: Array.from({ length: 32 }, (_, i) => [`item/compass_${pad(i)}`, 70]),
+  recovery_compass: Array.from({ length: 32 }, (_, i) => [`item/recovery_compass_${pad(i)}`, 70]),
+  light: Array.from({ length: 16 }, (_, i) => [`item/light_${pad(i)}`, 180]),
+  bow: [['item/bow', 900], ['item/bow_pulling_0', 250], ['item/bow_pulling_1', 250], ['item/bow_pulling_2', 700]],
+  crossbow: [['item/crossbow_standby', 900], ['item/crossbow_pulling_0', 250], ['item/crossbow_pulling_1', 250], ['item/crossbow_pulling_2', 250], ['item/crossbow_arrow', 1100]],
+}
+async function seriesIcon(n) {
+  const s = SERIES[n]; if (!s) return null
+  const frames = []; for (const [t] of s) { const f = await loadTex(t); if (!f) return null; frames.push(f) }
+  return apng(frames, s.map(([, ms]) => ms))
 }
 
 // Block entities (chests, shulker boxes, heads, banners) are drawn by the game from entity models, not block models.
 // Their boxes are copied from the game's model code; each lists its texture, size and where its UVs start.
-const guiOf = ref => { for (let r = ref, i = 0; r && i < 20; i++) { const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break; if (m.display?.gui) return m.display.gui; r = m.parent } return null }
 const DYE = { white: 0xF9FFFE, orange: 0xF9801D, magenta: 0xC74EBD, light_blue: 0x3AB3DA, yellow: 0xFED83D, lime: 0x80C71F, pink: 0xF38BAA, gray: 0x474F52, light_gray: 0x9D9D97,
   cyan: 0x169C9C, purple: 0x8932B8, blue: 0x3C44AA, brown: 0x835432, green: 0x5E7C16, red: 0xB02E26, black: 0x1D1D21 }
 const rgb = c => [c >> 16 & 255, c >> 8 & 255, c & 255]
-const entity = (gui, boxes) => async () => {
-  const imgs = new Map(); for (const b of boxes) if (!imgs.has(b.texture)) imgs.set(b.texture, await loadTex(`minecraft:entity/${b.texture}`))
+const entity = (gui, boxes, quads = []) => async () => {   // quads: extra flat panels { texture, pts, uv (in texture pixels) }
+  const imgs = new Map(); for (const b of [...boxes, ...quads]) if (!imgs.has(b.texture)) imgs.set(b.texture, await loadTex(`minecraft:entity/${b.texture}`))
   if ([...imgs.values()].some(x => !x)) return null
-  return renderModel({ quads: boxes.flatMap(b => entityBox({ ...b, texW: imgs.get(b.texture).w, texH: imgs.get(b.texture).h })), gui: guiOf(gui), texture: k => imgs.get(k) }, 64)
+  const panels = quads.map(q => { const im = imgs.get(q.texture); return { ...q, uv: q.uv.map(([u, v]) => [u * 16 / im.w, v * 16 / im.h]) } })
+  return renderModel({ quads: [...boxes.flatMap(b => entityBox({ ...b, texW: imgs.get(b.texture).w, texH: imgs.get(b.texture).h })), ...panels], gui: guiOf(gui), frontLight: lightOf(gui) === 'front', texture: k => imgs.get(k) }, 64)
 }
 const asIs = p => p, flipX180 = (dx, dy, dz) => p => [p[0] + dx, dy - p[1], dz - p[2]]   // the item's 180 degree turn about X, then its translation (pixels)
 const chest3d = t => entity('item/chest', [
@@ -160,51 +239,54 @@ const ENTITY = {
     { texture: 'piglin/piglin', u: 39, v: 6, from: [-1, 0, -2], size: [1, 5, 4], offset: [-4.5, -6, 0], rot: [0, 0, Math.PI / 6], place: flipX180(8, 0, 8) }]),
 }
 for (const w of ['', 'exposed_', 'weathered_', 'oxidized_']) ENTITY[`waxed_${w}copper_chest`] = ENTITY[`${w}copper_chest`]
+// The shield: a board and a handle, turned to face the viewer (the item flips Y and Z).
+ENTITY.shield = entity('item/shield', [
+  { texture: 'shield/shield_base_nopattern', u: 0, v: 0, from: [-6, -11, -2], size: [12, 22, 1], place: flipX180(8, 8, 8) },
+  { texture: 'shield/shield_base_nopattern', u: 26, v: 0, from: [-1, -3, -1], size: [2, 6, 6], place: flipX180(8, 8, 8) }])
+// The dragon head: the head part is moved up and shrunk to 3/4 size, with the jaw hanging from it (from the game's DragonHeadModel).
+{
+  const t = 'enderdragon/dragon', item = flipX180(8, 0, 8)
+  const head = p => item([p[0] * 0.75, p[1] * 0.75 - 7.986666, p[2] * 0.75]), jaw = p => head([p[0], p[1] + 4, p[2] - 8])
+  ENTITY.dragon_head = entity('item/dragon_head', [
+    { texture: t, u: 176, v: 44, from: [-6, -1, -24], size: [12, 5, 16], place: head },
+    { texture: t, u: 112, v: 30, from: [-8, -8, -10], size: [16, 16, 16], place: head },
+    { texture: t, u: 0, v: 0, from: [-5, -12, -4], size: [2, 4, 6], place: head },
+    { texture: t, u: 112, v: 0, from: [-5, -3, -22], size: [2, 2, 4], place: head },
+    { texture: t, u: 0, v: 0, from: [3, -12, -4], size: [2, 4, 6], place: head },
+    { texture: t, u: 112, v: 0, from: [3, -3, -22], size: [2, 2, 4], place: head },
+    { texture: t, u: 176, v: 65, from: [-6, 0, -16], size: [12, 4, 16], place: jaw }])
+}
+// Copper golem statues: the golem standing (body, head with nose, antenna and bulb, arms and legs), from the game's CopperGolemModel.
+for (const [w, tex] of [['', 'copper_golem'], ['exposed_', 'copper_golem_exposed'], ['weathered_', 'copper_golem_weathered'], ['oxidized_', 'copper_golem_oxidized']]) {
+  const t = `copper_golem/${tex}`, place = p => [p[0] + 8, p[1] + 24, p[2] + 8]   // the item flip and the 180 degree turn in its display cancel out
+  ENTITY[`${w}copper_golem_statue`] = ENTITY[`waxed_${w}copper_golem_statue`] = entity('item/template_copper_golem_statue', [
+    { texture: t, u: 0, v: 15, from: [-4, -6, -3], size: [8, 6, 6], offset: [0, -5, 0], place },
+    { texture: t, u: 0, v: 0, from: [-4, -5, -5], size: [8, 5, 10], offset: [0, -11, 0], place },
+    { texture: t, u: 56, v: 0, from: [-1, -2, -6], size: [2, 3, 2], offset: [0, -11, 0], place },
+    { texture: t, u: 37, v: 8, from: [-1, -9, -1], size: [2, 4, 2], offset: [0, -11, 0], place },
+    { texture: t, u: 37, v: 0, from: [-2, -13, -2], size: [4, 4, 4], offset: [0, -11, 0], place },
+    { texture: t, u: 36, v: 16, from: [-3, -1, -2], size: [3, 10, 4], offset: [-4, -11, 0], place },
+    { texture: t, u: 50, v: 16, from: [0, -1, -2], size: [3, 10, 4], offset: [4, -11, 0], place },
+    { texture: t, u: 0, v: 27, from: [-4, 0, -2], size: [4, 5, 4], offset: [0, -5, 0], place },
+    { texture: t, u: 16, v: 27, from: [0, 0, -2], size: [4, 5, 4], offset: [0, -5, 0], place }])
+}
+// The decorated pot: four painted sides, a top and bottom, and the neck (turned upside down onto the top, as the game does).
+{
+  const side = 'decorated_pot/decorated_pot_side', base = 'decorated_pot/decorated_pot_base'
+  const sideUv = [[1, 0], [15, 0], [15, 16], [1, 16]], neck = p => [p[0], 37 - p[1], 16 - p[2]]
+  ENTITY.decorated_pot = entity('item/decorated_pot', [
+    { texture: base, u: 0, v: 0, from: [4, 17, 4], size: [8, 3, 8], inflate: -0.1, place: neck },
+    { texture: base, u: 0, v: 5, from: [5, 20, 5], size: [6, 1, 6], place: neck }], [
+    { texture: side, pts: [[1, 16, 15], [15, 16, 15], [15, 0, 15], [1, 0, 15]], uv: sideUv },   // south (front)
+    { texture: side, pts: [[15, 16, 1], [1, 16, 1], [1, 0, 1], [15, 0, 1]], uv: sideUv },    // north
+    { texture: side, pts: [[15, 16, 15], [15, 16, 1], [15, 0, 1], [15, 0, 15]], uv: sideUv }, // east
+    { texture: side, pts: [[1, 16, 1], [1, 16, 15], [1, 0, 15], [1, 0, 1]], uv: sideUv },     // west
+    { texture: base, pts: [[1, 16, 1], [15, 16, 1], [15, 16, 15], [1, 16, 15]], uv: [[14, 13], [28, 13], [28, 27], [14, 27]] },
+    { texture: base, pts: [[1, 0, 15], [15, 0, 15], [15, 0, 1], [1, 0, 1]], uv: [[0, 13], [14, 13], [14, 27], [0, 27]] }])
+}
 for (const c of Object.keys(DYE)) { ENTITY[`${c}_shulker_box`] = shulker3d(`shulker/shulker_${c}`); ENTITY[`${c}_banner`] = banner3d(c) }
-for (const [n, make] of Object.entries(ENTITY)) {
-  if (have.has(n) || !itemDefs.has(n)) continue
-  try { const t = await make(); if (t) { fs.writeFileSync(path.join(out, n + '.png'), await png(t.w, t.h, t.data)); names.push(n); have.add(n) } } catch (e) { console.log(`Couldn't draw ${n}: ${e.message}`) }
-}
-// Some flat items are coloured by the game: leather armour is stored grey and dyed brown, potions get their liquid colour, and so on.
-// Their item definition lists a tint per layer, so stack the layers and colour each one the way the game would by default.
-const plainModel = node => {   // the model an item shows normally: skip "select" cases and take the fallback
-  if (!node || typeof node !== 'object') return null
-  if (node.type === 'minecraft:model') return node
-  return plainModel(node.fallback) || plainModel(node.on_false) || plainModel(node.model) || (Array.isArray(node.cases) ? plainModel(node.cases[0]?.model) : null)
-}
-const tintColour = t => {
-  if (!t) return null
-  const v = t.type === 'minecraft:constant' ? t.value : t.type === 'minecraft:grass' ? null : t.default
-  if (t.type === 'minecraft:grass') return GREEN
-  return typeof v === 'number' ? [v >> 16 & 255, v >> 8 & 255, v & 255] : null
-}
-let tinted = 0
-for (const n of itemDefs) {
-  const m = plainModel(readJson(`assets/minecraft/items/${n}.json`)?.model)
-  if (!m?.tints?.length || typeof m.model !== 'string') continue
-  const tx = modelTextures(m.model), layers = []
-  for (let i = 0; i < 8; i++) { const t = resolveRef(tx, tx[`layer${i}`]); if (typeof t !== 'string') break; layers.push(t) }
-  if (!layers.length) continue   // a block (grass, leaves): drawn in 3D with its own tint
-  try {
-    let out16 = null
-    for (const [i, t] of layers.entries()) {
-      const img = await loadTex(t); if (!img) throw new Error('missing ' + t)
-      const c = tintColour(m.tints[i])
-      if (!out16) out16 = { w: img.w, h: img.h, data: Buffer.alloc(img.w * img.h * 4) }
-      if (img.w !== out16.w || img.h !== out16.h) continue
-      for (let k = 0; k < img.data.length; k += 4) {
-        const a = img.data[k + 3] / 255; if (!a) continue
-        for (let ch = 0; ch < 3; ch++) { const v = img.data[k + ch] * (c ? c[ch] / 255 : 1); out16.data[k + ch] = Math.round(v * a + out16.data[k + ch] * (1 - a)) }
-        out16.data[k + 3] = Math.max(out16.data[k + 3], img.data[k + 3])
-      }
-    }
-    fs.writeFileSync(path.join(out, n + '.png'), await png(out16.w, out16.h, out16.data))
-    if (!have.has(n)) { names.push(n); have.add(n) }
-    tinted++
-  } catch { /* keep whatever flat texture it already had */ }
-}
-console.log(`Coloured ${tinted} tinted items`)
-// Items the game draws as 3D models (heads, chests, banners, the shield) only name a stand-in texture, so cut a face from their real texture.
+
+// Flat stand-ins for things drawn from entity models that aren't modelled above (the shield), or if a 3D one fails.
 const tex = p => zip.getEntry(`assets/minecraft/textures/${p}.png`)
 const face = (p, rect, hat) => async () => {   // a rectangle of an entity texture, with an optional overlay layer on top
   const e = tex(p); if (!e) return null
@@ -230,36 +312,64 @@ const SPECIAL = {
 for (const w of ['', 'exposed_', 'weathered_', 'oxidized_']) SPECIAL[`waxed_${w}copper_chest`] = SPECIAL[`${w}copper_chest`]
 for (const c of ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'])
   SPECIAL[`${c}_banner`] = async () => { const e = tex(`block/${c}_wool`); return e ? px(e.getData()) : null }   // banners if the 3D one fails: their colour
-for (const [n, make] of Object.entries(SPECIAL)) {
-  if (have.has(n) || !itemDefs.has(n)) continue
-  try { const t = await make(); if (t) { fs.writeFileSync(path.join(out, n + '.png'), await png(t.w, t.h, t.data)); names.push(n); have.add(n) } } catch { /* leave it to the steps below */ }
-}
-const blocks = []
-for (const n of [...(itemDefs.size ? itemDefs : new Set([...blockEntries.keys()]))]) {
-  if (have.has(n) || n === 'player_head' || n === 'dragon_head') continue   // the player head is drawn from Steve below; the dragon head has no flat face
-  try {
-    const cube = await render3d(n)
-    if (cube) { fs.writeFileSync(path.join(out, n + '.png'), await png(cube.w, cube.h, cube.data)); names.push(n); have.add(n); blocks.push(n); continue }
-  } catch { /* fall back to a flat texture */ }
-  const found = textureFor(n), key = found ? null : [n, n + '_side', n + '_front', n + '_top'].find(k => blockEntries.has(k))
-  if (!found && !key) continue
-  try {
-    const t = found ? await px(found.entry.getData(), null, TINT[found.base]) : await px(blockEntries.get(key).getData(), null, TINT[key])
-    fs.writeFileSync(path.join(out, n + '.png'), await png(t.w, t.h, t.data)); names.push(n); have.add(n); blocks.push(n)
-  } catch { /* skip odd textures */ }
-}
 
-// A flat Steve face (with the hat layer) for "player" rows.
-const steve = entityEntries.get('steve')
-if (steve && !have.has('player_head')) {
-  const buf = steve.getData(), base = await px(buf, [8, 8, 8, 8]), hat = await px(buf, [40, 8, 8, 8])
-  for (let i = 0; i < base.data.length; i += 4) if (hat.data[i + 3] > 8) for (let k = 0; k < 4; k++) base.data[i + k] = hat.data[i + k]
-  fs.writeFileSync(path.join(out, 'player_head.png'), await png(8, 8, base.data)); names.push('player_head'); have.add('player_head')
+// ---- one icon per item, trying the way the game draws it first
+const toPng = async t => (t ? png(t.w, t.h, t.data) : null)
+const tinted = (f, c) => (f && c ? { ...f, data: Buffer.from(f.data.map((v, i) => (i % 4 === 3 ? v : v * c[i % 4] / 255))) } : f)
+async function iconFor(n) {
+  if (ENTITY[n]) { const t = await ENTITY[n]().catch(() => null); if (t) return { buf: await toPng(t), kind: '3d' } }
+  const s = await seriesIcon(n); if (s) return { buf: s, kind: 'animated' }
+  const node = pick(readJson(`assets/minecraft/items/${n}.json`)?.model)
+  if (node?.type === 'minecraft:composite') {
+    const parts = (node.models || []).map(m => ({ ref: pick(m)?.model, at: m.transformation?.translation || [0, 0, 0] }))
+    if (parts.every(p => typeof p.ref === 'string')) { const b = await blockIcon(parts); if (b) return { buf: b, kind: '3d' } }
+  }
+  if (node?.type === 'minecraft:model' && typeof node.model === 'string') {
+    const c = chain(node.model)
+    if (c.flat) { const f = await flatIcon(node.model, node.tints); if (f) return { buf: f, kind: 'flat' } }
+    else if (c.elements) { const b = await blockIcon([{ ref: node.model, at: [0, 0, 0] }]); if (b) return { buf: b, kind: '3d' } }
+  }
+  if (SPECIAL[n]) { const t = await SPECIAL[n]().catch(() => null); if (t) return { buf: await toPng(t), kind: 'flat' } }
+  if (node?.type === 'minecraft:special' && typeof node.base === 'string') {   // something we don't model (copper golem statues): the texture its model names
+    const tx = chain(node.base).textures, t = resolveRef(tx, tx.particle)
+    if (typeof t === 'string' && await anim(t)) return { buf: await encode([t], get => get(t)), kind: 'flat' }
+  }
+  // Last resort: a texture with the item's name, or the block's own side or front.
+  for (const t of [`item/${n}`, `block/${n}`, `block/${n}_side`, `block/${n}_front`, `block/${n}_top`]) {
+    if (await anim(t)) return { buf: await encode([t], get => tinted(get(t), TINT[t.split('/').pop()])), kind: 'flat' }
+  }
+  return null
 }
-const missing = [...itemDefs].filter(n => !have.has(n) && n !== 'air')
+// Items that always shimmer get the game's enchantment glint sliding across them, looping every couple of seconds.
+const GLINT = new Set(['enchanted_book', 'written_book', 'enchanted_golden_apple', 'experience_bottle', 'nether_star', 'end_crystal', 'debug_stick'])
+async function glint(buf) {
+  const g = await loadTex('minecraft:misc/enchanted_glint_item'); if (!g) return buf
+  const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  const w = info.width, h = info.height, N = 30, cos = Math.cos(0.1745), sin = Math.sin(0.1745), frames = []
+  for (let f = 0; f < N; f++) {
+    const out2 = Buffer.from(data), shift = f / N
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4; if (!data[i + 3]) continue
+      const u = x / w * 0.5, v = y / h * 0.5, ru = u * cos - v * sin + shift, rv = u * sin + v * cos   // tilted 10 degrees, like the game's
+      const gx = Math.floor(((ru % 1) + 1) % 1 * g.w), gy = Math.floor(((rv % 1) + 1) % 1 * g.h), k = (gy * g.w + gx) * 4
+      for (let c = 0; c < 3; c++) out2[i + c] = Math.min(255, data[i + c] + g.data[k + c] * g.data[k + c] / 255 * 0.9)
+    }
+    frames.push({ w, h, data: out2 })
+  }
+  return apng(frames, frames.map(() => 70))
+}
+const names = [], missing = [], counts = { '3d': 0, flat: 0, animated: 0 }
+for (const n of itemDefs) {
+  let r = null
+  try { r = await iconFor(n) } catch (e) { console.log(`Couldn't draw ${n}: ${e.message}`) }
+  if (!r?.buf) { missing.push(n); continue }
+  if (GLINT.has(n)) r.buf = await glint(r.buf)
+  fs.writeFileSync(path.join(out, n + '.png'), r.buf); names.push(n)
+  counts[r.buf.includes(Buffer.from('acTL')) ? 'animated' : r.kind]++
+}
 if (missing.length) console.log(`No icon for ${missing.length} item(s): ${missing.join(', ')}`)
-names.sort((a, b) => a.localeCompare(b)); fs.writeFileSync(path.join('public', 'mc', 'index.json'), JSON.stringify(names))
-console.log(`Extracted ${names.length} icons (${blocks.length} blocks) to public/mc/`)
+if (!ONLY) fs.writeFileSync(path.join('public', 'mc', 'index.json'), JSON.stringify(names))
+console.log(`Wrote ${names.length} item icons to public/mc/item: ${counts['3d']} 3D, ${counts.flat} flat, ${counts.animated} animated`)
 
 // UI sounds: copied from your game's own sound files (looked up through the asset index next to the versions folder).
 try {

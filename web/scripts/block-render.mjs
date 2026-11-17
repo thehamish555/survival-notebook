@@ -40,9 +40,10 @@ function elementRot(p, r) {
 }
 
 /** model: { elements?, quads?, texture(name) -> {w,h,data} | null, gui: {rotation, translation, scale}, tint(textureName, tintindex) -> [r,g,b] | null }
+ *  frontLight: lit flat from the front, like items whose model says gui_light "front" (shields, banners).
  *  quads are for entity models (chests, heads, banners): { pts: four [x,y,z] in block pixels, uv: four [u,v] in 0..16, texture, tint? }.
  *  Returns { w, h, data } RGBA at size x size, or null if nothing was drawn. */
-export function renderModel({ elements, quads: extra, texture, gui, tint }, size = 64) {
+export function renderModel({ elements, quads: extra, texture, gui, tint, frontLight }, size = 64) {
   const rot = gui?.rotation || [30, 225, 0], tr = gui?.translation || [0, 0, 0], sc = gui?.scale || [0.625, 0.625, 0.625]
   // Model space (0..16) -> centred -> gui scale and rotation (Z, then Y, then X, as the game applies them) -> screen pixels.
   const view = p => {
@@ -81,7 +82,7 @@ export function renderModel({ elements, quads: extra, texture, gui, tint }, size
       let nn = turn(qd.normal)
       if (nn[2] < -1e-4) { if (!qd.twoSided) continue; nn = nn.map(x => -x) }   // facing away (entity faces just light the side we see)
       // Lighting by where the face points after turning: tops brightest, the left side a little darker, the right side darker still.
-      const shade = !qd.shade ? 1 : Math.min(1, 0.6 + 0.4 * Math.max(0, nn[1]) + 0.25 * Math.max(0, -nn[0]))
+      const shade = !qd.shade ? 1 : frontLight ? 0.5 + 0.38 * Math.max(0, nn[2]) : Math.min(1, 0.6 + 0.4 * Math.max(0, nn[1]) + 0.25 * Math.max(0, -nn[0]))
       const tc = qd.tint, uvc = qd.uv
       // The face is a parallelogram on screen: p = p0 + s*(p1-p0) + t*(p3-p0).
       const [p0, p1, , p3] = pts, ax = p1[0] - p0[0], ay = p1[1] - p0[1], bx = p3[0] - p0[0], by = p3[1] - p0[1], det = ax * by - ay * bx
