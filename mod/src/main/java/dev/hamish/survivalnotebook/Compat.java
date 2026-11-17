@@ -21,16 +21,22 @@ final class Compat {
 
 	private static final Map<String, ItemStack> STACKS = new HashMap<>();
 
-	/** The item with this id path (e.g. "diamond_sword"), or EMPTY if there's no such item. Cached. */
+	/**
+	 * The item with this id path (e.g. "diamond_sword"), or EMPTY if there's no such item. Cached once it works.
+	 * Before a world's data is loaded the game can't make items at all ("Components not bound yet"), so a failure is never cached:
+	 * caching it used to leave every icon blank for the whole session if the notebook was opened from the main menu first.
+	 */
 	static ItemStack stack(String path) {
 		if (path == null || path.isBlank()) return ItemStack.EMPTY;
-		return STACKS.computeIfAbsent(path, p -> {
-			try {
-				var item = BuiltInRegistries.ITEM.getValue(Identifier.withDefaultNamespace(p));
-				ItemStack s = new ItemStack(item);
-				return s.isEmpty() ? ItemStack.EMPTY : s;
-			} catch (RuntimeException e) { return ItemStack.EMPTY; }
-		});
+		ItemStack hit = STACKS.get(path);
+		if (hit != null) return hit;
+		try {
+			Identifier id = Identifier.withDefaultNamespace(path);
+			if (!BuiltInRegistries.ITEM.containsKey(id)) { STACKS.put(path, ItemStack.EMPTY); return ItemStack.EMPTY; }   // not an item: that won't change
+			ItemStack s = new ItemStack(BuiltInRegistries.ITEM.getValue(id));
+			if (!s.isEmpty()) STACKS.put(path, s);
+			return s;
+		} catch (RuntimeException e) { return ItemStack.EMPTY; }
 	}
 
 	/** Makes a vanilla button fully transparent (it still takes clicks), so no texture or corner pixels show around our own painting. */

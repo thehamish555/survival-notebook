@@ -16,8 +16,8 @@ import java.util.function.Consumer;
  * Vanilla buttons do the clicking, and we paint over them, so everything looks like one consistent UI.
  */
 final class NotebookScreen extends Screen {
-	static final String[] TABS = {"Home", "Places", "Map", "Enchants", "Deaths", "To-Do", "Farms", "Shopping", "Notes", "Settings"};
-	static final int HOME = 0, PLACES = 1, MAP = 2, GEAR = 3, DEATHS = 4, TODO = 5, FARMS = 6, SHOPPING = 7, NOTES = 8, SETTINGS = 9;
+	static final String[] TABS = {"Home", "Places", "Map", "Enchants", "Deaths", "Stats", "To-Do", "Farms", "Shopping", "Notes", "Settings"};
+	static final int HOME = 0, PLACES = 1, MAP = 2, GEAR = 3, DEATHS = 4, STATS = 5, TODO = 6, FARMS = 7, SHOPPING = 8, NOTES = 9, SETTINGS = 10;
 	static int tab = -1, scroll, scrollMax;
 
 	int x0, y0, pw, ph, sw, cx, cw, top, bottom;   // panel and content-area geometry
@@ -50,7 +50,7 @@ final class NotebookScreen extends Screen {
 	Font font() { return this.font; }
 	void rebuild() { this.rebuildWidgets(); }
 
-	static void resetEditors() { PagePlaces.reset(); PageTodo.reset(); PageFarms.reset(); PageGear.reset(); PageDeaths.reset(); PageNotes.reset(); PageShopping.reset(); PageMap.reset(); ddKey = ""; ddScroll = 0; PagePlaces.importing = false; PageFarms.picking = false; scroll = 0; }
+	static void resetEditors() { PagePlaces.reset(); PageTodo.reset(); PageFarms.reset(); PageGear.reset(); PageDeaths.reset(); PageNotes.reset(); PageShopping.reset(); PageMap.reset(); PageStats.reset(); ddKey = ""; ddScroll = 0; PagePlaces.importing = false; PageFarms.picking = false; scroll = 0; }
 	static String next(String cur, String[] opts) {
 		for (int i = 0; i < opts.length; i++) if (opts[i].equals(cur)) return opts[(i + 1) % opts.length];
 		return opts[0];
@@ -75,6 +75,7 @@ final class NotebookScreen extends Screen {
 			case MAP -> PageMap.build(this);
 			case GEAR -> PageGear.build(this);
 			case DEATHS -> PageDeaths.build(this);
+			case STATS -> PageStats.build(this);
 			case TODO -> PageTodo.build(this);
 			case FARMS -> PageFarms.build(this);
 			case SHOPPING -> PageShopping.build(this);
@@ -143,7 +144,7 @@ final class NotebookScreen extends Screen {
 
 	@Override
 	public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent e, double dx, double dy) {
-		if (tab == MAP && PageMap.drag(dx, dy)) return true;
+		if (tab == MAP && PageMap.drag(e.x(), e.y(), dx, dy)) return true;
 		return super.mouseDragged(e, dx, dy);
 	}
 
@@ -155,7 +156,7 @@ final class NotebookScreen extends Screen {
 
 	// ---- chrome
 
-	private static final String[] TAB_ICONS = {"home", "places", "item:filled_map", "gear", "deaths", "todo", "farms", "item:bundle", "notes", "settings"};   // "item:" = a Minecraft item icon
+	private static final String[] TAB_ICONS = {"home", "places", "map", "gear", "deaths", "stats", "todo", "farms", "shopping", "notes", "settings"};
 
 	private void header() {
 		paint((g, mx, my) -> {
@@ -198,8 +199,7 @@ final class NotebookScreen extends Screen {
 	}
 
 	private static void drawIcon(GuiGraphicsExtractor g, int i, int x, int y) {
-		if (TAB_ICONS[i].startsWith("item:")) Compat.drawItem(g, TAB_ICONS[i].substring(5), x - 3, y - 3);
-		else TabIcons.draw(g, TAB_ICONS[i], x, y);
+		TabIcons.draw(g, TAB_ICONS[i], x, y);
 	}
 
 	/** Small count shown next to a sidebar entry. */
@@ -220,7 +220,7 @@ final class NotebookScreen extends Screen {
 	String webUrl() {
 		NbConfig c = NbConfig.get();
 		if (tab == SETTINGS || c.notebookId.isBlank()) return c.web() + "/account";
-		String[] slug = {"home", "coordinates", "map", "enchantments", "deaths", "todo", "farms", "shopping", "notes", "members"};
+		String[] slug = {"home", "coordinates", "map", "enchantments", "deaths", "stats", "todo", "farms", "shopping", "notes", "members"};
 		String extra = tab == GEAR && !PageGear.uid.isBlank() ? "/" + PageGear.uid : "";
 		return c.web() + "/n/" + c.notebookId + "#" + slug[Math.min(tab, slug.length - 1)] + extra;
 	}

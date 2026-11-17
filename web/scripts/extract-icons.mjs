@@ -50,19 +50,83 @@ const px = async (buf, rect, tint) => {   // RGBA pixels of (a region of) a png;
   if (tint) for (let i = 0; i < data.length; i += 4) { data[i] = data[i] * tint[0] / 255; data[i + 1] = data[i + 1] * tint[1] / 255; data[i + 2] = data[i + 2] * tint[2] / 255 }
   return { w, h, data }
 }
+// Which texture an item shows is worked out the way the game does it: items/<id>.json names a model, models name parents and textures.
+// That finds the right texture for blocks named differently from their texture (oak_slab -> oak_planks, chest -> its particle texture, and so on).
+const jsonCache = new Map()
+const readJson = p => { if (!jsonCache.has(p)) { const e = zip.getEntry(p); let v = null; try { v = e ? JSON.parse(e.getData().toString('utf8')) : null } catch { v = null } jsonCache.set(p, v) } return jsonCache.get(p) }
+const modelRefs = (node, acc = []) => {   // every model named in an item definition (plain, conditional, select, special "base")
+  if (Array.isArray(node)) node.forEach(x => modelRefs(x, acc))
+  else if (node && typeof node === 'object') for (const [k, v] of Object.entries(node)) { if ((k === 'model' || k === 'base') && typeof v === 'string') acc.push(v); else modelRefs(v, acc) }
+  return acc
+}
+const modelTextures = ref => {   // a model's textures, with its parents' filling the gaps
+  const tex = {}
+  for (let r = ref, i = 0; r && i < 20; i++) { const m = readJson(`assets/minecraft/models/${r.replace(/^minecraft:/, '')}.json`); if (!m) break; for (const [k, v] of Object.entries(m.textures || {})) if (!(k in tex)) tex[k] = v; r = m.parent }
+  return tex
+}
+const resolveRef = (tex, v, depth = 0) => (typeof v === 'string' && v.startsWith('#') && depth < 10 ? resolveRef(tex, tex[v.slice(1)], depth + 1) : v)
+const PREFER = ['layer0', 'all', 'side', 'texture', 'front', 'top', 'end', 'cross', 'plant', 'pattern', 'wool', 'particle']
+const textureFor = n => {
+  for (const ref of modelRefs(readJson(`assets/minecraft/items/${n}.json`))) {
+    const tex = modelTextures(ref)
+    for (const k of PREFER) {
+      const t = resolveRef(tex, tex[k]); if (typeof t !== 'string' || t.startsWith('#')) continue
+      const entry = zip.getEntry(`assets/minecraft/textures/${t.replace(/^minecraft:/, '')}.png`)
+      if (entry) return { entry, base: t.split('/').pop() }
+    }
+  }
+  return null
+}
+// Items the game draws as 3D models (heads, chests, banners, the shield) only name a stand-in texture, so cut a face from their real texture.
+const tex = p => zip.getEntry(`assets/minecraft/textures/${p}.png`)
+const face = (p, rect, hat) => async () => {   // a rectangle of an entity texture, with an optional overlay layer on top
+  const e = tex(p); if (!e) return null
+  const base = await px(e.getData(), rect)
+  if (hat) { const top = await px(e.getData(), hat); for (let i = 0; i < base.data.length; i += 4) if (top.data[i + 3] > 8) for (let k = 0; k < 4; k++) base.data[i + k] = top.data[i + k] }
+  return base
+}
+const chest = p => async () => {   // the front of a chest: lid strip above the body, with the latch
+  const e = tex(`entity/chest/${p}`); if (!e) return null
+  const buf = e.getData(), lid = await px(buf, [14, 14, 14, 5]), body = await px(buf, [14, 33, 14, 10]), lock = await px(buf, [1, 1, 2, 4])
+  const w = 14, h = 15, data = Buffer.alloc(w * h * 4)
+  lid.data.copy(data, 0); body.data.copy(data, w * 5 * 4)
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 2; x++) { const s = (y * 2 + x) * 4, d = ((y + 3) * w + 6 + x) * 4; if (lock.data[s + 3] > 8) for (let k = 0; k < 4; k++) data[d + k] = lock.data[s + k] }
+  return { w, h, data }
+}
+const SPECIAL = {
+  skeleton_skull: face('entity/skeleton/skeleton', [8, 8, 8, 8]), wither_skeleton_skull: face('entity/skeleton/wither_skeleton', [8, 8, 8, 8]),
+  zombie_head: face('entity/zombie/zombie', [8, 8, 8, 8], [40, 8, 8, 8]), creeper_head: face('entity/creeper/creeper', [8, 8, 8, 8]),
+  piglin_head: face('entity/piglin/piglin', [8, 8, 10, 8]), shield: face('entity/shield_base_nopattern', [2, 2, 10, 20]),
+  chest: chest('normal'), trapped_chest: chest('trapped'), ender_chest: chest('ender'),
+  copper_chest: chest('copper'), exposed_copper_chest: chest('copper_exposed'), weathered_copper_chest: chest('copper_weathered'), oxidized_copper_chest: chest('copper_oxidized'),
+}
+for (const w of ['', 'exposed_', 'weathered_', 'oxidized_']) SPECIAL[`waxed_${w}copper_chest`] = SPECIAL[`${w}copper_chest`]
+for (const c of ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black'])
+  SPECIAL[`${c}_banner`] = SPECIAL[`${c}_bed`] = async () => { const e = tex(`block/${c}_wool`); return e ? px(e.getData()) : null }   // banners and beds: their colour
+for (const [n, make] of Object.entries(SPECIAL)) {
+  if (have.has(n) || !itemDefs.has(n)) continue
+  try { const t = await make(); if (t) { fs.writeFileSync(path.join(out, n + '.png'), await png(t.w, t.h, t.data)); names.push(n); have.add(n) } } catch { /* leave it to the steps below */ }
+}
 const blocks = []
 for (const n of [...(itemDefs.size ? itemDefs : new Set([...blockEntries.keys()]))]) {
-  if (have.has(n)) continue
-  const key = [n, n + '_side', n + '_front', n + '_top'].find(k => blockEntries.has(k)); if (!key) continue
-  try { const t = await px(blockEntries.get(key).getData(), null, TINT[key]); fs.writeFileSync(path.join(out, n + '.png'), await png(t.w, t.h, t.data)); names.push(n); have.add(n); blocks.push(n) } catch { /* skip odd textures */ }
+  if (have.has(n) || n === 'player_head' || n === 'dragon_head') continue   // the player head is drawn from Steve below; the dragon head has no flat face
+  const found = textureFor(n), key = found ? null : [n, n + '_side', n + '_front', n + '_top'].find(k => blockEntries.has(k))
+  if (!found && !key) continue
+  try {
+    const t = found ? await px(found.entry.getData(), null, TINT[found.base]) : await px(blockEntries.get(key).getData(), null, TINT[key])
+    fs.writeFileSync(path.join(out, n + '.png'), await png(t.w, t.h, t.data)); names.push(n); have.add(n); blocks.push(n)
+  } catch { /* skip odd textures */ }
 }
+
 // A flat Steve face (with the hat layer) for "player" rows.
 const steve = entityEntries.get('steve')
 if (steve && !have.has('player_head')) {
   const buf = steve.getData(), base = await px(buf, [8, 8, 8, 8]), hat = await px(buf, [40, 8, 8, 8])
   for (let i = 0; i < base.data.length; i += 4) if (hat.data[i + 3] > 8) for (let k = 0; k < 4; k++) base.data[i + k] = hat.data[i + k]
-  fs.writeFileSync(path.join(out, 'player_head.png'), await png(8, 8, base.data)); names.push('player_head')
+  fs.writeFileSync(path.join(out, 'player_head.png'), await png(8, 8, base.data)); names.push('player_head'); have.add('player_head')
 }
+const missing = [...itemDefs].filter(n => !have.has(n) && n !== 'air')
+if (missing.length) console.log(`No icon for ${missing.length} item(s): ${missing.join(', ')}`)
 names.sort((a, b) => a.localeCompare(b)); fs.writeFileSync(path.join('public', 'mc', 'index.json'), JSON.stringify(names))
 console.log(`Extracted ${names.length} icons (${blocks.length} from block textures) to public/mc/`)
 

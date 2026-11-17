@@ -1,3 +1,11 @@
+## 1.2.1 – Fix
+- Item icons show again. If the notebook had been opened before a world finished loading, they stayed blank for the whole session.
+- Map: dragging moves the map, and a slightly shaky click still counts. Clicking a place tracks it and shows the farms there, with Track, Edit and close buttons.
+- Map and Shopping have their own pixel icons, like the other tabs.
+- New Stats tab, the same as the website's: time played, deaths, distance and more, plus lists like Most mined and Killed by. Vanilla statistics only.
+- You can point the mod at your own server with apiUrl in config/survival-notebook.json.
+- Small screens: the map hint and the shopping list header no longer overlap the buttons.
+
 ## 1.2.0 – Feature
 - Map tab: the notebook's shared map in game, with your places as pins and a marker showing where you are and which way you face. Drag to move, scroll to zoom, and click a pin to track it. What you've just explored shows straight away.
 - Ender chest: the mod remembers what's in it each time you open it, and the shopping list counts it as Have (on the website too).

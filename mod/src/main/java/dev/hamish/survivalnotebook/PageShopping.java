@@ -136,10 +136,11 @@ final class PageShopping {
 		List<Line> all = lines(), view = new ArrayList<>();
 		int done = 0;
 		for (Line l : all) { if (l.have() >= 0 && l.left() == 0) done++; if (show.equals("Everything") || l.have() < 0 || l.left() > 0) view.add(l); }
-		if (!all.isEmpty()) s.textRight(done + " of " + all.size() + " done", s.cx + s.cw - 10, y + 6, p.mut);
+		String count = done + " of " + all.size() + " done";
+		if (!all.isEmpty() && s.cx + 312 + s.font().width(count) < s.cx + s.cw - 10) s.textRight(count, s.cx + s.cw - 10, y + 6, p.mut);   // only when there's room beside the buttons
 		JsonObject ender = InventoryScanner.enderNow();
-		s.text(ender == null ? "Have counts what you're carrying, with shulker boxes and bundles. Open your ender chest to count it too."
-			: "Have counts what you're carrying and your ender chest, with shulker boxes and bundles.", s.cx, y + 26, p.mut);
+		s.text(Ui.clip(s.font(), ender == null ? "Counts what you carry, shulker boxes and bundles. Open your ender chest to count it too."
+			: "Counts what you carry and your ender chest, with shulker boxes and bundles.", s.cw - 12), s.cx, y + 26, p.mut);
 
 		int listTop = y + 40, rowH = 22, vis = Math.max(1, (s.bottom - listTop) / rowH), rowW = s.cw - 10;
 		s.setScroll(view.size(), vis);

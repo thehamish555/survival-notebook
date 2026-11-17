@@ -14,4 +14,4 @@ export function TabIcon({ name, size = 18 }: { name: string; size?: number }) {
   return <svg className="tabicon" width={size} height={size} viewBox="0 0 10 10" shapeRendering="crispEdges" aria-hidden>
     {ic.rows.flatMap((r, y) => [...r].map((c, x) => c === '.' ? null : <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill={ic.pal[c]} />))}</svg>
 }
-export const TAB_KEY: Record<string, string> = { Home: 'home', Coordinates: 'places', Enchantments: 'gear', Deaths: 'deaths', Stats: 'stats', 'To-Do': 'todo', Farms: 'farms', Notes: 'notes', Members: 'members' }
+export const TAB_KEY: Record<string, string> = { Home: 'home', Coordinates: 'places', Map: 'map', Enchantments: 'gear', Deaths: 'deaths', Stats: 'stats', 'To-Do': 'todo', Farms: 'farms', Shopping: 'shopping', Notes: 'notes', Members: 'members' }

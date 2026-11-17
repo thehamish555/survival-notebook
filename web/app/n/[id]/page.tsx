@@ -19,7 +19,6 @@ const isXYZ = (s: string) => /^-?\d+\s+-?\d+\s+-?\d+$/.test((s || '').trim())
 const blank = (s: string) => !(s || '').trim()
 const conv = (s: string, f: number) => { const n = s.trim().split(/\s+/).map(Number); return [Math.floor(n[0] * f), n[1], Math.floor(n[2] * f)].join(' ') }
 const TABS = ['Home', 'Coordinates', 'Map', 'Enchantments', 'Deaths', 'Stats', 'To-Do', 'Farms', 'Shopping', 'Notes']
-const ITEM_TAB: Record<string, string> = { Map: 'filled_map', Shopping: 'bundle' }   // tabs drawn with a Minecraft item icon
 const SLUG: Record<string, string> = { Home: 'home', Coordinates: 'coordinates', Map: 'map', Enchantments: 'enchantments', Deaths: 'deaths', Stats: 'stats', 'To-Do': 'todo', Farms: 'farms', Shopping: 'shopping', Notes: 'notes' }
 // The URL hash remembers where you are (#todo, #enchantments/<player>) so a refresh — or a link from the mod — lands in the same place.
 const fromHash = () => {
@@ -212,7 +211,7 @@ export default function Notebook() {
 
     <div className="shell">
       <nav className="side">{tabs.map(t => <button key={t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => go(t)}>
-        {ITEM_TAB[t] ? <McIcon name={ITEM_TAB[t]} size={18} /> : <TabIcon name={TAB_KEY[t]} size={18} />}{t}</button>)}</nav>
+        <TabIcon name={TAB_KEY[t]} size={18} />{t}</button>)}</nav>
       <main>
       {err && <p className="err">{err}</p>}
       {savedAt > 0 ? <p className="pill t-amber">You're offline. This is the copy saved {timeAgo(savedAt)}. You can't make changes until you're back online.</p>

@@ -7,8 +7,8 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import java.util.List;
 
 /**
- * The shared map in game: tiles recorded by everyone's mod (Share map), your saved places as pins and you as an arrow.
- * Drag to move, scroll to zoom, click a pin to track it (click again to stop).
+ * The shared map in game: tiles recorded by everyone's mod (Share map), your saved places as pins and a marker for you.
+ * Drag to move, scroll to zoom. Clicking a place tracks it and shows the farms there.
  */
 final class PageMap {
 	private PageMap() { }
@@ -16,8 +16,11 @@ final class PageMap {
 	private static final String[] DIMS = {"ow", "nether", "end"}, LABELS = {"Overworld", "Nether", "End"};
 	static String dim = "";
 	static double cx, cz, scale = 1;
+	static String selected = "";   // the place whose details show at the bottom of the map
 	private static boolean centred, dragging, moved;
-	private static int ax, ay, aw, ah;   // the map area on screen, for the mouse handlers
+	private static double pressX, pressY;
+	private static int ax, ay, aw, ah, px0, py0, px1, py1;   // the map area and the details panel on screen, for the mouse handlers
+	private static NotebookScreen screen;
 
 	static void reset() { dragging = false; }
 
@@ -62,11 +65,50 @@ final class PageMap {
 		s.btn(s.cx + 156, y, 24, "+", 1, () -> zoom(1.5), true);
 		s.btn(s.cx + 184, y, 24, "−", 1, () -> zoom(1 / 1.5), true);
 		s.btn(s.cx + 212, y, 70, "Find me", 1, () -> { Names.Spot h = Names.here(); if (h == null) return; dim = h.dim(); centreOnMe(); s.rebuild(); }, Names.here() != null);
-		s.textRight("Drag, scroll, click a pin to track", s.cx + s.cw - 10, y + 6, p.mut);
+		String hint = "Drag to move, scroll to zoom, click a place";
+		if (s.cx + 290 + s.font().width(hint) < s.cx + s.cw - 10) s.textRight(hint, s.cx + s.cw - 10, y + 6, p.mut);   // only when there's room beside the buttons
 
 		ax = s.cx; ay = y + 26; aw = s.cw - 10; ah = s.bottom - ay;
+		screen = s;
 		final boolean sharing = NbConfig.get().shareMap;
 		s.paint((g, mx, my) -> draw(s, g, mx, my, sharing));
+		details(s);
+	}
+
+	/** The picked place: its coordinates, whether it's tracked, and the farms linked to it (like the website's farm Location). */
+	private static void details(NotebookScreen s) {
+		px0 = px1 = py0 = py1 = 0;
+		JsonObject place = selected.isEmpty() ? null : Notebook.find("coords", selected);
+		if (place == null) { selected = ""; return; }
+		Ui.Pal p = Ui.pal();
+		List<JsonObject> farms = new java.util.ArrayList<>();
+		for (JsonObject f : Notebook.rows("farms")) if (Notebook.str(f, "place").equals(selected)) farms.add(f);
+		final int shown = Math.min(farms.size(), 4), w = Math.min(aw - 12, 300), h = 38 + Math.max(1, shown) * 12 + (farms.size() > shown ? 10 : 0);
+		final int x = ax + 6, y = ay + ah - h - 6;
+		px0 = x; py0 = y; px1 = x + w; py1 = y + h;
+		final String name = Notebook.str(place, "name").isBlank() ? "Unnamed place" : Notebook.str(place, "name"), xyz = Notebook.str(place, dim);
+		final boolean tracked = selected.equals(NbConfig.get().trackedPlace);
+		s.paint((g, mx, my) -> {
+			Ui.bevel(g, x, y, w, h, p.panel, p.hi, p.lo, p.edge);
+			g.fill(x + 1, y + 1, x + w - 1, y + 3, Ui.cat(Notebook.str(place, "cat")).fg());
+			g.text(s.font(), Ui.clip(s.font(), name, w - 150), x + 6, y + 7, p.gold, false);
+			g.text(s.font(), xyz.isBlank() ? "" : label(dim) + " " + xyz, x + 6, y + 19, p.mut, false);
+			if (farms.isEmpty()) g.text(s.font(), "No farms here. Pick this place as a farm's Location to list it.", x + 6, y + 33, p.mut, false);
+			for (int i = 0; i < shown; i++) {
+				JsonObject f = farms.get(i);
+				String st = Notebook.bool(f, "built") ? "Built" : Notebook.bool(f, "building") ? "Building" : "To build";
+				int fy = y + 32 + i * 12;
+				Compat.drawItem(g, Notebook.str(f, "icon").isBlank() ? "wheat" : Notebook.str(f, "icon"), x + 4, fy - 4);
+				g.text(s.font(), Ui.clip(s.font(), Notebook.str(f, "name").isBlank() ? "Unnamed farm" : Notebook.str(f, "name"), w - 90), x + 22, fy, p.ink, false);
+				g.text(s.font(), st, x + w - 8 - s.font().width(st), fy, st.equals("Built") ? p.grassHi : p.mut, false);
+			}
+			if (farms.size() > shown) g.text(s.font(), "+" + (farms.size() - shown) + " more on the Farms tab", x + 22, y + 32 + shown * 12, p.mut, false);
+		});
+		s.pill(x + w - 140, y + 5, 70, 15, tracked ? "Tracking" : "Track", tracked ? p.amber : p.gray, () -> {
+			NbConfig c = NbConfig.get(); c.trackedPlace = tracked ? "" : selected; NbConfig.save(); Compat.soundToggle(); s.rebuild();
+		}, true);
+		s.pill(x + w - 66, y + 5, 42, 15, "Edit", p.secondary, () -> { PagePlaces.open(selected); NotebookScreen.tab = NotebookScreen.PLACES; s.rebuild(); }, true);
+		s.pill(x + w - 20, y + 5, 15, 15, "\u2715", p.secondary, () -> { selected = ""; s.rebuild(); }, true);
 	}
 
 	private static int sx(double x) { return (int) Math.round(ax + aw / 2.0 + (x - cx) * scale); }
@@ -123,7 +165,7 @@ final class PageMap {
 
 	private static JsonObject pinAt(double mx, double my) {
 		JsonObject best = null;
-		double bd = 6;
+		double bd = 8;
 		for (JsonObject o : Notebook.rows("coords")) {
 			double[] at = xyz(Notebook.str(o, dim));
 			if (at == null) continue;
@@ -139,12 +181,20 @@ final class PageMap {
 
 	// ---- mouse (called by NotebookScreen while this tab is open)
 
-	static boolean press(double x, double y) { if (!inside(x, y)) return false; dragging = true; moved = false; return true; }
+	private static boolean onPanel(double x, double y) { return x >= px0 && x < px1 && y >= py0 && y < py1; }
 
-	static boolean drag(double dx, double dy) {
+	static boolean press(double x, double y) {
+		if (!inside(x, y) || onPanel(x, y)) return false;   // the details panel has its own buttons
+		dragging = true; moved = false; pressX = x; pressY = y;
+		return true;
+	}
+
+	/** Moves the map with the mouse. It only counts as a drag once the mouse has gone a few pixels, so a slightly shaky click still picks a place. */
+	static boolean drag(double x, double y, double dx, double dy) {
 		if (!dragging) return false;
+		if (!moved && Math.hypot(x - pressX, y - pressY) < 3) return true;
+		moved = true;
 		cx -= dx / scale; cz -= dy / scale;
-		if (Math.abs(dx) + Math.abs(dy) > 0.5) moved = true;
 		return true;
 	}
 
@@ -153,13 +203,12 @@ final class PageMap {
 		dragging = false;
 		if (moved) return true;
 		JsonObject pin = pinAt(x, y);
-		if (pin != null) {   // click a pin: track it, or stop tracking it
+		if (pin != null) {   // click a place: track it and show what's there
+			selected = Notebook.str(pin, "id");
 			NbConfig c = NbConfig.get();
-			String id = Notebook.str(pin, "id");
-			c.trackedPlace = id.equals(c.trackedPlace) ? "" : id;
-			NbConfig.save();
-			Compat.soundToggle();
-		}
+			if (!selected.equals(c.trackedPlace)) { c.trackedPlace = selected; NbConfig.save(); Compat.soundToggle(); }
+		} else selected = "";
+		if (screen != null) screen.rebuild();
 		return true;
 	}
 

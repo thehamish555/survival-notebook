@@ -40,8 +40,9 @@ final class NbConfig {
 
 	boolean connected() { return token.startsWith("snp_"); }
 
-	/** Official server first; if it can't be reached (e.g. a local dev setup), quietly fall back to localhost. */
+	/** Your own server if you set apiUrl in the config file; otherwise the official one, quietly falling back to localhost if that can't be reached. */
 	String base() {
+		if (apiUrl != null && !apiUrl.isBlank()) return apiUrl.trim().replaceAll("/+$", "");
 		String r = resolved;
 		if (r != null) return r;
 		r = reachable(OFFICIAL_API) ? OFFICIAL_API : reachable(LOCAL_API) ? LOCAL_API : OFFICIAL_API;

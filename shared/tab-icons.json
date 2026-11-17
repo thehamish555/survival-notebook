@@ -2,11 +2,13 @@
  "order": [
   "home",
   "places",
+  "map",
   "gear",
   "deaths",
   "stats",
   "todo",
   "farms",
+  "shopping",
   "notes",
   "members",
   "settings"
@@ -204,6 +206,48 @@
     ".....ggg..",
     "hhhhhggghh",
     ".....ggg.."
+   ]
+  },
+  "map": {
+   "pal": {
+    "o": "#3B2A14",
+    "p": "#E8D9A8",
+    "g": "#6DAA45",
+    "b": "#4C8DE0",
+    "r": "#D9473A"
+   },
+   "rows": [
+    ".oooooooo.",
+    "opppgggppo",
+    "oppggggbpo",
+    "opgggrgbbo",
+    "opggrrrbbo",
+    "oppggrgbpo",
+    "obbpgggppo",
+    "obbbppgppo",
+    "opppppppbo",
+    ".oooooooo."
+   ]
+  },
+  "shopping": {
+   "pal": {
+    "o": "#3A2410",
+    "b": "#A0662E",
+    "d": "#6E4219",
+    "h": "#D9A15A",
+    "t": "#F2C14E"
+   },
+   "rows": [
+    "...oooo...",
+    "..o....o..",
+    "..o....o..",
+    ".oooooooo.",
+    "obbbbbbbdo",
+    "obhbbbbbdo",
+    "obhbttbbdo",
+    "obbbttbbdo",
+    "obbbbbbddo",
+    ".oooooooo."
    ]
   }
  }
