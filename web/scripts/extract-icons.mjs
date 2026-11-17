@@ -349,24 +349,27 @@ async function glint(buf) {
   if (info.width < 64) {   // flat items: scale up (keeping their pixels sharp) so the glint can be smooth across them, like in game
     const up = await sharp(buf).ensureAlpha().resize(64, 64, { kernel: 'nearest' }).raw().toBuffer({ resolveWithObject: true }); data = up.data; info = up.info
   }
-  const w = info.width, h = info.height, N = 48, cos = Math.cos(0.1745), sin = Math.sin(0.1745), frames = []
+  // The game's glint (TextureTransform.setupGlintTexturing, at the default glint speed and strength): the 128px texture, turned 10 degrees,
+  // slides up through one full repeat every 7.5 seconds (its slow sideways drift would take 27.5 s, so it's left out to loop cleanly),
+  // and is added on top, about as strongly as it looks in game (checked against in-game screenshots).
   const texel = (x, y) => { const k = ((((y % g.h) + g.h) % g.h) * g.w + (((x % g.w) + g.w) % g.w)) * 4; return [g.data[k], g.data[k + 1], g.data[k + 2]] }
-  const sample = (u, v) => {   // smooth (bilinear) like the game's blurred glint texture, wrapping at the edges
+  const sample = (u, v) => {   // smooth (bilinear), like the game's blurred glint texture, wrapping at the edges
     const x = u * g.w - 0.5, y = v * g.h - 0.5, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0
     const a = texel(x0, y0), b = texel(x0 + 1, y0), c = texel(x0, y0 + 1), d = texel(x0 + 1, y0 + 1)
     return [0, 1, 2].map(i => (a[i] * (1 - fx) + b[i] * fx) * (1 - fy) + (c[i] * (1 - fx) + d[i] * fx) * fy)
   }
+  const w = info.width, h = info.height, N = 60, SPAN = 0.25, STRENGTH = 0.4, cos = Math.cos(0.1745), sin = Math.sin(0.1745), frames = []
   for (let f = 0; f < N; f++) {
-    const out2 = Buffer.from(data), shift = f / N
+    const out2 = Buffer.from(data), rise = f / N
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4; if (!data[i + 3]) continue
-      const u = (x + 0.5) / w * 0.5, v = (y + 0.5) / h * 0.5, ru = u * cos - v * sin + shift, rv = u * sin + v * cos   // tilted 10 degrees, like the game's
-      const s2 = sample(ru, rv)
-      for (let c = 0; c < 3; c++) out2[i + c] = Math.min(255, data[i + c] + s2[c] * s2[c] / 255 * 0.9)
+      const u = (x + 0.5) / w * SPAN, v = (y + 0.5) / h * SPAN
+      const s2 = sample(u * cos - v * sin, u * sin + v * cos + rise)
+      for (let c = 0; c < 3; c++) out2[i + c] = Math.min(255, Math.round(data[i + c] + s2[c] * STRENGTH))   // added straight on, as bright as the game's
     }
     frames.push({ w, h, data: out2 })
   }
-  return apng(frames, frames.map(() => 125))   // about 6 seconds a loop, like the game's slow drift
+  return apng(frames, frames.map(() => 125))   // 60 frames x 125 ms = the game's 7.5 s cycle
 }
 const names = [], missing = [], counts = { '3d': 0, flat: 0, animated: 0 }
 for (const n of itemDefs) {
