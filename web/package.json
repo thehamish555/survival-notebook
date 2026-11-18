@@ -6,6 +6,7 @@
     "build": "next build",
     "start": "next start",
     "icons": "node scripts/extract-icons.mjs",
+    "blocks": "node scripts/extract-blocks.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"lib/*.test.ts\"",
     "og": "node scripts/og.mjs"
@@ -14,11 +15,13 @@
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "survival-notebook": "file:.."
+    "survival-notebook": "file:..",
+    "three": "^0.170.0"
   },
   "devDependencies": {
     "@types/node": "^22",
     "@types/react": "^19",
+    "@types/three": "^0.170.0",
     "adm-zip": "^0.5.16",
     "playwright-core": "^1.52.0",
     "sharp": "^0.35.5",

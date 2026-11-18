@@ -93,7 +93,7 @@ export function MapView({ id, rev, places, role, onPlace, players = [], meId = '
     }
     ctx.font = `${12 * devicePixelRatio}px system-ui, sans-serif`
     for (const { p, at } of pins) {
-      const x = sx(at[0] + 0.5), y = sz(at[2] + 0.5), r = 9 * devicePixelRatio, img = iconPic(CAT_ICON[p.cat] || 'paper')
+      const x = sx(at[0] + 0.5), y = sz(at[2] + 0.5), r = 9 * devicePixelRatio, img = iconPic(p.icon || CAT_ICON[p.cat] || 'paper')
       ctx.fillStyle = '#000a'; ctx.beginPath(); ctx.arc(x, y, r + 2 * devicePixelRatio, 0, Math.PI * 2); ctx.fill()
       if (img) ctx.drawImage(img, x - r, y - r, r * 2, r * 2)
       else { ctx.fillStyle = '#f2c14e'; ctx.beginPath(); ctx.arc(x, y, 4 * devicePixelRatio, 0, Math.PI * 2); ctx.fill() }

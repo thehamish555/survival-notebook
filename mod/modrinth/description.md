@@ -7,6 +7,7 @@ Your notebooks live on the website, **[notebook.hamish555.com](https://notebook.
 ## What it does
 
 - **Places:** save where you are with one key, sort places by category, and track one with a compass bar at the top of the screen.
+- **Waypoints:** your places show on screen in the world with their icon and the distance. Places your synced minimap already shows are skipped.
 - **Map:** a shared map of everywhere your group has explored, with your places and your team on it. Drag to move, scroll to zoom, click a place to track it, and right-click to add one.
 - **Team:** see where everyone is, live, with their own face. People who have logged off stay where they left, dimmed.
 - **Gear:** keeps a list of your enchanted gear and shows which enchantments each item is still missing.

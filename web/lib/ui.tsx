@@ -2,11 +2,15 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { downloadFile, uploadFile } from '@/lib/api'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { Logo, TabIcon } from '@/components/PixelIcon'
 import { MODRINTH_URL } from '@/lib/site'
 import { CHANGELOG, LINKS, clipWords } from '@/lib/data'
 import { getVolume, play, setSound, setVolume, soundOn } from '@/lib/sound'
 import { looksPasted, parsePaste, type Pasted } from '@/lib/coords'
+
+// three.js only loads when someone opens a schematic
+const Schematic3D = dynamic(() => import('@/components/notebook/Schematic3D').then(m => m.Schematic3D), { ssr: false })
 
 type Opts = { title: string; body?: string; ok?: string; danger?: boolean }
 const Ctx = createContext<(o: Opts) => Promise<boolean>>(async () => false)
@@ -166,7 +170,7 @@ export function YtCell({ r, patch }: any) {
 }
 
 export function FileCell({ r, patch }: any) {
-  const nb = useContext(NbId), confirm = useConfirm(), [busy, setBusy] = useState(false), [err, setErr] = useState('')
+  const nb = useContext(NbId), confirm = useConfirm(), [busy, setBusy] = useState(false), [err, setErr] = useState(''), [view, setView] = useState(false)
   const pick = async (f?: File) => {
     if (!f) return; setErr('')
     if (!/\.litematic$/i.test(f.name)) return setErr('Only .litematic files')
@@ -178,7 +182,9 @@ export function FileCell({ r, patch }: any) {
     {r.file
       ? <span className="chip t-teal file"><span className="x" role="button" title="Download" onClick={() => downloadFile(nb, r.file).catch(e => setErr(e.message))}>⭳ {r.file.name} · {Math.max(1, Math.round(r.file.size / 1024))} KB</span><button className="x" title="Remove file" onClick={drop}>✕</button></span>
       : <label className="upl">{busy ? 'Uploading…' : '+ Upload .litematic'}<input type="file" accept=".litematic" hidden disabled={busy} onChange={e => { pick(e.target.files?.[0]); e.target.value = '' }} /></label>}
+    {r.file && <button className="ghost small view3d" onClick={() => setView(true)}>View in 3D</button>}
     {err && <div className="err" style={{ fontSize: 12 }}>{err}</div>}
+    {view && r.file && <Schematic3D nb={nb} file={r.file} title={r.name || 'Unnamed farm'} onClose={() => setView(false)} />}
   </div>
 }
 

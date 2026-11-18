@@ -111,7 +111,7 @@ final class Names {
 		return "All Purpose";
 	}
 
-	private static double[] parse(String s) {
+	static double[] parse(String s) {
 		String[] a = s == null ? new String[0] : s.trim().split("\\s+");
 		if (a.length != 3) return null;
 		try { return new double[] {Double.parseDouble(a[0]), Double.parseDouble(a[1]), Double.parseDouble(a[2])}; } catch (NumberFormatException e) { return null; }

@@ -7,6 +7,8 @@ import type { AppEnv, Ctx } from '../types'
 
 const Rename = z.object({ name: z.string().trim().min(1, 'Enter a display name').max(40) })
 const Delete = z.object({ email: z.string().max(254) })
+const validTz = (tz: string) => { try { new Intl.DateTimeFormat('en', { timeZone: tz }); return true } catch { return false } }
+const Tz = z.object({ tz: z.string().max(64).refine(validTz, 'Unknown timezone') })
 
 export const accountRoutes = (ctx: Ctx) => {
   const { db, bus } = ctx, r = new Hono<AppEnv>(), auth = requireAuth(ctx)
@@ -17,6 +19,12 @@ export const accountRoutes = (ctx: Ctx) => {
     db.prepare('update users set name=? where id=?').run(b.data.name, c.get('uid')); return c.json({ ok: true })
   })
 
+  // The browser's timezone, so the weekly recap arrives at 7pm your time
+  r.put('/me/tz', auth, async c => {
+    const b = await readBody(c, Tz); if (!b.ok) return b.res
+    db.prepare('update users set tz=? where id=?').run(b.data.tz, c.get('uid')); return c.json({ ok: true })
+  })
+
   // Deletes the account, every notebook it owns, its memberships, tokens, push subscriptions, gear and inventory.
   r.delete('/me', auth, async c => {
     const b = await readBody(c, Delete); if (!b.ok) return b.res
@@ -24,7 +32,7 @@ export const accountRoutes = (ctx: Ctx) => {
     if (b.data.email.trim().toLowerCase() !== emailOf(uid)) return c.json({ error: 'That is not your email address' }, 403)
     db.transaction(() => {
       for (const { nb } of db.prepare("select nb from members where user=? and role='owner'").all(uid) as { nb: string }[]) {
-        for (const t of ['sections', 'members', 'files', 'activity', 'invites', 'map_tiles', 'positions']) db.prepare(`delete from ${t} where nb=?`).run(nb)
+        for (const t of ['sections', 'members', 'files', 'activity', 'invites', 'map_tiles', 'positions', 'play']) db.prepare(`delete from ${t} where nb=?`).run(nb)
         db.prepare('delete from notebooks where id=?').run(nb)
       }
       for (const { nb } of db.prepare('select nb from members where user=?').all(uid) as { nb: string }[]) {
@@ -32,6 +40,7 @@ export const accountRoutes = (ctx: Ctx) => {
       }
       db.prepare('delete from members where user=?').run(uid)
       db.prepare('delete from positions where user=?').run(uid)
+      db.prepare('delete from play where user=?').run(uid)
       db.prepare('delete from api_tokens where user=?').run(uid)
       db.prepare('delete from push_subs where user=?').run(uid)
       db.prepare('delete from users where id=?').run(uid)

@@ -41,6 +41,7 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 		quickKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.survival_notebook.quick_save", InputConstants.Type.KEYBOARD, SDLScancode.SDL_SCANCODE_UNKNOWN, category));
 		hudKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.survival_notebook.toggle_hud", InputConstants.Type.KEYBOARD, SDLScancode.SDL_SCANCODE_H, category));
 
+		HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT, Identifier.fromNamespaceAndPath(ID, "waypoints"), Waypoints::extract);
 		HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT, Identifier.fromNamespaceAndPath(ID, "todo_hud"), TodoHud::extract);
 		HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT, Identifier.fromNamespaceAndPath(ID, "compass_hud"), CompassHud::extract);
 		ClientTickEvents.END_CLIENT_TICK.register(this::onTick);

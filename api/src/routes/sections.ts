@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { canEdit, getRole } from '../access'
 import { requireAuth } from '../middleware'
 import { diffRows, logActivity } from '../activity'
-import { newAssignments, newDeaths, newlyBuilt, newlyDone, stampBy, whoAndWhere } from '../push'
+import { listOf, newAssignments, newDeaths, newlyBuilt, newlyDone, rowsIn, stampBy, whoAndWhere } from '../push'
 import { OWN_RE, SECTIONS } from '../seed'
 import type { AppEnv, Ctx } from '../types'
 
@@ -31,15 +31,38 @@ export const sectionRoutes = (ctx: Ctx) => {
     const who = () => whoAndWhere(db, nb, by)
     if (section === 'todos' || section === 'farms') {
       const farm = section === 'farms', url = `/n/${nb}#${farm ? 'farms' : 'todo'}`
-      for (const r of newAssignments(prev, next, by, members)) { const { name, title } = who(); ctx.notify(r.assignee, { title, body: `${name} assigned you ${farm ? `the farm “${clip(r.name, 'Unnamed farm')}”` : `“${clip(r.project, 'Untitled to-do')}”`}`, url }) }
-      if (!farm) for (const r of newlyDone(prev, next, by)) if (members.has(r.by)) { const { name, title } = who(); ctx.notify(r.by, { title, body: `${name} finished “${clip(r.project, 'Untitled to-do')}”`, url }) }
-      if (farm) for (const r of newlyBuilt(prev, next)) { const { name, title } = who(); for (const m of others) ctx.notify(m, { title, body: `${name} built the farm “${clip(r.name, 'Unnamed farm')}”`, url }) }
+      for (const r of newAssignments(prev, next, by, members)) { const { name, title } = who(); ctx.notify(r.assignee, { title, body: `${name} assigned you ${farm ? `the farm “${clip(r.name, 'Unnamed farm')}”` : `“${clip(r.project, 'Untitled to-do')}”`}`, url }, 'assigned') }
+      if (!farm) for (const r of newlyDone(prev, next, by)) if (members.has(r.by)) { const { name, title } = who(); ctx.notify(r.by, { title, body: `${name} finished “${clip(r.project, 'Untitled to-do')}”`, url }, 'finished') }
+      if (farm) for (const r of newlyBuilt(prev, next)) { const { name, title } = who(); for (const m of others) ctx.notify(m, { title, body: `${name} built the farm “${clip(r.name, 'Unnamed farm')}”`, url }, 'built') }
+    }
+    if (section === 'todos' || section === 'coords') {   // gathered for a minute, so a row that's still being typed goes out with its real name
+      const prevRows = new Map(rowsIn(prev).map(r => [r?.id, r])), field = section === 'todos' ? 'project' : 'name'
+      const fresh = next.filter(r => r && !r.auto && (!prevRows.has(r.id) || !String(prevRows.get(r.id)?.[field] || '').trim())).map(r => String(r.id))
+      if (fresh.length) later(nb, by, section, fresh)
     }
     if (section === 'deaths') for (const r of newDeaths(prev, next)) {
       const { title } = who(), dead = whoAndWhere(db, nb, typeof r.uid === 'string' ? r.uid : by).name
       const where = r.nether ? ' in the Nether' : r.end ? ' in the End' : ''
-      for (const m of memberIds.filter(m => m !== r.uid && m !== by)) ctx.notify(m, { title, body: r.cause ? clip(r.cause, '') : `${dead} died${where}`, url: `/n/${nb}#deaths` })
+      for (const m of memberIds.filter(m => m !== r.uid && m !== by)) ctx.notify(m, { title, body: r.cause ? clip(r.cause, '') : `${dead} died${where}`, url: `/n/${nb}#deaths` }, 'deaths')
     }
+  }
+
+  // New places and to-dos: "Sam added 3 places: Base, Iron farm and Mesa". Sent a minute after the first one, with the names as they are by then.
+  const pending = new Map<string, { ids: Set<string>; timer: ReturnType<typeof setTimeout> }>()
+  const later = (nb: string, by: string, section: string, ids: string[]) => {
+    const key = `${nb}|${by}|${section}`, p = pending.get(key)
+    if (p) { ids.forEach(i => p.ids.add(i)); return }
+    const timer = setTimeout(() => { const q = pending.get(key); pending.delete(key); if (q) sendAdded(nb, by, section, q.ids) }, ctx.config.NODE_ENV === 'test' ? 20 : 60_000)
+    timer.unref?.(); pending.set(key, { ids: new Set(ids), timer })
+  }
+  const sendAdded = (nb: string, by: string, section: string, ids: Set<string>) => {
+    const raw = (db.prepare('select data from sections where nb=? and name=?').get(nb, section) as { data: string } | undefined)?.data
+    const places = section === 'coords', names = rowsIn(raw).filter(r => ids.has(String(r?.id))).map(r => String((places ? r.name : r.project) || '').trim().slice(0, 60)).filter(Boolean)
+    if (!names.length) return
+    const { name, title } = whoAndWhere(db, nb, by)
+    const what = names.length === 1 ? `${places ? 'the place' : 'the to-do'} “${names[0]}”` : `${names.length} ${places ? 'places' : 'to-dos'}: ${listOf(names)}`
+    for (const { user } of db.prepare('select user from members where nb=? and user<>?').all(nb, by) as { user: string }[])
+      ctx.notify(user, { title, body: `${name} added ${what}`, url: `/n/${nb}#${places ? 'coordinates' : 'todo'}` }, places ? 'places' : 'todos')
   }
 
   r.get('/notebooks/:id/s/:name', auth, c => {
@@ -71,7 +94,7 @@ export const sectionRoutes = (ctx: Ctx) => {
     })()
     if ('conflict' in result) return c.json({ error: 'Out of date — someone else changed this just now', rev: result.conflict }, 409)
     if (name === 'farms') sweep(id, data.data as any[])
-    if (name === 'todos' || name === 'farms' || name === 'deaths') notifyChanges(id, uid, name, result.prev, data.data as any[])
+    if (name === 'todos' || name === 'farms' || name === 'deaths' || name === 'coords') notifyChanges(id, uid, name, result.prev, data.data as any[])
     bus.emit(id, { section: name, rev: result.rev, by: uid, cid: c.req.header('x-client-id') || '' })   // cid lets a browser tab ignore its own echo but see edits from the mod or other tabs
     return c.json({ rev: result.rev })
   })

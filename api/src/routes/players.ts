@@ -2,12 +2,14 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { getRole } from '../access'
 import { requireAuth } from '../middleware'
+import { whoAndWhere } from '../push'
 import { readBody } from '../validate'
 import type { AppEnv, Ctx } from '../types'
 
 // Where each player is, so the team can see each other on the map (website and mod). Each player's last position is kept,
 // so someone who has logged off still shows where they left, greyed out with when they were last seen.
 export const ONLINE_FOR = 120_000   // no update for two minutes (or they left the world) = offline
+const AWAY_FOR = 20 * 60_000          // "Sam is playing" only after 20 minutes away, so rejoining doesn't spam
 export type Pos = { uid: string; name: string; dim: 'ow' | 'nether' | 'end'; x: number; y: number; z: number; yaw: number; ts: number; online: boolean; mcName: string; mcUuid: string }
 const UUID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
 const Body = z.object({
@@ -33,6 +35,15 @@ export const playerRoutes = (ctx: Ctx) => {
     const id = c.req.param('id'), uid = c.get('uid'); if (!getRole(db, id, uid)) return c.json({ error: 'not found' }, 404)
     const b = await readBody(c, Body); if (!b.ok) return b.res
     const d = b.data, now = Date.now()
+    const before = db.prepare('select dim, x, z, ts, online from positions where nb=? and user=?').get(id, uid) as { dim: string; x: number; z: number; ts: number; online: number } | undefined
+    if (before?.online && now - before.ts < ONLINE_FOR) {   // still playing since the last update: add the time and the distance to today's total
+      const moved = before.dim === d.dim ? Math.min(2000, Math.hypot(d.x - before.x, d.z - before.z)) : 0
+      db.prepare(`insert into play(nb,user,day,ms,dist) values(?,?,?,?,?) on conflict(nb,user,day) do update set ms=ms+excluded.ms, dist=dist+excluded.dist`)
+        .run(id, uid, new Date(now).toISOString().slice(0, 10), now - before.ts, moved)
+    } else if (!before || now - before.ts > AWAY_FOR) {     // back after a while: let the team know, if they want that
+      const { name, title } = whoAndWhere(db, id, uid)
+      for (const { user } of db.prepare('select user from members where nb=? and user<>?').all(id, uid) as { user: string }[]) ctx.notify(user, { title, body: `${name} is playing`, url: `/n/${id}#map` }, 'online')
+    }
     db.prepare(`insert into positions(nb,user,dim,x,y,z,yaw,ts,online,mc_name,mc_uuid) values(?,?,?,?,?,?,?,?,1,?,?)
       on conflict(nb,user) do update set dim=excluded.dim, x=excluded.x, y=excluded.y, z=excluded.z, yaw=excluded.yaw, ts=excluded.ts, online=1,
         mc_name=case when excluded.mc_name<>'' then excluded.mc_name else positions.mc_name end, mc_uuid=case when excluded.mc_uuid<>'' then excluded.mc_uuid else positions.mc_uuid end`)
@@ -76,6 +87,34 @@ export const playerRoutes = (ctx: Ctx) => {
     }
     if (!hit.png) return c.json({ error: 'no skin' }, 404)
     return c.body(hit.png as any, 200, { 'content-type': 'image/png', 'cache-control': 'private, max-age=21600' })
+  })
+
+  // The skin on a player head in a schematic, for the 3D viewer: by texture hash (most files have it), or the owner's UUID or name.
+  // Fetched by the server from Mojang only (so browsers never contact anyone else), and kept for a day.
+  const heads = new Map<string, { at: number; png: Uint8Array | null }>()
+  const getJson = async (url: string) => { const res = await fetch(url, { signal: AbortSignal.timeout(5000) }); return res.ok ? res.json() : null }
+  r.get('/skins/:key', auth, async c => {
+    const key = c.req.param('key')
+    const kind = /^[0-9a-f]{40,64}$/.test(key) && key.length !== 32 ? 'hash' : /^[0-9a-f]{32}$/.test(key) ? 'uuid' : /^[A-Za-z0-9_]{1,16}$/.test(key) ? 'name' : null
+    if (!kind) return c.json({ error: 'not a skin' }, 400)
+    let hit = heads.get(key)
+    if (!hit || Date.now() - hit.at > 24 * 3_600_000) {
+      hit = { at: Date.now(), png: null }
+      try {
+        let hash = kind === 'hash' ? key : ''
+        if (!hash) {
+          const uuid = kind === 'uuid' ? key : (await getJson(`https://api.mojang.com/users/profiles/minecraft/${key}`))?.id
+          const prof = typeof uuid === 'string' && /^[0-9a-f]{32}$/.test(uuid) ? await getJson(`https://sessionserver.mojang.com/session/minecraft/profile/${uuid}`) : null
+          const tex = JSON.parse(Buffer.from(prof?.properties?.find((p: any) => p.name === 'textures')?.value || '', 'base64').toString('utf8') || '{}')
+          hash = String(tex?.textures?.SKIN?.url || '').match(/\/texture\/([0-9a-f]{40,64})$/)?.[1] || ''
+        }
+        if (hash) { const res = await fetch(`https://textures.minecraft.net/texture/${hash}`, { signal: AbortSignal.timeout(5000) }); if (res.ok) hit.png = new Uint8Array(await res.arrayBuffer()) }
+      } catch { /* offline or unknown: the viewer shows Steve */ }
+      if (heads.size >= 500) heads.delete(heads.keys().next().value!)
+      heads.set(key, hit)
+    }
+    if (!hit.png) return c.json({ error: 'no skin' }, 404)
+    return c.body(hit.png as any, 200, { 'content-type': 'image/png', 'cache-control': 'private, max-age=86400' })
   })
   return r
 }

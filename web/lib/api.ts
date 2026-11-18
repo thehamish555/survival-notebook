@@ -24,6 +24,12 @@ export const googleLogin = (credential: string) =>
   call('/auth/google', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ credential }) })
 export const uploadFile = (nb: string, f: File) =>
   call(`/notebooks/${nb}/files?name=${encodeURIComponent(f.name)}`, { method: 'POST', headers: auth({ 'content-type': 'application/octet-stream' }), body: f })
+/** A notebook file's bytes (for the 3D viewer). */
+export async function fetchFile(nb: string, id: string) {
+  const r = await fetch(`${BASE}/notebooks/${nb}/files/${id}`, { headers: auth() })
+  if (!r.ok) throw new Error('Couldn’t load the file')
+  return r.arrayBuffer()
+}
 export async function downloadFile(nb: string, file: { id: string; name: string }) {
   const r = await fetch(`${BASE}/notebooks/${nb}/files/${file.id}`, { headers: auth() })
   if (!r.ok) throw new Error('Download failed')

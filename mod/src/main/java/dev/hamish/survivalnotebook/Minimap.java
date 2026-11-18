@@ -22,7 +22,8 @@ import java.util.stream.Stream;
 final class Minimap {
 	private Minimap() { }
 
-	record Wp(String name, String dim, String xyz) { }                       // dim: ow | nether | end
+	/** dim: ow | nether | end. shown: the minimap draws it in the world (it isn't disabled there). */
+	record Wp(String name, String dim, String xyz, boolean shown) { }
 	record Source(String app, String world, Path dir, int count, long modified) { }
 
 	/** All waypoint sets found under the game directory, newest first. */
@@ -89,7 +90,8 @@ final class Minimap {
 						if (a.length > 8 && a[8].trim().equals("1")) continue;   // type 1 = a death marker
 						String pos = xyz(a[3], a[4], a[5]);
 						String name = a[1].replace("§§", ":").trim();
-						if (pos != null && !name.isEmpty()) out.add(new Wp(name, dim, pos));
+						boolean off = a.length > 7 && a[7].trim().equals("true");   // "disabled" in Xaero's
+						if (pos != null && !name.isEmpty()) out.add(new Wp(name, dim, pos, !off));
 					}
 				} catch (IOException | RuntimeException ignored) { }
 			}
@@ -109,19 +111,59 @@ final class Minimap {
 				if (name.isEmpty() || !o.has("x") || !o.has("z")) continue;
 				String pos = xyz(o.get("x").getAsString(), o.has("y") ? o.get("y").getAsString() : "~", o.get("z").getAsString());
 				if (pos == null) continue;
+				boolean on = !(o.has("enable") && !o.get("enable").getAsBoolean()) && !(o.has("enabled") && !o.get("enabled").getAsBoolean());
 				if (o.has("dimensions") && o.get("dimensions").isJsonArray()) {
 					for (JsonElement d : o.getAsJsonArray("dimensions")) {
 						String s = d.getAsString();
 						String dim = s.endsWith("the_nether") ? "nether" : s.endsWith("the_end") ? "end" : s.endsWith("overworld") ? "ow" : null;
-						if (dim != null) out.add(new Wp(name, dim, pos));
+						if (dim != null) out.add(new Wp(name, dim, pos, on));
 					}
-				} else out.add(new Wp(name, "ow", pos));
+				} else out.add(new Wp(name, "ow", pos, on));
 			} catch (IOException | RuntimeException ignored) { }
 		}
 		return out;
 	}
 
-	private static String key(Wp w) { return w.name().toLowerCase() + "|" + w.dim() + "|" + w.xyz(); }
+	private static String key(Wp w) { return key(w.name(), w.dim(), w.xyz()); }
+	private static String key(String name, String dim, String xyz) { return name.trim().toLowerCase() + "|" + dim + "|" + xyz.trim().replaceAll("\\s+", " "); }
+
+	// ---- which places the minimap already draws in the world, so our own waypoints can skip them
+
+	private static volatile Set<String> shownKeys = Set.of();
+	private static volatile long shownChecked, shownModified = -1;
+	private static volatile boolean shownBusy;
+
+	/** True if the minimap mod you sync with is installed and draws this exact waypoint in the world itself. */
+	static boolean drawsInWorld(String name, String dim, String xyz) {
+		NbConfig c = NbConfig.get();
+		if (c.mmDir.isBlank() || !installed(c.mmApp)) return false;
+		refreshShown(c);
+		return shownKeys.contains(key(name, dim, xyz));
+	}
+
+	private static boolean installed(String app) {
+		var fl = net.fabricmc.loader.api.FabricLoader.getInstance();
+		return app.equals("JourneyMap") ? fl.isModLoaded("journeymap") : fl.isModLoaded("xaerominimap") || fl.isModLoaded("xaerominimapfair");
+	}
+
+	/** Re-reads the minimap's files in the background every few seconds, only when they changed. */
+	private static void refreshShown(NbConfig c) {
+		long now = System.currentTimeMillis();
+		if (shownBusy || now - shownChecked < 4000) return;
+		shownChecked = now; shownBusy = true;
+		final String dir = c.mmDir, app = c.mmApp;
+		Api.EXEC.execute(() -> {
+			try {
+				Path d = Path.of(dir);
+				long m = newest(app.equals("JourneyMap") ? d.resolve("waypoints") : d);
+				if (m == shownModified) return;
+				Set<String> keys = new HashSet<>();
+				for (Wp w : read(new Source(app, "", d, 0, m))) if (w.shown()) keys.add(key(w));
+				shownKeys = keys; shownModified = m;
+			} catch (RuntimeException ignored) { }
+			finally { shownBusy = false; }
+		});
+	}
 	private static String sv(JsonObject o, String k) { return o.has(k) && o.get(k).isJsonPrimitive() ? o.get(k).getAsString() : ""; }
 
 	/**
