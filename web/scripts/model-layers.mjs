@@ -22,7 +22,7 @@ export function parseClass(buf) {
     }
   }
   const utf = i => cp[i].s
-  o += 6; const ifs = u2(); o += ifs * 2
+  o += 2; const self = u2(), sup = u2(); const superName = sup ? utf(cp[sup].a) : null; const ifs = u2(); o += ifs * 2
   const skipAttrs = () => { const c = u2(); for (let i = 0; i < c; i++) { o += 2; const l = u4(); o += l } }
   const fc = u2(); for (let i = 0; i < fc; i++) { o += 6; skipAttrs() }
   const methods = new Map()
@@ -42,7 +42,7 @@ export function parseClass(buf) {
     if (an === 'BootstrapMethods') { const c = u2(); for (let i = 0; i < c; i++) { const ref = u2(), na = u2(), args = []; for (let j = 0; j < na; j++) args.push(u2()); boot.push({ ref, args }) } }
     o = end
   }
-  return { cp, utf, methods, boot }
+  return { cp, utf, methods, boot, superName }
 }
 
 // ---- what the model builders make
@@ -58,8 +58,9 @@ export function makeReader(readClassBytes) {
   const load = name => { if (!classes.has(name)) { const b = readClassBytes(name); classes.set(name, b ? parseClass(b) : null) } return classes.get(name) }
 
   function run(owner, name, desc, args) {
-    const cls = load(owner); if (!cls) throw new Error(`no class ${owner}`)
-    const m = cls.methods.get(name + desc); if (!m) throw new Error(`no method ${owner}.${name}${desc}`)
+    let cls = load(owner); if (!cls) throw new Error(`no class ${owner}`)
+    while (cls && !cls.methods.has(name + desc) && cls.superName && name !== '<clinit>') cls = load(cls.superName)   // inherited static helpers
+    const m = cls?.methods.get(name + desc); if (!m) throw new Error(`no method ${owner}.${name}${desc}`)
     const { cp, utf } = cls, code = m.code, loc = new Array(Math.max(m.maxLocals, args.length)).fill(undefined), st = []
     // arguments: longs/doubles take two slots
     let li = 0; const params = desc.slice(1, desc.indexOf(')')).match(/\[*(L[^;]+;|[ZBCSIFJD])/g) || []
@@ -130,7 +131,7 @@ export function makeReader(readClassBytes) {
         case 0xac: case 0xad: case 0xae: case 0xaf: case 0xb0: return st.pop()
         case 0xb1: return undefined
         case 0xb2: { const r = ref(u2()); st.push(getStatic(r)); break }
-        case 0xb3: { u2(); st.pop(); break }
+        case 0xb3: { const r = ref(u2()); staticsOf(r.owner).set(r.name, st.pop()); break }
         case 0xb4: { const r = ref(u2()), obj = st.pop(); st.push(obj?.[r.name] ?? 0); break }
         case 0xb5: { const r = ref(u2()), v = st.pop(), obj = st.pop(); if (obj) obj[r.name] = v; break }
         case 0xb6: case 0xb7: case 0xb8: case 0xb9: {
@@ -145,7 +146,10 @@ export function makeReader(readClassBytes) {
           const i = u2(); pc += 2
           const c = cp[i], nt = cp[c.b], nm = utf(nt.a), d = utf(nt.b), b = cls.boot[c.a]
           const n = (d.slice(1, d.indexOf(')')).match(/\[*(L[^;]+;|[ZBCSIFJD])/g) || []).length, a = st.splice(st.length - n, n)
-          if (nm !== 'makeConcatWithConstants') { st.push({ k: 'Lambda', name: nm }); break }
+          if (nm !== 'makeConcatWithConstants') {   // a lambda: remembers the method it runs and what it captured
+            const h = cp[b.args[1]], target = h?.t === 15 ? ref(h.a) : null
+            st.push({ k: 'Lambda', name: nm, target, captured: a }); break
+          }
           const recipe = ldc(b.args[0]); let k = 0
           st.push(recipe.replace(/\u0001/g, () => String(a[k++])))
           break
@@ -161,26 +165,43 @@ export function makeReader(readClassBytes) {
     }
   }
 
+  // Static fields set by a class's static initialiser (run once, the first time one is read), like LayerDefinitions' armour sizes
+  const statics = new Map(), started = new Set()
+  const staticsOf = owner => { if (!statics.has(owner)) statics.set(owner, new Map()); return statics.get(owner) }
+  const OURS = /^net\/minecraft\/client\/(model|renderer)\//
   function getStatic({ owner, name }) {
     if (owner.endsWith('/PartPose') && name === 'ZERO') return pose()
     if (owner.endsWith('/CubeDeformation') && name === 'NONE') return deform()
     if (ENUMS.has(owner)) return { k: 'Enum', name }
     if (owner === 'net/minecraft/util/Mth' && name === 'PI') return Math.PI
-    return { k: 'Static', owner, name }
+    if (owner.endsWith('/ModelLayers')) return { k: 'Layer', name }
+    if (OURS.test(owner) && !started.has(owner)) {
+      started.add(owner)
+      try { if (load(owner)?.methods.has('<clinit>()V')) run(owner, '<clinit>', '()V', []) } catch { /* fields it couldn't make stay unknown */ }
+    }
+    return staticsOf(owner).has(name) ? staticsOf(owner).get(name) : { k: 'Static', owner, name }
   }
 
+  function callLambda(l, a) {
+    if (l?.k !== 'Lambda' || !l.target) throw new Error('not a lambda')
+    return run(l.target.owner, l.target.name, l.target.desc, [...l.captured, ...a])
+  }
   function call({ owner, name, desc }, self, a) {
+    if (self?.k === 'Lambda' && self.target && OURS.test(self.target.owner)) return callLambda(self, a)   // UnaryOperator.apply, MeshTransformer.apply and so on
     const short = owner.slice(owner.lastIndexOf('/') + 1)
     // constructors of the builder types
     if (name === '<init>') {
       if (self?.k === 'New') {
         if (short === 'CubeDeformation') Object.assign(self, a.length === 1 ? deform(a[0]) : deform(a[0], a[1], a[2]))
-        else if (short === 'MeshDefinition') Object.assign(self, { k: 'MeshDefinition', root: partDef() })
+        else if (short === 'MeshDefinition') Object.assign(self, { k: 'MeshDefinition', root: a[0]?.k === 'PartDefinition' ? a[0] : partDef() })
+        else if (short === 'CubeListBuilder') Object.assign(self, builder())
       }
       return
     }
     switch (short + '.' + name) {
       case 'MeshDefinition.getRoot': return self.root
+      case 'MeshDefinition.transformed': { const r = self.root; return { k: 'MeshDefinition', root: { ...r, pose: callLambda(a[0], [r.pose]) } } }
+      case 'PartDefinition.transformed': return { ...self, pose: callLambda(a[0], [self.pose]), children: new Map(self.children) }
       case 'CubeListBuilder.create': return builder()
       case 'CubeListBuilder.texOffs': self.u = a[0]; self.v = a[1]; return self
       case 'CubeListBuilder.mirror': self.mirror = a.length ? !!a[0] : true; return self
@@ -205,7 +226,10 @@ export function makeReader(readClassBytes) {
       case 'PartPose.scaled': return { ...self, xScale: self.xScale * a[0], yScale: self.yScale * a[0], zScale: self.zScale * a[0] }
       case 'PartPose.withRotation': case 'PartPose.offsetAndRotation_': return pose(self.x, self.y, self.z, a[0], a[1], a[2])
       case 'CubeDeformation.extend': return a.length === 1 ? deform(self.x + a[0], self.y + a[0], self.z + a[0]) : deform(self.x + a[0], self.y + a[1], self.z + a[2])
-      case 'PartDefinition.addOrReplaceChild': { const p = partDef(a[1].cubes, a[2]); self.children.set(a[0], p); return p }
+      case 'PartDefinition.addOrReplaceChild': {   // a replaced part keeps its children, like the game's
+        const p = partDef(a[1].cubes, a[2]), old = self.children.get(a[0]); if (old) for (const [k, v] of old.children) p.children.set(k, v)
+        self.children.set(a[0], p); return p
+      }
       case 'PartDefinition.getChild': return self.children.get(a[0])
       case 'PartDefinition.clearChild': self.children.set(a[0], partDef()); return self.children.get(a[0])
       case 'PartDefinition.clearRecursively': self.cubes = []; for (const k of self.children.keys()) self.children.set(k, partDef([], self.children.get(k).pose)); return self
@@ -217,16 +241,43 @@ export function makeReader(readClassBytes) {
       case 'Math.toRadians': return a[0] * Math.PI / 180
       case 'Float.valueOf': case 'Integer.valueOf': case 'Float.floatValue': return a[0] ?? self
       case 'ImmutableList.of': case 'List.of': return a
+      case 'Set.of': case 'ImmutableSet.of': return { k: 'Set', items: a }
+      // LayerDefinitions.createRoots: every layer put in a map under its ModelLayers name, some scaled down (MeshTransformer.scaling)
+      case 'ImmutableMap.builder': return { k: 'MapBuilder', map: new Map() }
+      case 'ImmutableMap$Builder.put': if (self?.k === 'MapBuilder' && a[0]?.k === 'Layer') self.map.set(a[0].name, a[1]); return self
+      case 'ImmutableMap$Builder.build': case 'ImmutableMap$Builder.buildOrThrow': return self?.map
+      case 'MeshTransformer.scaling': return { k: 'Scaling', f: a[0] }
+      case 'LayerDefinition.apply': {
+        if (self?.k !== 'LayerDefinition') return self
+        if (a[0]?.k === 'Lambda' && a[0].target) { try { return { ...self, mesh: callLambda(a[0], [self.mesh]) } } catch { return { ...self, odd: true } } }
+        if (a[0]?.k !== 'Scaling') return { ...self, odd: true }   // a transform this can't follow (baby heads): left as it was, and marked
+        const f = a[0].f, r = self.mesh.root.pose
+        return { ...self, mesh: { ...self.mesh, root: { ...self.mesh.root, pose: { ...r, xScale: r.xScale * f, yScale: r.yScale * f, zScale: r.zScale * f, y: r.y + 24.016 * (1 - f) } } } }
+      }
     }
     // anything else inside the game's model code (shared helpers like HumanoidModel.createMesh): run it too
-    if (owner.startsWith('net/minecraft/client/model/') && !self) return run(owner, name, desc, a)
+    if (OURS.test(owner) && !self && name !== '<clinit>') {
+      if (!lenient) return run(owner, name, desc, a)
+      try { return run(owner, name, desc, a) } catch (e) { return { k: 'Failed', why: e.message } }
+    }
+    if (lenient) return { k: 'Unknown', owner, name }
     throw new Error(`can't run ${owner}.${name}${desc}`)
   }
+  let lenient = false
 
   /** Runs owner.name (a static model method with no arguments, or with args) and returns its parts tree, texture size and part names. */
-  return function layer(owner, name, desc, args = []) {
+  function layer(owner, name, desc, args = []) {
     const out = run(owner, name, desc, args)
     const mesh = out?.k === 'LayerDefinition' ? out.mesh : out
     return { root: mesh.root, w: out?.w ?? 64, h: out?.h ?? 64 }
   }
+  /** Every model layer the game registers (LayerDefinitions.createRoots), by its ModelLayers name: { root, w, h, odd? } or { failed }. */
+  function roots() {
+    lenient = true
+    try {
+      const map = run('net/minecraft/client/model/geom/LayerDefinitions', 'createRoots', '()Ljava/util/Map;', [])
+      return new Map([...(map || new Map())].map(([k, v]) => [k, v?.k === 'LayerDefinition' ? { root: v.mesh.root, w: v.w, h: v.h, odd: !!v.odd } : { failed: v?.why || v?.k || 'nothing' }]))
+    } finally { lenient = false }
+  }
+  return Object.assign(layer, { roots })
 }

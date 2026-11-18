@@ -91,11 +91,14 @@ for (const [k, c] of Object.entries(TINTS)) if (blocks[k]) blocks[k].t = c
 // Fluids have no model: the viewer draws them as a slightly lower box
 for (const [k, t] of [['water', 'block/water_still'], ['lava', 'block/lava_still']]) blocks[k] = { ...(blocks[k] || {}), fluid: tex(t) }
 
-// Chests, shulker boxes, banners, heads, pots and bells: drawn by code in the game, shapes copied in block-entities.mjs
-const big = addBlockEntities({ hasBlock: n => !!zip.getEntry(`assets/minecraft/blockstates/${n}.json`), tex, models, blocks })
-// Mobs, armor stands, boats, minecarts and item frames: their shapes read from the game's model code
+// Every entity and block entity model the game registers, read from its code (model-layers.mjs)
+const layer = makeReader(name => zip.getEntry(name + '.class')?.getData()), roots = layer.roots()
+for (const [k, v] of roots) if (v.failed) console.warn('Model layer', k, 'could not be read:', v.failed)
+// Chests, shulker boxes, banners, heads, pots, bells, conduits and statues: drawn by code in the game, shapes made in block-entities.mjs
+const big = addBlockEntities({ hasBlock: n => !!zip.getEntry(`assets/minecraft/blockstates/${n}.json`), tex, models, blocks, roots })
+// Mobs, armor stands, boats, minecarts and item frames
 const entities = addEntities({
-  layer: makeReader(name => zip.getEntry(name + '.class')?.getData()),
+  layer, roots,
   bigTex: p => { const i = tex(p); big.set(i, p); return i },
   box: ref => models[model(ref)].b || [],
 })
@@ -125,16 +128,22 @@ for (let i = 0; i < texList.length; i++) {
 for (const [i, { data, w, h }] of pics) { const [x0, y0] = rects[i]; for (let y = 0; y < h; y++) data.copy(sheet, ((y0 + y) * W + x0) * 4, y * w * 4, (y + 1) * w * 4) }
 const out = path.join('public', 'mc'); fs.mkdirSync(out, { recursive: true })
 await sharp(sheet, { raw: { width: W, height: rows * 16, channels: 4 } }).png({ compressionLevel: 9 }).toFile(path.join(out, 'blocks.png'))
-// Banner pattern layers (the viewer paints each banner from them) and Steve, for heads whose skin can't be loaded
-const ent = path.join(out, 'entity'); fs.rmSync(ent, { recursive: true, force: true }); fs.mkdirSync(path.join(ent, 'banner'), { recursive: true })
+// Entity textures (mobs, banner patterns, villager clothes and the rest), loaded by the viewer as it needs them, and Steve for heads whose skin can't be loaded
+const ent = path.join(out, 'entity'); fs.rmSync(ent, { recursive: true, force: true })
 for (const e of zip.getEntries()) {
-  const n = e.entryName.match(/^assets\/minecraft\/textures\/entity\/banner\/([a-z0-9_]+)\.png$/)?.[1]
-  if (n && n !== 'banner_base') fs.writeFileSync(path.join(ent, 'banner', n + '.png'), e.getData())
-}
-for (const e of zip.getEntries()) {   // villager biome and job layers, painted over the villager by the viewer
-  const n = e.entryName.match(/^assets\/minecraft\/textures\/entity\/villager\/((type|profession)\/[a-z0-9_]+|villager)\.png$/)?.[1]
-  if (n) { fs.mkdirSync(path.join(ent, 'villager', path.dirname(n)), { recursive: true }); fs.writeFileSync(path.join(ent, 'villager', n + '.png'), e.getData()) }
+  const n = e.entryName.match(/^assets\/minecraft\/textures\/entity\/([a-z0-9_/]+)\.png$/)?.[1]
+  if (!n || /^(equipment|signs|bed|chest|shield|decorated_pot)\//.test(n) || (n.startsWith('player/') && n !== 'player/wide/steve')) continue
+  fs.mkdirSync(path.join(ent, path.dirname(n)), { recursive: true }); fs.writeFileSync(path.join(ent, n + '.png'), e.getData())
 }
 fs.writeFileSync(path.join(ent, 'steve.png'), zip.getEntry('assets/minecraft/textures/entity/player/wide/steve.png').getData())
-fs.writeFileSync(path.join(out, 'blocks.json'), JSON.stringify({ cols: COLS, rows, tex: texList, big: rects, models, blocks, entities }))
+// Paintings: each picture, and how many blocks wide and high it is
+const paint = path.join(out, 'painting'); fs.rmSync(paint, { recursive: true, force: true }); fs.mkdirSync(paint, { recursive: true })
+for (const e of zip.getEntries()) { const n = e.entryName.match(/^assets\/minecraft\/textures\/painting\/([a-z0-9_]+)\.png$/)?.[1]; if (n) fs.writeFileSync(path.join(paint, n + '.png'), e.getData()) }
+const paintings = {}   // pictures are 16 pixels to the block
+for (const e of zip.getEntries()) {
+  const n = e.entryName.match(/^assets\/minecraft\/textures\/painting\/([a-z0-9_]+)\.png$/)?.[1]; if (!n || n === 'back') continue
+  const { width, height } = await sharp(e.getData()).metadata(); paintings[n] = [Math.round(width / 16), Math.round(height / 16)]
+}
+fs.writeFileSync(path.join(out, 'blocks.json'), JSON.stringify({ cols: COLS, rows, tex: texList, big: rects, models, blocks, paintings }))
+fs.writeFileSync(path.join(out, 'entities.json'), JSON.stringify(entities))   // only loaded for schematics with entities in them
 console.log(`${Object.keys(blocks).length} blocks, ${models.length} models, ${texList.length} textures -> public/mc/blocks.json, blocks.png (${(fs.statSync(path.join(out, 'blocks.json')).size / 1024).toFixed(0)} KB json)`)

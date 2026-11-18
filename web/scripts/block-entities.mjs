@@ -68,7 +68,7 @@ const chestParts = type => {
 }
 
 /** Adds the block entities to `models` and `blocks`. `tex(path)` registers a texture; returns the ones to keep at full size. */
-export function addBlockEntities({ hasBlock, tex, models, blocks }) {
+export function addBlockEntities({ hasBlock, tex, models, blocks, roots }) {
   const big = new Map()
   const bigTex = p => { const i = tex(p); big.set(i, p); return i }
   const seen = new Map()   // the same shape is stored once (banners of every colour, waxed chests)
@@ -96,10 +96,30 @@ export function addBlockEntities({ hasBlock, tex, models, blocks }) {
 
   // Heads and skulls (SkullModel, SkullBlockRenderer): on the ground in 16 turns, or on a wall
   const HEADS = { skeleton_skull: ['skeleton/skeleton', 0], wither_skeleton_skull: ['skeleton/wither_skeleton', 0], zombie_head: ['zombie/zombie', 1], creeper_head: ['creeper/creeper', 0], player_head: ['player/wide/steve', 1] }
-  for (const [name, [path, hat]] of Object.entries(HEADS)) {
-    const t = bigTex('entity/' + path), head = [part([cube(0, 0, -4, -8, -4, 8, 8, 8), ...(hat ? [cube(32, 0, -4, -8, -4, 8, 8, 8, { grow: 0.25 })] : [])])]
+  const skull = (name, head, t) => {
     variants(name, Array.from({ length: 16 }, (_, r) => [`rotation=${r}`, bake(head, chain(T(0.5, 0, 0.5), RY(deg(-r * 22.5)), S(-1, -1, 1)), t)]))
     variants(name.replace(/_(skull|head)$/, '_wall_$1'), HORIZ.map(f => [`facing=${f}`, bake(head, chain(T(0.5 - STEP[f][0] * 0.25, 0.25, 0.5 - STEP[f][2] * 0.25), RY(deg(-YROT[OPPOSITE[f]])), S(-1, -1, 1)), t)]))
+  }
+  for (const [name, [path, hat]] of Object.entries(HEADS)) skull(name, [part([cube(0, 0, -4, -8, -4, 8, 8, 8), ...(hat ? [cube(32, 0, -4, -8, -4, 8, 8, 8, { grow: 0.25 })] : [])])], bigTex('entity/' + path))
+  // The dragon's and piglin's heads have shapes of their own (DragonHeadModel, PiglinHeadModel)
+  for (const [name, L, path] of [['dragon_head', 'DRAGON_SKULL', 'enderdragon/dragon'], ['piglin_head', 'PIGLIN_HEAD', 'piglin/piglin']]) {
+    const head = rootParts(roots, L); if (head) skull(name, head, bigTex('entity/' + path))
+  }
+
+  // Conduit, not yet switched on (ConduitRenderer draws just its shell)
+  const conduit = rootParts(roots, 'CONDUIT_SHELL')
+  if (conduit) variants('conduit', [['', bake(conduit, T(0.5, 0.5, 0.5), bigTex('entity/conduit/base'))]])
+
+  // Copper golem statues (CopperGolemStatueBlockRenderer): the copper golem in one of four poses, its root turned upside down as the statue model sets it
+  const POSES = { standing: 'COPPER_GOLEM', running: 'COPPER_GOLEM_RUNNING', sitting: 'COPPER_GOLEM_SITTING', star: 'COPPER_GOLEM_STAR' }
+  for (const [pre, suffix] of [['', ''], ['exposed_', '_exposed'], ['weathered_', '_weathered'], ['oxidized_', '_oxidized']]) {
+    const t = bigTex(`entity/copper_golem/copper_golem${suffix}`), list = []
+    for (const [pose, L] of Object.entries(POSES)) {
+      const golem = rootParts(roots, L); if (!golem) continue
+      golem[0].at = [golem[0].at[0], 0, golem[0].at[2]]; golem[0].rot = [golem[0].rot[0], golem[0].rot[1], Math.PI]
+      for (const f of HORIZ) list.push([`copper_golem_pose=${pose},facing=${f}`, bake(golem, chain(T(0.5, 0, 0.5), RY(deg(-YROT[OPPOSITE[f]]))), t)])
+    }
+    for (const n of [`${pre}copper_golem_statue`, `waxed_${pre}copper_golem_statue`]) variants(n, list)
   }
 
   // Banners (BannerModel, BannerFlagModel, BannerRenderer): the pole in wood, the cloth tinted the banner's colour
@@ -134,7 +154,24 @@ export function addBlockEntities({ hasBlock, tex, models, blocks }) {
 
 /** A parts tree from model-layers.mjs as bake() parts, keeping names so poses can be set and parts picked. */
 const partsOf = node => [...node.children].map(([name, c]) => ({ ...part(c.cubes, { at: [c.pose.x, c.pose.y, c.pose.z], rot: [c.pose.xRot, c.pose.yRot, c.pose.zRot], scale: [c.pose.xScale, c.pose.yScale, c.pose.zScale], kids: partsOf(c) }), name }))
+/** A whole layer from LayerDefinitions.createRoots, its root's pose kept (layers the game shrinks keep their size there), or null. */
+function rootParts(roots, name) {
+  const r = roots?.get(name); if (!r || r.failed) return null
+  const p = r.root.pose
+  return [{ ...part(r.root.cubes, { at: [p.x, p.y, p.z], rot: [p.xRot, p.yRot, p.zRot], scale: [p.xScale, p.yScale, p.zScale], kids: partsOf(r.root) }), name: 'root' }]
+}
 const find = (parts, name) => { for (const p of parts) { if (p.name === name) return p; const k = find(p.kids, name); if (k) return k } return null }
+// Model layers (LayerDefinitions names, lower case) drawn as mobs
+const MOB_LAYERS = `allay armadillo armadillo_baby axolotl axolotl_baby bat bee bee_baby blaze bogged bogged_outer_layer breeze camel camel_baby cat cat_baby cave_spider
+  chicken chicken_baby cold_chicken cod copper_golem cow cow_baby cold_cow cold_cow_baby warm_cow warm_cow_baby creaking creeper dolphin dolphin_baby donkey donkey_baby
+  drowned drowned_outer_layer drowned_baby drowned_baby_outer_layer elder_guardian enderman endermite evoker fox fox_baby frog ghast giant glow_squid glow_squid_baby goat
+  goat_baby guardian happy_ghast happy_ghast_baby hoglin hoglin_baby horse horse_baby husk husk_baby illusioner llama llama_baby magma_cube mooshroom mooshroom_baby mule
+  mule_baby nautilus nautilus_baby zombie_nautilus ocelot ocelot_baby panda panda_baby parched parrot phantom pig pig_baby cold_pig piglin piglin_brute piglin_baby pillager
+  polar_bear polar_bear_baby pufferfish_big pufferfish_medium pufferfish_small rabbit rabbit_baby ravager salmon salmon_small salmon_large sheep sheep_baby sheep_wool
+  sheep_baby_wool silverfish skeleton skeleton_horse skeleton_horse_baby slime slime_outer sniffer sniffer_baby spider squid squid_baby stray stray_outer_layer strider
+  strider_baby tadpole trader_llama trader_llama_baby tropical_fish_large tropical_fish_large_pattern tropical_fish_small tropical_fish_small_pattern turtle turtle_baby vex
+  villager villager_baby vindicator wandering_trader warden witch wither wither_skeleton wolf wolf_baby zoglin zoglin_baby zombie zombie_baby zombie_horse zombie_horse_baby
+  zombie_villager zombie_villager_baby zombified_piglin zombified_piglin_baby`.split(/\s+/)
 const DIR3 = ['down', 'up', 'north', 'south', 'west', 'east']   // the Facing byte's order in entity data
 
 /** A block model's boxes (from extract-blocks) as quads on the sheet's 16 px tiles, through matrix m (block units). */
@@ -161,7 +198,7 @@ function boxQuads(boxes, m) {
 }
 
 /** Entity shapes for the viewer: { key: { q, pic? } }. layer(owner, method, desc) reads a model from the game's code; box(ref) gives a block model's boxes. */
-export function addEntities({ layer, bigTex, box }) {
+export function addEntities({ layer, bigTex, box, roots }) {
   const out = {}, L = '()Lnet/minecraft/client/model/geom/builders/LayerDefinition;', M = '()Lnet/minecraft/client/model/geom/builders/MeshDefinition;'
   const model = (cls, method, desc = L) => partsOf(layer('net/minecraft/client/model/' + cls, method, desc).root)
   // LivingEntityRenderer: turned (180 - yaw; the viewer adds the yaw), flipped, and lifted so the feet are on the ground
@@ -179,11 +216,21 @@ export function addEntities({ layer, bigTex, box }) {
     out.snow_golem_sheared = { q: body }
   }
 
-  // Villager: 0.9375 the size of its model (as LayerDefinitions registers it), painted with its biome and job by the viewer
-  {
-    const parts = model('npc/VillagerModel', 'createBodyModel', M), s = 0.9375
-    out.villager = { q: bake([part([], { at: [0, 24.016 * (1 - s), 0], scale: [s, s, s], kids: parts })], living(), bigTex('entity/villager/villager')), pic: 'villager' }
+  // Mobs: every model below as the game registers it (sizes included), stood up by LivingEntityRenderer. Their textures (with the mob's
+  // variant, colour or job) are picked and loaded by the viewer, so these have no texture of their own here.
+  // Texture coordinates are kept in the layer's own texture size (s), which can differ from the picture's (the ghast's is drawn at twice the size)
+  const HIDE = { armadillo: ['cube'], armadillo_baby: ['cube'], breeze: ['wind_body'], turtle: ['egg_belly'], turtle_baby: ['egg_belly'] }   // shown only rolled up, as wind, or with an egg
+  const CHESTS = ['left_chest', 'right_chest']   // donkeys, mules and llamas carrying chests
+  const keep = (parts, drop) => parts.filter(p => !drop.includes(p.name)).map(p => ({ ...p, kids: keep(p.kids, drop) }))
+  const only = (parts, pick) => parts.flatMap(p => (pick.includes(p.name) ? [p] : (() => { const k = only(p.kids, pick); return k.length ? [{ ...p, cubes: [], kids: k }] : [] })()))
+  for (const L of MOB_LAYERS) {
+    const r = roots.get(L.toUpperCase()), parts = rootParts(roots, L.toUpperCase()); if (!parts) { console.warn('No model layer', L); continue }
+    const m = L === 'wither' ? living(2) : living(), body = keep(parts, [...(HIDE[L] || []), ...CHESTS]), chests = only(parts, CHESTS)
+    out['m:' + L] = { q: bake(body, m, -1), s: [r.w, r.h] }
+    if (bake(chests, m, -1).length) out[`m:${L}:chests`] = { q: bake(chests, m, -1), s: [r.w, r.h] }
   }
+  const knot = rootParts(roots, 'LEASH_KNOT'); if (knot) out['m:leash_knot'] = { q: bake(knot, S(-1, -1, 1), -1), s: [roots.get('LEASH_KNOT').w, roots.get('LEASH_KNOT').h] }
+  const crystal = rootParts(roots, 'END_CRYSTAL'); if (crystal) out['m:end_crystal'] = { q: bake(crystal, chain(S(2), T(0, -0.5, 0)), -1), s: [roots.get('END_CRYSTAL').w, roots.get('END_CRYSTAL').h] }
 
   // Armor stand in its default pose; arms and base plate kept apart since stands can hide them
   {

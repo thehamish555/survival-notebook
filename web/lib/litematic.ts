@@ -3,13 +3,17 @@
 // (a value can cross from one long into the next). Index order inside a region: x fastest, then z, then y.
 
 export type Block = { name: string; props: Record<string, string> }
-/** What a block entity adds to how it looks: a player head's skin (a texture hash, a UUID or a name) or a banner's pattern layers. */
-export type Tile = { skin?: string; patterns?: [string, string][] }
+/** What a block entity adds to how it looks: a player head's skin (a texture hash, a UUID or a name), a banner's pattern layers, or the mob in a spawner. */
+export type Tile = { skin?: string; patterns?: [string, string][]; spawn?: string }
 /** A mob, armor stand, boat, minecart or item frame: where it is (in blocks, from the schematic's corner), which way it faces, and the few details that change its look. */
 export type Entity = {
-  id: string; x: number; y: number; z: number; yaw: number
+  id: string; x: number; y: number; z: number; yaw: number; pitch?: number
   wood?: string; arms?: boolean; plate?: boolean; small?: boolean; hidden?: boolean; pumpkin?: boolean; colour?: number
   villager?: [string, string]; facing?: number; item?: string; turn?: number
+  /** Which kind of its mob it is: a name ("warm", "tabby") or a number (horses, axolotls, tropical fish), as the file has it */
+  variant?: string | number; baby?: boolean; size?: number; sheared?: boolean; tame?: boolean; chest?: boolean
+  /** A falling block, primed TNT or block display's block, and a display's transformation (4x4, row by row) */
+  block?: Block; transform?: number[]
 }
 export type Schematic = { X: number; Y: number; Z: number; palette: Block[]; data: Uint16Array; name: string; count: number; tiles?: Map<number, Tile>; entities?: Entity[] }
 const MAX_VOLUME = 8_000_000
@@ -78,17 +82,52 @@ function skinOf(t: any): string | undefined {
 }
 const bare = (v: any) => (typeof v === 'string' ? v.replace(/^minecraft:/, '') : undefined)
 const flag = (v: any) => (v === undefined ? undefined : !!v)
-function entityOf(e: any, ox: number, oy: number, oz: number): Entity | null {
-  const id = bare(e?.id), pos = e?.Pos
-  if (!id || !Array.isArray(pos) || pos.length < 3 || !pos.every((n: any) => Number.isFinite(n))) return null
-  const vd = e.VillagerData ?? e.villager_data
-  return {
-    id, x: ox + pos[0], y: oy + pos[1], z: oz + pos[2], yaw: Number(e.Rotation?.[0]) || 0,
-    wood: bare(e.Type), arms: flag(e.ShowArms), plate: e.NoBasePlate === undefined ? undefined : !e.NoBasePlate, small: flag(e.Small), hidden: flag(e.Invisible),
-    pumpkin: flag(e.Pumpkin), colour: typeof e.Color === 'number' ? e.Color : undefined,
-    villager: vd ? [bare(vd.type) || 'plains', bare(vd.profession) || 'none'] : undefined,
-    facing: typeof e.Facing === 'number' ? e.Facing : undefined, item: bare(e.Item?.id), turn: typeof e.ItemRotation === 'number' ? e.ItemRotation : undefined,
+const num = (v: any) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+const blockOf = (b: any): Block | undefined => (typeof b?.Name === 'string' ? { name: bare(b.Name)!, props: b.Properties && typeof b.Properties === 'object' ? b.Properties : {} } : undefined)
+const PAINTING_FACING = [3, 4, 2, 5]   // a painting's 2D facing (south, west, north, east) as the 3D order item frames use
+
+/** A display entity's transformation as a 4x4 matrix (row by row): either saved as one, or as translation, left rotation, scale and right rotation. */
+function transformOf(t: any): number[] | undefined {
+  if (!t) return undefined
+  if ((Array.isArray(t) || t instanceof Float32Array) && t.length === 16) return Array.from(t as ArrayLike<number>, Number)
+  if (typeof t !== 'object') return undefined
+  const v3 = (a: any, d: number) => (Array.isArray(a) && a.length === 3 ? a.map(Number) : [d, d, d])
+  const quat = (r: any): number[] => {
+    if (Array.isArray(r) && r.length === 4) return r.map(Number)
+    if (r && Array.isArray(r.axis) && r.axis.length === 3) { const [x, y, z] = r.axis.map(Number), l = Math.hypot(x, y, z) || 1, h = Number(r.angle || 0) / 2, s = Math.sin(h); return [x / l * s, y / l * s, z / l * s, Math.cos(h)] }
+    return [0, 0, 0, 1]
   }
+  const rot = ([x, y, z, w]: number[]) => [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w), 0, 2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w), 0, 2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y), 0, 0, 0, 0, 1]
+  const mul = (a: number[], b: number[]) => { const o = new Array(16).fill(0); for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) for (let k = 0; k < 4; k++) o[r * 4 + c] += a[r * 4 + k] * b[k * 4 + c]; return o }
+  const [tx, ty, tz] = v3(t.translation, 0), [sx, sy, sz] = v3(t.scale, 1)
+  const m = [mul(mul([1, 0, 0, tx, 0, 1, 0, ty, 0, 0, 1, tz, 0, 0, 0, 1], rot(quat(t.left_rotation))), [sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, 0, 0, 0, 1]), rot(quat(t.right_rotation))].reduce(mul)
+  return m.every(Number.isFinite) ? m : undefined
+}
+
+// How high riders sit above their vehicle's position (roughly: boats and rafts, minecarts)
+const seat = (vehicle: string) => (/boat|raft/.test(vehicle) ? 0.1875 : /minecart/.test(vehicle) ? 0.0625 : 0.75)
+/** An entity and anything riding it (a villager in a boat or minecart), with positions from the schematic's corner. Litematica moves only the
+ *  vehicle's position into the schematic, so riders are put on their vehicle instead of where their own (world) position says. */
+function entitiesOf(e: any, ox: number, oy: number, oz: number, out: Entity[], depth = 0, vehicle?: Entity) {
+  if (depth > 8 || out.length >= 5000) return
+  const id = bare(e?.id), pos = e?.Pos
+  let me: Entity | undefined
+  if (id && (vehicle || (Array.isArray(pos) && pos.length >= 3 && pos.every((n: any) => Number.isFinite(n))))) {
+    const vd = e.VillagerData ?? e.villager_data, isPainting = id === 'painting'
+    const [x, y, z] = vehicle ? [vehicle.x, vehicle.y + seat(vehicle.id), vehicle.z] : [ox + pos[0], oy + pos[1], oz + pos[2]]
+    out.push(me = {
+      id, x, y, z, yaw: Number(e.Rotation?.[0]) || 0, pitch: Number(e.Rotation?.[1]) || 0,
+      wood: bare(e.Type), arms: flag(e.ShowArms), plate: e.NoBasePlate === undefined ? undefined : !e.NoBasePlate, small: flag(e.Small), hidden: flag(e.Invisible),
+      pumpkin: flag(e.Pumpkin), colour: num(e.Color),
+      villager: vd ? [bare(vd.type) || 'plains', bare(vd.profession) || 'none'] : undefined,
+      facing: isPainting ? PAINTING_FACING[num(e.facing) ?? num(e.Facing) ?? 0] : num(e.Facing),
+      item: bare(e.Item?.id ?? e.item?.id), turn: num(e.ItemRotation),
+      variant: isPainting ? bare(e.variant ?? e.Motive ?? e.motive) : bare(e.variant) ?? num(e.Variant) ?? num(e.RabbitType) ?? bare(e.MainGene) ?? bare(e.type) ?? num(e.PuffState) ?? bare(e.weather_state),
+      baby: (num(e.Age) ?? 0) < 0 || !!e.IsBaby, size: num(e.Size), sheared: flag(e.Sheared), tame: !!(e.Owner ?? e.owner), chest: flag(e.ChestedHorse),
+      block: blockOf(e.BlockState ?? e.block_state), transform: transformOf(e.transformation),
+    })
+  }
+  if (me) for (const p of Array.isArray(e?.Passengers) ? e.Passengers : []) entitiesOf(p, ox, oy, oz, out, depth + 1, me)
 }
 
 function patternsOf(t: any): [string, string][] | undefined {
@@ -119,14 +158,12 @@ export async function readLitematic(file: ArrayBuffer): Promise<Schematic> {
   let count = 0
   const tiles = new Map<number, Tile>(), entities: Entity[] = []
   for (const b of box) {
-    for (const e of Array.isArray(b.r.Entities) ? b.r.Entities.slice(0, 5000) : []) {   // positions are from the region's corner, like block entities
-      const en = entityOf(e, b.x - minX, b.y - minY, b.z - minZ); if (en) entities.push(en)
-    }
+    for (const e of Array.isArray(b.r.Entities) ? b.r.Entities : []) entitiesOf(e, b.x - minX, b.y - minY, b.z - minZ, entities)   // positions are from the region's corner, like block entities
     for (const t of Array.isArray(b.r.TileEntities) ? b.r.TileEntities : []) {   // positions are from the region's corner
       const x = Number(t?.x), y = Number(t?.y), z = Number(t?.z)
       if (![x, y, z].every(Number.isInteger) || x < 0 || y < 0 || z < 0 || x >= b.sx || y >= b.sy || z >= b.sz) continue
-      const tile: Tile = { skin: skinOf(t), patterns: patternsOf(t) }
-      if (tile.skin || tile.patterns) tiles.set(((b.y - minY + y) * Z + (b.z - minZ + z)) * X + (b.x - minX + x), tile)
+      const tile: Tile = { skin: skinOf(t), patterns: patternsOf(t), spawn: bare((t.SpawnData ?? t.spawn_data)?.entity?.id) }
+      if (tile.skin || tile.patterns || tile.spawn) tiles.set(((b.y - minY + y) * Z + (b.z - minZ + z)) * X + (b.x - minX + x), tile)
     }
     const pal: any[] = Array.isArray(b.r.BlockStatePalette) ? b.r.BlockStatePalette : [], words: Uint32Array = b.r.BlockStates
     if (!pal.length || !(words instanceof Uint32Array)) continue
