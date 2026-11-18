@@ -40,17 +40,6 @@ final class PageSettings {
 		s.dropdown(id, s.cx + s.cw - 104, y + 2, 86, 18, "", opts, cur, cur.equals("Off") ? p.gray : p.green, v -> { pick.accept(v); NbConfig.save(); s.rebuild(); });
 	}
 
-	/** Which waypoints show in the world with Xaero's installed: ours, Xaero's or neither (Xaero's minimap keeps showing its own either way). */
-	static String waypointMode() {
-		NbConfig c = NbConfig.get();
-		if (c.waypoints) return "Ours";
-		return Boolean.TRUE.equals(Xaero.inWorld()) ? "Xaero's" : "Off";
-	}
-	static void setWaypointMode(String v) {
-		NbConfig c = NbConfig.get();
-		c.waypoints = v.equals("Ours");
-		Xaero.setInWorld(v.equals("Xaero's"));
-	}
 
 	static void build(NotebookScreen s) {
 		NbConfig c = NbConfig.get();
@@ -60,7 +49,7 @@ final class PageSettings {
 		y += 28;
 		if (cat.equals("Members")) { PageMembers.build(s, y); return; }
 		int visible = Math.max(1, (s.bottom - y) / ROW);
-		boolean xaero = Xaero.present();
+		boolean xaero = !Minimaps.installed().isEmpty();   // a minimap mod the notebook can work with
 		int rows = switch (cat) { case "Connection" -> 5; case "Overlays" -> xaero ? 7 : 6; case "Sync & privacy" -> 9; default -> 3; };
 		s.setScroll(rows, visible);
 		final int base = y - NotebookScreen.scroll * ROW, first = NotebookScreen.scroll;
@@ -97,12 +86,12 @@ final class PageSettings {
 				if (show.test(2)) toggle(s, base + 2 * ROW, "Enchants needed list", "Items you're making and missing enchants", c.hudGoals, () -> c.hudGoals = !c.hudGoals);
 				if (show.test(3)) toggle(s, base + 3 * ROW, "Compass arrow", "Points to the place you're tracking", c.compass, () -> c.compass = !c.compass);
 				if (show.test(4)) {
-					if (xaero) choice(s, base + 4 * ROW, "settings-wp", "Waypoints in the world", "Ours or Xaero's. Doesn't change the minimap", Xaero.MODES, waypointMode(), PageSettings::setWaypointMode);
+					if (xaero) choice(s, base + 4 * ROW, "settings-wp", "Waypoints in the world", "Whose show in the world. Not the minimap", Minimaps.modes(), Minimaps.mode(), Minimaps::setMode);
 					else toggle(s, base + 4 * ROW, "Waypoints in the world", "Your places' icons, with the name and distance when you look at one", c.waypoints, () -> c.waypoints = !c.waypoints);
 				}
 				int r = 5;
-				if (xaero) { if (show.test(r)) toggle(s, base + r * ROW, "Places on Xaero's map", "Shows your notebook's places on Xaero's minimap and world map", c.xaeroPlaces, () -> c.xaeroPlaces = !c.xaeroPlaces); r++; }
-				if (show.test(r)) toggle(s, base + r * ROW, "Weekly recap", "This week on Home, and a message on Sunday at 7pm", c.weeklyRecap, () -> c.weeklyRecap = !c.weeklyRecap);
+				if (xaero) { if (show.test(r)) toggle(s, base + r * ROW, "Places on your minimap", "On " + String.join(" and ", Minimaps.installed()) + ", minimap and full map", c.minimapPlaces, () -> c.minimapPlaces = !c.minimapPlaces); r++; }
+				if (show.test(r)) toggle(s, base + r * ROW, "Weekly recap", "On Home, and a note on Sunday at 7pm", c.weeklyRecap, () -> c.weeklyRecap = !c.weeklyRecap);
 			}
 			case "Sync & privacy" -> {
 				if (show.test(0)) toggle(s, base, "Auto-sync gear", "Keeps your gear list up to date", c.autoSyncGear, () -> c.autoSyncGear = !c.autoSyncGear);

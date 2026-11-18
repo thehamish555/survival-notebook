@@ -107,7 +107,7 @@ final class MapRecorder {
 				for (int i = 0; i < keys.size(); i++) {
 					String[] k = keys.get(i);
 					Api.Res r = Api.putBytes("/notebooks/" + nb + "/map/" + k[0] + "/" + k[1] + "/" + k[2], deflate(data.get(i)));
-					if (r.status() == 413) { full = true; Notebook.msg("The map for this notebook is full. The owner can clear it on the website."); return; }
+					if (r.status() == 413) { full = true; Notebook.error("The map for this notebook is full. The owner can clear it on the website."); return; }
 					if (r.status() / 100 != 2) { synchronized (MapRecorder.class) { dirty.add(String.join("/", k)); } return; }   // try again next round
 				}
 			} catch (Api.ApiException e) {

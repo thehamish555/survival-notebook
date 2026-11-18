@@ -36,15 +36,15 @@ final class Notebook {
 	static String str(JsonObject o, String k) { return o.has(k) && o.get(k).isJsonPrimitive() ? o.get(k).getAsString() : ""; }
 	static boolean bool(JsonObject o, String k) { return o.has(k) && o.get(k).isJsonPrimitive() && o.get(k).getAsBoolean(); }
 
-	static void msg(String text) {
-		Minecraft mc = Minecraft.getInstance();
-		mc.execute(() -> { if (mc.player != null) mc.player.sendSystemMessage(Component.literal("[Survival Notebook] " + text)); });
-	}
+	/** Tells you something: a toast, kept in the notebook's notifications. Never chat. */
+	static void msg(String text) { Inbox.add(text, false); }
+	/** Tells you something went wrong (in red). */
+	static void error(String text) { Inbox.add(text, true); }
 
 	private static void job(Job j) {
 		Api.EXEC.execute(() -> {
 			try { j.run(); }
-			catch (Api.ApiException e) { if (e.status == 401) ok = false; status = e.getMessage(); bump(); msg(e.getMessage()); }
+			catch (Api.ApiException e) { if (e.status == 401) ok = false; status = e.getMessage(); bump(); error(e.getMessage()); }
 			catch (RuntimeException e) { status = "Unexpected error: " + e.getMessage(); bump(); }
 		});
 	}

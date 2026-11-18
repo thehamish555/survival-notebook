@@ -36,7 +36,7 @@ final class Waypoints {
 		Vec3 eye = cam.position();
 
 		List<Mark> marks = new ArrayList<>();
-		boolean xaeroOff = Xaero.present() && Boolean.FALSE.equals(Xaero.inWorld());   // you chose ours over Xaero's, so its waypoints aren't drawn in the world
+		boolean xaeroOff = !Minimaps.installed().isEmpty() && !Minimaps.anyInWorld();   // you chose ours over the minimap's, so its waypoints aren't drawn in the world
 		for (JsonObject o : Notebook.rows("coords")) {
 			String xyz = Notebook.str(o, here.dim());
 			double[] p = Names.parse(xyz);

@@ -76,7 +76,7 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 			if (ticks > 300 && ticks % 6000 == 200) PlayerStats.requestFromServer(mc);
 		}
 		if (ticks % 60 == 0) Notebook.minimapTick();
-		if (ticks % 60 == 30) Xaero.tick();          // ~every 3s: your places on Xaero's minimap, when they changed
+		if (ticks % 60 == 30) Minimaps.tick();       // ~every 3s: your places on Xaero's or JourneyMap's maps, when they changed
 		if (ticks % 200 == 100) Recap.tick();        // Sunday evening: the week in chat, once   // ~every 3s: mirrors the minimap's waypoints if you turned syncing on
 		if (ticks % 1200 == 0) Notebook.refresh();   // keep to-dos and places fresh (~every minute)
 		if (ticks % 600 == 0 && cfg.autoSyncGear && Notebook.canEdit()) {   // ~every 30s, only writes when your gear actually changed
@@ -130,7 +130,7 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 
 	/** B: opens a new place in the notebook, prefilled with where you're standing, so you can name it and set its details. */
 	private void addPlace(Minecraft mc) {
-		if (Names.here() == null) { Notebook.msg("Can't read your position in this dimension"); return; }
+		if (Names.here() == null) { Notebook.error("Can't read your position in this dimension"); return; }
 		PagePlaces.addHere();
 		mc.gui.setScreen(new NotebookScreen());
 	}
@@ -138,8 +138,8 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 	/** Optional unbound key: saves a place instantly with an automatic name. */
 	private void quickSave() {
 		Names.Spot spot = Names.here();
-		if (spot == null) { Notebook.msg("Can't read your position in this dimension"); return; }
-		if (!Notebook.canEdit()) { Notebook.msg("Not connected (press N, then Settings)"); return; }
+		if (spot == null) { Notebook.error("Can't read your position in this dimension"); return; }
+		if (!Notebook.canEdit()) { Notebook.error("Not connected (press N, then Settings)"); return; }
 		Notebook.savePlace("Place " + HHMM.format(LocalTime.now()), "Important", spot);
 	}
 }

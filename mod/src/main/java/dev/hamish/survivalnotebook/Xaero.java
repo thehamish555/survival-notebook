@@ -39,7 +39,7 @@ final class Xaero {
 		}
 		throw new NoSuchMethodException(o.getClass().getName() + "." + name);
 	}
-	private static Class<?> box(Class<?> c) {
+	static Class<?> box(Class<?> c) {
 		if (!c.isPrimitive()) return c;
 		return c == boolean.class ? Boolean.class : c == int.class ? Integer.class : c == long.class ? Long.class : c == double.class ? Double.class : c == float.class ? Float.class : c;
 	}
@@ -88,6 +88,7 @@ final class Xaero {
 	private static final Identifier ORIGIN = Identifier.fromNamespaceAndPath(SurvivalNotebookClient.ID, "places");
 	private static String pushed = "";
 	private static Object pushedRoot;
+	private static String failed = "";
 	// Minecraft's 16 chat colours, the ones Xaero's waypoints use, by index
 	private static final int[] COLOURS = {0x000000, 0x0000AA, 0x00AA00, 0x00AAAA, 0xAA0000, 0xAA00AA, 0xFFAA00, 0xAAAAAA, 0x555555, 0x5555FF, 0x55FF55, 0x55FFFF, 0xFF5555, 0xFF55FF, 0xFFFF55, 0xFFFFFF};
 
@@ -112,20 +113,17 @@ final class Xaero {
 	 * Called every few seconds. Puts your places into Xaero's, one dimension at a time, only when something changed. Places that came
 	 * from Xaero's in the first place (synced from its waypoints) are left out, since Xaero's already has them.
 	 */
-	static void tick() {
+	static void tick(List<JsonObject> rows, String sig) {
 		if (!present()) return;
 		Minecraft mc = Minecraft.getInstance();
 		if (mc.level == null) { pushed = ""; pushedRoot = null; return; }
-		boolean on = NbConfig.get().xaeroPlaces && Notebook.ok;
-		List<JsonObject> rows = on ? Notebook.rows("coords") : List.of();
-		StringBuilder sig = new StringBuilder();
-		for (JsonObject o : rows) sig.append(Notebook.str(o, "id")).append(Notebook.str(o, "name")).append(Notebook.str(o, "cat")).append(Notebook.str(o, "ow")).append('|').append(Notebook.str(o, "nether")).append('|').append(Notebook.str(o, "end")).append(Notebook.bool(o, "mm")).append(';');
+		if (sig.equals(failed)) return;
 		try {
 			Object session = call(staticField("xaero.hud.minimap.BuiltInHudModules", "MINIMAP"), "getCurrentSession");
 			if (session == null) return;
 			Object root = call(call(session, "getWorldManager"), "getAutoRootContainer");
 			if (root == null) return;
-			String s = sig.toString();
+			String s = sig;
 			if (s.equals(pushed) && root == pushedRoot) return;
 			Object dims = call(session, "getDimensionHelper");
 			Class<?> wpClass = cls("xaero.common.minimap.waypoints.Waypoint"), colourClass = cls("xaero.hud.minimap.waypoint.WaypointColor"), purposeClass = cls("xaero.hud.minimap.waypoint.WaypointPurpose");
@@ -149,10 +147,8 @@ final class Xaero {
 			}
 			pushed = s; pushedRoot = root;
 		} catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-			pushed = sig.toString(); pushedRoot = null;   // this Xaero's version works differently: don't keep retrying every few seconds
+			failed = sig;   // this Xaero's version works differently: don't retry until the places change
 		}
 	}
 
-	/** The ways to show waypoints in the world when Xaero's is installed. */
-	static final List<String> MODES = new ArrayList<>(List.of("Ours", "Xaero's", "Off"));
 }

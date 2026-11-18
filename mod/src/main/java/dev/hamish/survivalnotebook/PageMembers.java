@@ -48,7 +48,7 @@ final class PageMembers {
 			s.box(s.cx, ay + 12, s.cw - 190, "friend@example.com", email, v -> email = v);
 			s.pill(s.cx + s.cw - 184, ay + 12, 76, 20, role.equals("editor") ? "Editor" : "Viewer", role.equals("editor") ? p.blue : p.gray, () -> { role = role.equals("editor") ? "viewer" : "editor"; s.rebuild(); }, true);
 			s.btn(s.cx + s.cw - 102, ay + 12, 96, "Add member", 0, () -> {
-				if (!email.contains("@")) { Notebook.msg("Enter their account email"); return; }
+				if (!email.contains("@")) { Notebook.error("Enter their account email"); return; }
 				Notebook.addMember(email, role, () -> email = "");
 			}, Notebook.ok);
 		}
