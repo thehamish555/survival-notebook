@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { fetchFile } from '@/lib/api'
 import { readLitematic, type Schematic } from '@/lib/litematic'
 import { buildMesh, type BlockData, type MeshPart } from '@/lib/schematic-mesh'
+import { pictureFor } from '@/lib/schematic-pictures'
 
 let blockData: Promise<{ data: BlockData; sheet: THREE.Texture }> | null = null
 /** The game's block models and textures, loaded once the first time a schematic is opened. */
@@ -95,6 +96,11 @@ export function Schematic3D({ nb, file, title, onClose }: { nb: string; file: { 
     const solid = new THREE.MeshBasicMaterial({ map: v.sheet, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide })
     const glass = new THREE.MeshBasicMaterial({ map: v.sheet, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide })
     v.group.add(new THREE.Mesh(geometry(m.solid), solid)); if (m.glass.idx.length) v.group.add(new THREE.Mesh(geometry(m.glass), glass))
+    for (const [key, part] of Object.entries(m.custom)) {   // player heads with their skin, banners with their patterns: shown once their picture is ready
+      const mat = new THREE.MeshBasicMaterial({ vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), mesh = new THREE.Mesh(geometry(part), mat)
+      mesh.visible = false; v.group.add(mesh)
+      pictureFor(key).then(t => { mat.map = t; mat.needsUpdate = true; mesh.visible = true; v.render() }).catch(() => {})
+    }
     v.follow(layer); v.render()
   }, [layer, schem])
 

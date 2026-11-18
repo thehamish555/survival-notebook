@@ -242,3 +242,9 @@ test('play time, "is playing" and the weekly recap', async () => {
   sendWeeklyRecaps(db, notify, utc)
   assert.deepEqual(got.map(g => g.split(':')[0]), ['alice', 'bob'])
 })
+
+test('head skins: only texture hashes, UUIDs and names, and only when signed in', async () => {
+  const { call, user } = mk(), a = await user('alice')
+  assert.equal((await call('GET', '/skins/Notch')).status, 401)
+  for (const bad of ['..%2Fetc', 'a'.repeat(17) + '!', 'http:%2F%2Fevil']) assert.equal((await call('GET', `/skins/${bad}`, undefined, a.token)).status, 400)
+})

@@ -3,7 +3,9 @@
 // (a value can cross from one long into the next). Index order inside a region: x fastest, then z, then y.
 
 export type Block = { name: string; props: Record<string, string> }
-export type Schematic = { X: number; Y: number; Z: number; palette: Block[]; data: Uint16Array; name: string; count: number }
+/** What a block entity adds to how it looks: a player head's skin (a texture hash, a UUID or a name) or a banner's pattern layers. */
+export type Tile = { skin?: string; patterns?: [string, string][] }
+export type Schematic = { X: number; Y: number; Z: number; palette: Block[]; data: Uint16Array; name: string; count: number; tiles?: Map<number, Tile> }
 const MAX_VOLUME = 8_000_000
 
 function readNbt(buf: Uint8Array): any {
@@ -44,6 +46,40 @@ async function gunzip(file: ArrayBuffer): Promise<Uint8Array> {
 }
 
 const AIR = new Set(['air', 'cave_air', 'void_air', 'structure_void'])
+const COLOURS = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black']
+// Banner patterns saved before 1.20.5 use short codes
+const OLD_PATTERNS: Record<string, string> = {
+  b: 'base', bl: 'square_bottom_left', br: 'square_bottom_right', tl: 'square_top_left', tr: 'square_top_right', bs: 'stripe_bottom', ts: 'stripe_top', ls: 'stripe_left', rs: 'stripe_right',
+  cs: 'stripe_center', ms: 'stripe_middle', drs: 'stripe_downright', dls: 'stripe_downleft', ss: 'small_stripes', cr: 'cross', sc: 'straight_cross', bt: 'triangle_bottom', tt: 'triangle_top',
+  bts: 'triangles_bottom', tts: 'triangles_top', ld: 'diagonal_left', rd: 'diagonal_up_right', lud: 'diagonal_up_left', rud: 'diagonal_right', mc: 'circle', mr: 'rhombus', vh: 'half_vertical',
+  hh: 'half_horizontal', vhr: 'half_vertical_right', hhb: 'half_horizontal_bottom', bo: 'border', cbo: 'curly_border', gra: 'gradient', gru: 'gradient_up', bri: 'bricks', glb: 'globe',
+  cre: 'creeper', sku: 'skull', flo: 'flower', moj: 'mojang', pig: 'piglin',
+}
+const hex = (a: any) => (a instanceof Int32Array && a.length === 4 ? [...a].map(n => (n >>> 0).toString(16).padStart(8, '0')).join('') : '')
+/** A head's skin: the texture's hash when the file has it, otherwise the owner's UUID or name for the server to look up. */
+function skinOf(t: any): string | undefined {
+  const prof = t.profile ?? t.SkullOwner
+  if (typeof prof === 'string') return /^[A-Za-z0-9_]{1,16}$/.test(prof) ? prof : undefined
+  if (!prof || typeof prof !== 'object') return undefined
+  const props = Array.isArray(prof.properties) ? prof.properties : prof.Properties?.textures ?? []
+  const value = props.find?.((p: any) => (p.name ?? 'textures') === 'textures')?.value ?? props[0]?.Value
+  if (typeof value === 'string') {
+    try { const url = JSON.parse(atob(value))?.textures?.SKIN?.url; const h = typeof url === 'string' && url.match(/\/texture\/([0-9a-f]{40,64})$/)?.[1]; if (h) return h } catch { }
+  }
+  const id = hex(prof.id ?? prof.Id); if (id) return id
+  const name = prof.name ?? prof.Name
+  return typeof name === 'string' && /^[A-Za-z0-9_]{1,16}$/.test(name) ? name : undefined
+}
+function patternsOf(t: any): [string, string][] | undefined {
+  const list = Array.isArray(t.patterns) ? t.patterns : Array.isArray(t.Patterns) ? t.Patterns : null
+  if (!list) return undefined
+  const out = list.map((p: any): [string, string] | null => {
+    const pat = typeof p.pattern === 'string' ? p.pattern : p.pattern?.asset_id ?? OLD_PATTERNS[p.Pattern]
+    const col = typeof p.color === 'string' ? p.color : COLOURS[p.Color]
+    return typeof pat === 'string' && col ? [pat.replace(/^minecraft:/, '').replace(/^.*\//, ''), col] : null
+  }).filter(Boolean).slice(0, 16) as [string, string][]
+  return out.length ? out : undefined
+}
 
 export async function readLitematic(file: ArrayBuffer): Promise<Schematic> {
   const root = readNbt(await gunzip(file))
@@ -60,7 +96,14 @@ export async function readLitematic(file: ArrayBuffer): Promise<Schematic> {
   if (X * Y * Z > MAX_VOLUME) throw new Error('This schematic is too big to show in 3D')
   const data = new Uint16Array(X * Y * Z), palette: Block[] = [{ name: 'air', props: {} }], keyIdx = new Map<string, number>([['air', 0]])
   let count = 0
+  const tiles = new Map<number, Tile>()
   for (const b of box) {
+    for (const t of Array.isArray(b.r.TileEntities) ? b.r.TileEntities : []) {   // positions are from the region's corner
+      const x = Number(t?.x), y = Number(t?.y), z = Number(t?.z)
+      if (![x, y, z].every(Number.isInteger) || x < 0 || y < 0 || z < 0 || x >= b.sx || y >= b.sy || z >= b.sz) continue
+      const tile: Tile = { skin: skinOf(t), patterns: patternsOf(t) }
+      if (tile.skin || tile.patterns) tiles.set(((b.y - minY + y) * Z + (b.z - minZ + z)) * X + (b.x - minX + x), tile)
+    }
     const pal: any[] = Array.isArray(b.r.BlockStatePalette) ? b.r.BlockStatePalette : [], words: Uint32Array = b.r.BlockStates
     if (!pal.length || !(words instanceof Uint32Array)) continue
     const map = pal.map(p => {   // this region's palette -> the merged one
@@ -84,5 +127,5 @@ export async function readLitematic(file: ArrayBuffer): Promise<Schematic> {
       count++
     }
   }
-  return { X, Y, Z, palette, data, name: String(root?.Metadata?.Name || ''), count }
+  return { X, Y, Z, palette, data, name: String(root?.Metadata?.Name || ''), count, tiles }
 }

@@ -88,5 +88,33 @@ export const playerRoutes = (ctx: Ctx) => {
     if (!hit.png) return c.json({ error: 'no skin' }, 404)
     return c.body(hit.png as any, 200, { 'content-type': 'image/png', 'cache-control': 'private, max-age=21600' })
   })
+
+  // The skin on a player head in a schematic, for the 3D viewer: by texture hash (most files have it), or the owner's UUID or name.
+  // Fetched by the server from Mojang only (so browsers never contact anyone else), and kept for a day.
+  const heads = new Map<string, { at: number; png: Uint8Array | null }>()
+  const getJson = async (url: string) => { const res = await fetch(url, { signal: AbortSignal.timeout(5000) }); return res.ok ? res.json() : null }
+  r.get('/skins/:key', auth, async c => {
+    const key = c.req.param('key')
+    const kind = /^[0-9a-f]{40,64}$/.test(key) && key.length !== 32 ? 'hash' : /^[0-9a-f]{32}$/.test(key) ? 'uuid' : /^[A-Za-z0-9_]{1,16}$/.test(key) ? 'name' : null
+    if (!kind) return c.json({ error: 'not a skin' }, 400)
+    let hit = heads.get(key)
+    if (!hit || Date.now() - hit.at > 24 * 3_600_000) {
+      hit = { at: Date.now(), png: null }
+      try {
+        let hash = kind === 'hash' ? key : ''
+        if (!hash) {
+          const uuid = kind === 'uuid' ? key : (await getJson(`https://api.mojang.com/users/profiles/minecraft/${key}`))?.id
+          const prof = typeof uuid === 'string' && /^[0-9a-f]{32}$/.test(uuid) ? await getJson(`https://sessionserver.mojang.com/session/minecraft/profile/${uuid}`) : null
+          const tex = JSON.parse(Buffer.from(prof?.properties?.find((p: any) => p.name === 'textures')?.value || '', 'base64').toString('utf8') || '{}')
+          hash = String(tex?.textures?.SKIN?.url || '').match(/\/texture\/([0-9a-f]{40,64})$/)?.[1] || ''
+        }
+        if (hash) { const res = await fetch(`https://textures.minecraft.net/texture/${hash}`, { signal: AbortSignal.timeout(5000) }); if (res.ok) hit.png = new Uint8Array(await res.arrayBuffer()) }
+      } catch { /* offline or unknown: the viewer shows Steve */ }
+      if (heads.size >= 500) heads.delete(heads.keys().next().value!)
+      heads.set(key, hit)
+    }
+    if (!hit.png) return c.json({ error: 'no skin' }, 404)
+    return c.body(hit.png as any, 200, { 'content-type': 'image/png', 'cache-control': 'private, max-age=86400' })
+  })
   return r
 }

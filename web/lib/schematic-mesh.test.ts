@@ -40,3 +40,17 @@ test('schematic: block entities are baked quads on their full-size texture, tint
   assert.deepEqual([m.solid.col[1], m.solid.col[2]], [0, 0])                                              // the tinted one is red
   assert.equal(m.solid.col[12 + 1], m.solid.col[12])                                                     // the other isn't
 })
+
+test('schematic: a head with a skin and a banner with patterns get their own picture', () => {
+  const quad = (tint: number) => [4, tint, 0, 16, 0, 8, 0, 16, 16, 0, 16, 16, 16, 16, 0, 0, 16, 0, 16, 16, 0, 16, 0, 0, 0]
+  const d: BlockData = { ...data, rows: 5, big: { 4: [0, 16, 64, 64] }, tex: [...data.tex, 'x'], models: [{ q: [quad(1), quad(0)] }],
+    blocks: { red_banner: { v: [['', { m: 0 }]], t: [255, 0, 0] }, player_head: { v: [['', { m: 0 }]] } } }
+  const palette = [{ name: 'air', props: {} }, { name: 'red_banner', props: {} }, { name: 'player_head', props: {} }]
+  const tiles = new Map([[0, { patterns: [['stripe_top', 'blue']] as [string, string][] }], [1, { skin: 'Notch' }]])
+  const m = buildMesh({ X: 3, Y: 1, Z: 1, palette, data: new Uint16Array([1, 2, 1]), name: '', count: 3, tiles }, d)
+  assert.deepEqual(Object.keys(m.custom).sort(), ['banner:red:stripe_top/blue', 'skin:Notch'])
+  assert.equal(m.custom['banner:red:stripe_top/blue'].idx.length / 6, 1)   // only the cloth; the pole stays on the sheet
+  assert.equal(m.custom['skin:Notch'].idx.length / 6, 2)                    // the whole head
+  assert.equal(m.solid.idx.length / 6, 3)                                   // the plain banner, and the patterned one's pole
+  assert.deepEqual([...m.custom['skin:Notch'].uv.slice(0, 2)], [8, 0])     // in the skin's own pixels
+})

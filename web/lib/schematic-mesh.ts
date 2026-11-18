@@ -1,6 +1,6 @@
 // Turns a schematic into triangles using the game's own block models (public/mc/blocks.json, made by scripts/extract-blocks.mjs).
 // Faces hidden against a full solid neighbour are skipped, like the game does, so big builds stay light.
-import type { Block, Schematic } from './litematic'
+import type { Block, Schematic, Tile } from './litematic'
 
 type Face = [number, number[] | null, number, number, number]   // texture, uv, cull, tint, uv rotation
 type Box = [number[], number[], 0 | [string, number, number, number, number], Record<string, Face>]
@@ -12,7 +12,8 @@ export type BlockData = {
   blocks: Record<string, { v?: [string, ModelRef][]; mp?: [any, ModelRef][]; t?: number[]; fluid?: number }>
 }
 export type MeshPart = { pos: Float32Array; uv: Float32Array; col: Float32Array; idx: Uint32Array }
-export type Mesh = { solid: MeshPart; glass: MeshPart; faces: number }
+/** custom: parts drawn with their own picture instead of the sheet, keyed "skin:<hash, uuid or name>" or "banner:<colour>:<pattern/colour,...>". Their uv is in that picture's pixels. */
+export type Mesh = { solid: MeshPart; glass: MeshPart; custom: Record<string, MeshPart>; faces: number }
 
 const DIRS: Record<string, number[]> = { down: [0, -1, 0], up: [0, 1, 0], north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0] }
 const corners = (dir: string, [x0, y0, z0]: number[], [x1, y1, z1]: number[]): number[][] => {
@@ -88,15 +89,17 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
   const at = (x: number, y: number, z: number) => (x < 0 || y < 0 || z < 0 || x >= X || y >= Y || z >= Z ? 0 : s.data[(y * Z + z) * X + x])
   const parts = { solid: { p: [] as number[], u: [] as number[], c: [] as number[], i: [] as number[] }, glass: { p: [] as number[], u: [] as number[], c: [] as number[], i: [] as number[] } }
   let faces = 0
+  type Part = typeof parts.solid
+  const custom: Record<string, Part> = {}
   const corner = (texIdx: number) => data.big?.[texIdx] ?? [(texIdx % data.cols) * 16, Math.floor(texIdx / data.cols) * 16]
-  const quad = (glass: boolean, pts: number[][], uv: number[] | number[][], rot: number, texIdx: number, shade: number[], ox: number, oy: number, oz: number) => {
-    const g = glass ? parts.glass : parts.solid, base = g.p.length / 3
-    const [tx, ty] = corner(texIdx)
+  const quad = (glass: boolean, pts: number[][], uv: number[] | number[][], rot: number, texIdx: number, shade: number[], ox: number, oy: number, oz: number, own?: Part) => {
+    const g = own || (glass ? parts.glass : parts.solid), base = g.p.length / 3
+    const [tx, ty] = own ? [0, 0] : corner(texIdx)
     let uvs = Array.isArray(uv[0]) ? uv as number[][] : (([a, b, c, d]) => [[a, b], [c, b], [c, d], [a, d]])(uv as number[])
     for (let r = 0; r < (rot / 90) % 4; r++) uvs = [uvs[3], uvs[0], uvs[1], uvs[2]]
     for (let k = 0; k < 4; k++) {
       g.p.push(ox + pts[k][0] / 16, oy + pts[k][1] / 16, oz + pts[k][2] / 16)
-      g.u.push((tx + uvs[k][0]) / W, 1 - (ty + uvs[k][1]) / H)
+      if (own) g.u.push(uvs[k][0], uvs[k][1]); else g.u.push((tx + uvs[k][0]) / W, 1 - (ty + uvs[k][1]) / H)
       g.c.push(shade[0], shade[1], shade[2])
     }
     g.i.push(base, base + 1, base + 2, base, base + 2, base + 3)
@@ -139,10 +142,14 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
     for (const ref of st.refs) {
       const m = data.models[ref.m]
       if ('b' in m) for (const [from, to, rot, f] of m.b) box(st, id, x, y, z, ref, from, to, rot, f)
-      else if ('q' in m) for (const q of m.q) {   // a chest, banner, head and so on, already turned the right way
-        const pts = [0, 1, 2, 3].map(k => turn(ref, q.slice(2 + k * 5, 5 + k * 5))), uv = [0, 1, 2, 3].map(k => q.slice(5 + k * 5, 7 + k * 5))
-        const l = light(normalOf(pts)), t = q[1] && st.tint ? st.tint.map(linear) : [1, 1, 1]
-        quad(st.glass, pts, uv, 0, q[0], [t[0] * l, t[1] * l, t[2] * l], x, y, z)
+      else if ('q' in m) {   // a chest, banner, head and so on, already turned the right way
+        const key = ownPicture(st.b.name, s.tiles?.get((y * Z + z) * X + x))
+        for (const q of m.q) {
+          const pts = [0, 1, 2, 3].map(k => turn(ref, q.slice(2 + k * 5, 5 + k * 5))), uv = [0, 1, 2, 3].map(k => q.slice(5 + k * 5, 7 + k * 5))
+          const own = key && (key.all || q[1]) ? (custom[key.key] ||= { p: [], u: [], c: [], i: [] }) : undefined   // a head's skin, or a banner's patterned cloth
+          const l = light(normalOf(pts)), t = !own && q[1] && st.tint ? st.tint.map(linear) : [1, 1, 1]
+          quad(st.glass, pts, uv, 0, q[0], [t[0] * l, t[1] * l, t[2] * l], x, y, z, own)
+        }
       } else if (m.p >= 0) {
         const sp = SPECIAL.find(([re]) => re.test(st.b.name))
         box(st, id, x, y, z, ref, sp ? sp[1] : [1, 0, 1], sp ? sp[2] : [15, 15, 15], 0, plain(m.p))
@@ -150,5 +157,14 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
     }
   }
   const pack = (g: typeof parts.solid): MeshPart => ({ pos: new Float32Array(g.p), uv: new Float32Array(g.u), col: new Float32Array(g.c), idx: new Uint32Array(g.i) })
-  return { solid: pack(parts.solid), glass: pack(parts.glass), faces }
+  return { solid: pack(parts.solid), glass: pack(parts.glass), custom: Object.fromEntries(Object.entries(custom).map(([k, g]) => [k, pack(g)])), faces }
+}
+
+/** Which blocks get their own picture: player heads with a skin (the whole head) and banners with patterns (the cloth). */
+function ownPicture(name: string, tile?: Tile): { key: string; all: boolean } | null {
+  if (!tile) return null
+  if (tile.skin && /^player(_wall)?_head$/.test(name)) return { key: 'skin:' + tile.skin, all: true }
+  const colour = name.match(/^(.+?)_(wall_)?banner$/)?.[1]
+  if (tile.patterns && colour) return { key: `banner:${colour}:${tile.patterns.map(p => p.join('/')).join(',')}`, all: false }
+  return null
 }

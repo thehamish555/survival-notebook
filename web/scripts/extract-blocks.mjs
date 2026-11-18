@@ -118,5 +118,12 @@ for (let i = 0; i < texList.length; i++) {
 for (const [i, { data, w, h }] of pics) { const [x0, y0] = rects[i]; for (let y = 0; y < h; y++) data.copy(sheet, ((y0 + y) * W + x0) * 4, y * w * 4, (y + 1) * w * 4) }
 const out = path.join('public', 'mc'); fs.mkdirSync(out, { recursive: true })
 await sharp(sheet, { raw: { width: W, height: rows * 16, channels: 4 } }).png({ compressionLevel: 9 }).toFile(path.join(out, 'blocks.png'))
+// Banner pattern layers (the viewer paints each banner from them) and Steve, for heads whose skin can't be loaded
+const ent = path.join(out, 'entity'); fs.rmSync(ent, { recursive: true, force: true }); fs.mkdirSync(path.join(ent, 'banner'), { recursive: true })
+for (const e of zip.getEntries()) {
+  const n = e.entryName.match(/^assets\/minecraft\/textures\/entity\/banner\/([a-z0-9_]+)\.png$/)?.[1]
+  if (n && n !== 'banner_base') fs.writeFileSync(path.join(ent, 'banner', n + '.png'), e.getData())
+}
+fs.writeFileSync(path.join(ent, 'steve.png'), zip.getEntry('assets/minecraft/textures/entity/player/wide/steve.png').getData())
 fs.writeFileSync(path.join(out, 'blocks.json'), JSON.stringify({ cols: COLS, rows, tex: texList, big: rects, models, blocks }))
 console.log(`${Object.keys(blocks).length} blocks, ${models.length} models, ${texList.length} textures -> public/mc/blocks.json, blocks.png (${(fs.statSync(path.join(out, 'blocks.json')).size / 1024).toFixed(0)} KB json)`)
