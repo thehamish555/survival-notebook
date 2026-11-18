@@ -45,6 +45,8 @@ const MIGRATIONS: ((db: DB) => void)[] = [
     db.exec(`create table if not exists play(nb text not null, user text not null, day text not null, ms integer not null default 0, dist real not null default 0, primary key(nb, user, day));`)
     if (!db.prepare("select 1 from pragma_table_info('users') where name='notify'").get()) db.exec("alter table users add column notify text not null default '{}'")
   },
+  // 3.5: each person's timezone (from their browser), so the weekly recap arrives at 7pm their time.
+  db => { if (!db.prepare("select 1 from pragma_table_info('users') where name='tz'").get()) db.exec("alter table users add column tz text not null default ''") },
 ]
 
 export function openDb(path: string): DB {

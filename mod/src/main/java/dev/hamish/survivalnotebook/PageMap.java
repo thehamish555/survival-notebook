@@ -188,7 +188,7 @@ final class PageMap {
 			boolean on = Notebook.str(o, "id").equals(tracked), hov = o == hover;
 			if (on || hov) { g.fill(px - 8, pz - 8, px + 8, pz + 8, on ? p.gold : p.ink); g.fill(px - 7, pz - 7, px + 7, pz + 7, 0xCC000000); }
 			g.pose().pushMatrix(); g.pose().translate(px - 6, pz - 6); g.pose().scale(0.75f, 0.75f);
-			Compat.drawItem(g, PagePlaces.CAT_ICON.getOrDefault(Notebook.str(o, "cat"), "paper"), 0, 0);
+			Compat.drawItem(g, PagePlaces.icon(o), 0, 0);
 			g.pose().popMatrix();
 			if (scale >= 0.5 || hov || on) {
 				String name = Notebook.str(o, "name").isBlank() ? "Unnamed place" : Notebook.str(o, "name");

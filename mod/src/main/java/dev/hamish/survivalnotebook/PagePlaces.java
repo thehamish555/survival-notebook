@@ -13,8 +13,10 @@ final class PagePlaces {
 
 	static final java.util.Map<String, String> CAT_ICON = java.util.Map.of("Important", "nether_star", "Farms", "wheat", "Biomes", "spyglass", "Structures", "bricks", "Other", "paper");
 	static final String[] CATS = {"Important", "Farms", "Biomes", "Structures", "Other"};
+	/** A place's own icon if it has one, otherwise its category's. */
+	static String icon(JsonObject o) { String ic = Notebook.str(o, "icon"); return ic.isBlank() ? CAT_ICON.getOrDefault(Notebook.str(o, "cat"), "paper") : ic; }
 	static JsonObject draft;
-	static boolean isNew, confirmDel, nearest, importing;
+	static boolean isNew, confirmDel, nearest, importing, pickingIcon;
 	static String query = "";
 	static List<Minimap.Source> sources = new ArrayList<>();
 	static int importPick = -1;
@@ -64,7 +66,7 @@ final class PagePlaces {
 		net.minecraft.client.Minecraft.getInstance().execute(() -> offer(s, dim, p.xyz(), "Pasted"));
 	}
 
-	static void reset() { confirmHere = ""; draft = null; confirmDel = false; importing = false; importPick = -1; }
+	static void reset() { confirmHere = ""; draft = null; pickingIcon = false; confirmDel = false; importing = false; importPick = -1; }
 
 	static void open(String id) {
 		JsonObject o = Notebook.find("coords", id);
@@ -88,7 +90,7 @@ final class PagePlaces {
 		openNew();
 	}
 
-	static void build(NotebookScreen s) { if (draft != null) editor(s); else if (importing) importView(s); else list(s); }
+	static void build(NotebookScreen s) { if (draft != null && pickingIcon) IconPicker.build(s, draft, () -> { pickingIcon = false; s.rebuild(); }); else if (draft != null) editor(s); else if (importing) importView(s); else list(s); }
 
 	private static void importView(NotebookScreen s) {
 		Ui.Pal p = Ui.pal();
@@ -163,7 +165,7 @@ final class PagePlaces {
 			if (!(nearest && here != null)) { int at = NotebookScreen.scroll + i; s.reorder("coords", id, at > 0 ? Notebook.str(all.get(at - 1), "id") : "", at + 1 < all.size() ? Notebook.str(all.get(at + 1), "id") : "", ry, 25); }   // manual order only when not sorted by distance
 			s.row(s.cx, ry, s.cw - 10, 25, s.cw - 72, i, () -> { open(id); s.rebuild(); });
 			s.paint((g, mx, my) -> {
-				Compat.drawItem(g, CAT_ICON.getOrDefault(c, "paper"), s.cx + 6, ry + 5);
+				Compat.drawItem(g, icon(o), s.cx + 6, ry + 5);
 				g.fill(s.cx + 1, ry + 3, s.cx + 4, ry + 22, Ui.cat(c).fg());
 				String label = (tracked ? "> " : "") + (name.isBlank() ? "Unnamed place" : name);
 				g.text(s.font(), Ui.clip(s.font(), label, s.cw - 250), s.cx + 28, ry + 5, tracked ? p.amber.fg() : p.ink, false);
@@ -188,7 +190,10 @@ final class PagePlaces {
 		s.text(isNew ? "New place" : "Edit place", s.cx, y - 1, p.gold);
 		y += 14;
 		s.text("Name", s.cx, y + 6, p.mut);
-		s.box(bx, y, bw, "Place name", Notebook.str(draft, "name"), v -> draft.addProperty("name", v));
+		s.box(bx, y, bw - 28, "Place name", Notebook.str(draft, "name"), v -> draft.addProperty("name", v));
+		final int iy = y; final JsonObject d = draft;   // the icon: the category's until you pick your own
+		s.btn(bx + bw - 22, y, 22, "", 1, () -> { pickingIcon = true; IconPicker.reset(); NotebookScreen.scroll = 0; s.rebuild(); }, Notebook.canEdit());
+		s.paint((g, mx, my) -> Compat.drawItem(g, icon(d), bx + bw - 19, iy + 2));
 		y += 26;
 
 		s.text("Details", s.cx, y + 6, p.mut);

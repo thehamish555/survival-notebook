@@ -1,5 +1,6 @@
 // Extracts block shapes and textures from YOUR installed Minecraft client jar for the 3D schematic viewer.
-// Writes public/mc/blocks.json (every block state's models, with their boxes and faces) and public/mc/blocks.png (the textures, 16x16 each).
+// Writes public/mc/blocks.json (every block state's models, with their boxes and faces) and public/mc/blocks.png (the textures: 16x16 tiles,
+// then the chest, banner, head and other block entity textures at full size).
 // Usage: npm run blocks            (auto-finds your newest installed version)
 //        npm run blocks -- "C:\path\to\26.3.jar"
 import AdmZip from 'adm-zip'
@@ -7,6 +8,7 @@ import sharp from 'sharp'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import { addBlockEntities } from './block-entities.mjs'
 
 let jar = process.argv[2]
 if (!jar) {
@@ -88,18 +90,33 @@ for (const [k, c] of Object.entries(TINTS)) if (blocks[k]) blocks[k].t = c
 // Fluids have no model: the viewer draws them as a slightly lower box
 for (const [k, t] of [['water', 'block/water_still'], ['lava', 'block/lava_still']]) blocks[k] = { ...(blocks[k] || {}), fluid: tex(t) }
 
-// ---- the texture sheet: 16x16 tiles, first frame of animated ones
-const COLS = 64, rows = Math.ceil(texList.length / COLS)
-const sheet = Buffer.alloc(COLS * 16 * rows * 16 * 4)
+// Chests, shulker boxes, banners, heads, pots and bells: drawn by code in the game, shapes copied in block-entities.mjs
+const big = addBlockEntities({ hasBlock: n => !!zip.getEntry(`assets/minecraft/blockstates/${n}.json`), tex, models, blocks })
+
+// ---- the texture sheet: 16x16 tiles (first frame of animated ones), then the block entity textures at full size below them
+const COLS = 64, W = COLS * 16, tileRows = Math.ceil(texList.length / COLS)
+const rects = {}, pics = new Map()
+let sx = 0, sy = tileRows * 16, shelf = 0
+for (const [i, p] of [...big.entries()].sort((a, b) => a[1].localeCompare(b[1]))) {
+  const e = zip.getEntry(`assets/minecraft/textures/${p}.png`); if (!e) { console.warn('Missing texture', p); continue }
+  const { data, info } = await sharp(e.getData()).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  if (sx + info.width > W) { sx = 0; sy += shelf; shelf = 0 }
+  rects[i] = [sx, sy, info.width, info.height]; pics.set(i, { data, w: info.width, h: info.height })
+  sx += info.width; shelf = Math.max(shelf, info.height)
+}
+const rows = Math.ceil((sy + shelf) / 16)
+const sheet = Buffer.alloc(W * rows * 16 * 4)
 for (let i = 0; i < texList.length; i++) {
+  if (big.has(i)) continue
   const e = zip.getEntry(`assets/minecraft/textures/${texList[i]}.png`); if (!e) continue
   const meta = await sharp(e.getData()).metadata()
   const side = Math.min(meta.width, meta.height)
   const { data } = await sharp(e.getData()).ensureAlpha().extract({ left: 0, top: 0, width: side, height: side }).resize(16, 16, { kernel: 'nearest' }).raw().toBuffer({ resolveWithObject: true })
   const cx = (i % COLS) * 16, cy = Math.floor(i / COLS) * 16
-  for (let y = 0; y < 16; y++) data.copy(sheet, ((cy + y) * COLS * 16 + cx) * 4, y * 64, y * 64 + 64)
+  for (let y = 0; y < 16; y++) data.copy(sheet, ((cy + y) * W + cx) * 4, y * 64, y * 64 + 64)
 }
+for (const [i, { data, w, h }] of pics) { const [x0, y0] = rects[i]; for (let y = 0; y < h; y++) data.copy(sheet, ((y0 + y) * W + x0) * 4, y * w * 4, (y + 1) * w * 4) }
 const out = path.join('public', 'mc'); fs.mkdirSync(out, { recursive: true })
-await sharp(sheet, { raw: { width: COLS * 16, height: rows * 16, channels: 4 } }).png({ compressionLevel: 9 }).toFile(path.join(out, 'blocks.png'))
-fs.writeFileSync(path.join(out, 'blocks.json'), JSON.stringify({ cols: COLS, rows, tex: texList, models, blocks }))
+await sharp(sheet, { raw: { width: W, height: rows * 16, channels: 4 } }).png({ compressionLevel: 9 }).toFile(path.join(out, 'blocks.png'))
+fs.writeFileSync(path.join(out, 'blocks.json'), JSON.stringify({ cols: COLS, rows, tex: texList, big: rects, models, blocks }))
 console.log(`${Object.keys(blocks).length} blocks, ${models.length} models, ${texList.length} textures -> public/mc/blocks.json, blocks.png (${(fs.statSync(path.join(out, 'blocks.json')).size / 1024).toFixed(0)} KB json)`)

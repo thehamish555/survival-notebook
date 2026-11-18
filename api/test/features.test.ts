@@ -230,8 +230,15 @@ test('play time, "is playing" and the weekly recap', async () => {
   const { recap, recapLine, sendWeeklyRecaps } = await import('../src/recap')
   assert.equal(recapLine(recap(db, nb)), '2h 0m played, 1 new place, 1 farm built and 1 death')
   const got: string[] = [], notify = (u: string, m: { body: string }) => { got.push(`${u === a.id ? 'alice' : 'bob'}: ${m.body}`) }
-  const sunday = new Date(); sunday.setUTCDate(sunday.getUTCDate() + (7 - sunday.getUTCDay()) % 7); sunday.setUTCHours(23, 59)   // the coming Sunday: this week's events are in its recap
-  assert.equal(sendWeeklyRecaps(db, notify, new Date(sunday.getTime() - 86_400_000)), 0)   // only on Sundays
-  sendWeeklyRecaps(db, notify, sunday); sendWeeklyRecaps(db, notify, sunday)                // once per week
-  assert.equal(got.length, 2)
+  // Sunday at 7pm in each person's timezone: alice is in New Zealand, bob never sent one (so UTC)
+  assert.equal((await call('PUT', '/me/tz', { tz: 'Mars/Olympus' }, a.token)).status, 400)
+  await call('PUT', '/me/tz', { tz: 'Pacific/Auckland' }, a.token)
+  const { localTime } = await import('../src/recap')
+  const next = (tz: string) => { let t = Math.ceil(Date.now() / 3_600_000) * 3_600_000 + 60_000; while (!(localTime(tz, new Date(t)).day === 0 && localTime(tz, new Date(t)).hour === 19)) t += 3_600_000; return new Date(t) }
+  const nz = next('Pacific/Auckland'), utc = next('UTC')
+  assert.equal(sendWeeklyRecaps(db, notify, new Date(nz.getTime() - 3_600_000)), 0)          // 6pm: not yet
+  sendWeeklyRecaps(db, notify, nz); sendWeeklyRecaps(db, notify, new Date(nz.getTime() + 600_000))   // 7pm, and again a bit later: once
+  assert.deepEqual(got, ['alice: 2h 0m played, 1 new place, 1 farm built and 1 death'])
+  sendWeeklyRecaps(db, notify, utc)
+  assert.deepEqual(got.map(g => g.split(':')[0]), ['alice', 'bob'])
 })

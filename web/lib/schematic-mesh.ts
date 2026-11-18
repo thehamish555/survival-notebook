@@ -7,7 +7,8 @@ type Box = [number[], number[], 0 | [string, number, number, number, number], Re
 type ModelRef = { m: number; x?: number; y?: number }
 export type BlockData = {
   cols: number; rows: number; tex: string[]
-  models: ({ b: Box[] } | { p: number })[]
+  big?: Record<number, number[]>   // block entity textures kept at full size: [x, y, w, h] on the sheet
+  models: ({ b: Box[] } | { p: number } | { q: number[][] })[]   // q: baked block entity quads, [texture, tint, then x y z u v for each corner]
   blocks: Record<string, { v?: [string, ModelRef][]; mp?: [any, ModelRef][]; t?: number[]; fluid?: number }>
 }
 export type MeshPart = { pos: Float32Array; uv: Float32Array; col: Float32Array; idx: Uint32Array }
@@ -87,10 +88,11 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
   const at = (x: number, y: number, z: number) => (x < 0 || y < 0 || z < 0 || x >= X || y >= Y || z >= Z ? 0 : s.data[(y * Z + z) * X + x])
   const parts = { solid: { p: [] as number[], u: [] as number[], c: [] as number[], i: [] as number[] }, glass: { p: [] as number[], u: [] as number[], c: [] as number[], i: [] as number[] } }
   let faces = 0
-  const quad = (glass: boolean, pts: number[][], uv: number[], rot: number, texIdx: number, shade: number[], ox: number, oy: number, oz: number) => {
+  const corner = (texIdx: number) => data.big?.[texIdx] ?? [(texIdx % data.cols) * 16, Math.floor(texIdx / data.cols) * 16]
+  const quad = (glass: boolean, pts: number[][], uv: number[] | number[][], rot: number, texIdx: number, shade: number[], ox: number, oy: number, oz: number) => {
     const g = glass ? parts.glass : parts.solid, base = g.p.length / 3
-    const tx = (texIdx % data.cols) * 16, ty = Math.floor(texIdx / data.cols) * 16
-    let uvs = [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]]
+    const [tx, ty] = corner(texIdx)
+    let uvs = Array.isArray(uv[0]) ? uv as number[][] : (([a, b, c, d]) => [[a, b], [c, b], [c, d], [a, d]])(uv as number[])
     for (let r = 0; r < (rot / 90) % 4; r++) uvs = [uvs[3], uvs[0], uvs[1], uvs[2]]
     for (let k = 0; k < 4; k++) {
       g.p.push(ox + pts[k][0] / 16, oy + pts[k][1] / 16, oz + pts[k][2] / 16)
@@ -100,6 +102,7 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
     g.i.push(base, base + 1, base + 2, base, base + 2, base + 3)
     faces++
   }
+  const linear = (v: number) => Math.pow(v / 255, 2.2)   // tints are sRGB colours; the viewer mixes in linear light and converts back
   const light = (n: number[]) => (n[1] > 0.5 ? 1 : n[1] < -0.5 ? 0.5 : Math.abs(n[2]) > Math.abs(n[0]) ? 0.8 : 0.62)
   const normalOf = (p: number[][]) => {
     const a = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]], b = [p[3][0] - p[0][0], p[3][1] - p[0][1], p[3][2] - p[0][2]]
@@ -119,7 +122,7 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
       let pts = corners(dir, from, to)
       if (rot) pts = pts.map(p => { const [axis, ang, ox, oy, oz] = rot; const q = rotAxis(axis, rad(ang), [p[0] - ox, p[1] - oy, p[2] - oz]); return [q[0] + ox, q[1] + oy, q[2] + oz] })
       pts = pts.map(p => turn(ref, p))
-      const l = light(normalOf(pts)), t = f[3] && st.tint ? st.tint.map(v => v / 255) : [1, 1, 1]
+      const l = light(normalOf(pts)), t = f[3] && st.tint ? st.tint.map(linear) : [1, 1, 1]
       quad(st.glass, pts, f[1] || defaultUv(dir, from, to), f[4], f[0], [t[0] * l, t[1] * l, t[2] * l], x, y, z)
     }
   }
@@ -136,7 +139,11 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
     for (const ref of st.refs) {
       const m = data.models[ref.m]
       if ('b' in m) for (const [from, to, rot, f] of m.b) box(st, id, x, y, z, ref, from, to, rot, f)
-      else if (m.p >= 0) {
+      else if ('q' in m) for (const q of m.q) {   // a chest, banner, head and so on, already turned the right way
+        const pts = [0, 1, 2, 3].map(k => turn(ref, q.slice(2 + k * 5, 5 + k * 5))), uv = [0, 1, 2, 3].map(k => q.slice(5 + k * 5, 7 + k * 5))
+        const l = light(normalOf(pts)), t = q[1] && st.tint ? st.tint.map(linear) : [1, 1, 1]
+        quad(st.glass, pts, uv, 0, q[0], [t[0] * l, t[1] * l, t[2] * l], x, y, z)
+      } else if (m.p >= 0) {
         const sp = SPECIAL.find(([re]) => re.test(st.b.name))
         box(st, id, x, y, z, ref, sp ? sp[1] : [1, 0, 1], sp ? sp[2] : [15, 15, 15], 0, plain(m.p))
       }

@@ -1,5 +1,6 @@
 ## 1.6.0 – Feature
-- Waypoints in the world: your notebook's places show where they are, with a faint beam, their category icon and the distance. Look at one to see its name. Turn them off in Settings > Overlays.
+- Waypoints in the world: your notebook's places show on screen where they are, with their icon and the distance. Look at one to see its name. They go away once you're within 16 blocks. Turn them off in Settings > Overlays.
+- Places can have their own icon: press the icon beside the name when editing a place. Places without one keep their category's icon.
 - If you sync places with Xaero's Minimap or JourneyMap, places it already shows are skipped so nothing appears twice. Places from teammates, places you added yourself and waypoints you've hidden in the minimap still show.
 - Time played and distance travelled now count towards the weekly recap on the website (with Share position on).
 

@@ -262,7 +262,7 @@ export default function Notebook() {
         <p className="mut">Enter coordinates as x y z, or paste what F3 + C copies in game. Use the buttons to copy them or convert between Overworld and Nether.</p>
         <FS edit={edit}><Table rows={coords} hl={hl} onChange={(v: any) => save('coords', v)} show={coordShow} onAdd={resetFilters} empty="No places yet. Add your first one."
           blank={{ name: '', cat: F('cc') === 'All' ? 'Important' : F('cc'), ow: '', nether: '', end: '', portal: 'No Portal' }}
-          cols={[{ k: 'name', l: 'Place name', icon: (r: any) => CAT_ICON[r.cat] }, { k: 'cat', l: 'Category', t: 'pill', opts: CATS, tones: TONES.cat }, { k: 'ow', l: 'Overworld', t: 'coord', dim: 'ow', other: putOther }, { k: '_conv', l: '', t: 'custom', render: (r: any, patch: any) => {
+          cols={[{ k: 'name', l: 'Place name', icon: (r: any) => r.icon || CAT_ICON[r.cat] || 'paper', pick: true }, { k: 'cat', l: 'Category', t: 'pill', opts: CATS, tones: TONES.cat }, { k: 'ow', l: 'Overworld', t: 'coord', dim: 'ow', other: putOther }, { k: '_conv', l: '', t: 'custom', render: (r: any, patch: any) => {
               const toN = isXYZ(r.ow) && blank(r.nether), toO = isXYZ(r.nether) && blank(r.ow)
               return <button className="x" disabled={!toN && !toO} onClick={() => patch(toN ? { nether: conv(r.ow, 1 / 8) } : { ow: conv(r.nether, 8) })}
                 title={toN ? 'Fill Nether from Overworld (÷8)' : toO ? 'Fill Overworld from Nether (×8)' : 'Fill in one coordinate and leave the other empty, nothing gets overwritten'}>⇄</button>

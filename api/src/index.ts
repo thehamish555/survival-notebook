@@ -22,7 +22,7 @@ const prune = () => { try { const n = pruneMap(db); if (n) console.log(`Removed 
 setTimeout(prune, 60_000).unref(); setInterval(prune, 24 * 3600 * 1000).unref()
 
 // Hourly: on Sunday the weekly recap goes out (once per notebook)
-setInterval(() => { try { const n = sendWeeklyRecaps(db, notify); if (n) console.log(`Sent ${n} weekly recap(s)`) } catch (e) { console.error('recap failed', e) } }, 3600 * 1000).unref()
+setInterval(() => { try { const n = sendWeeklyRecaps(db, notify); if (n) console.log(`Sent ${n} weekly recap(s)`) } catch (e) { console.error('recap failed', e) } }, 5 * 60 * 1000).unref()
 
 // Daily consistent snapshot of the database (safe while running), newest 14 kept.
 const backupDir = config.BACKUP_DIR || join(dirname(config.DB_PATH), 'backups')

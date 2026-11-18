@@ -1,4 +1,5 @@
 'use client'
+import { sendTimezone } from './pwa'
 import { useEffect, useRef, useState } from 'react'
 import { api, clientId, eventsUrl, getToken, isOffline, readLocal, saveLocal } from '@/lib/api'
 import { mergeSection } from '@/lib/merge'
@@ -80,7 +81,7 @@ export function useNotebook(id: string) {
       save: (k, v) => { setD((p: any) => ({ ...p, [k]: v })); pending[k] = v; schedule(k) },
       reload: () => load(),
     }
-    api('/me').then(u => { me = u.id; setMeId(u.id); saveLocal('sn_me', u.id) }).catch(e => { if (isOffline(e)) setMeId(readLocal('sn_me')?.v || ''); else location.href = '/' })
+    api('/me').then(u => { me = u.id; setMeId(u.id); saveLocal('sn_me', u.id); sendTimezone() }).catch(e => { if (isOffline(e)) setMeId(readLocal('sn_me')?.v || ''); else location.href = '/' })
     load(); loadActivity()
     api(`/notebooks/${id}/pos`).then((ps: any[]) => setPlayers(Array.isArray(ps) ? ps : [])).catch(() => {})
     const stale = setInterval(() => setPlayers(ps => ps.map(p => (p.online && Date.now() - p.ts > 120_000 ? { ...p, online: false } : p))), 15000)   // quiet for 2 minutes: offline

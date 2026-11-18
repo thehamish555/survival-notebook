@@ -15,15 +15,15 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Your notebook's places shown in the world: a faint beam, the category icon and the distance, with the name when you look at it or get
- * close. Drawn on the HUD from the camera's own projection, so it lines up with the world without hooking the renderer. Places that a
+ * Your notebook's places shown in the world: the place's icon and the distance, with the name when you look at it. They go away once
+ * you're within 16 blocks. Drawn on the HUD from the camera's own projection, so it lines up with the world without hooking the renderer. Places that a
  * synced minimap mod already draws are skipped, so nothing shows twice.
  */
 final class Waypoints {
 	private Waypoints() { }
 
 	private record Mark(JsonObject place, double x, double y, double z, double dist, boolean tracked) { }
-	private static final int MAX = 32;
+	private static final int MAX = 32, NEAR = 16;
 
 	static void extract(GuiGraphicsExtractor g, DeltaTracker tick) {
 		NbConfig c = NbConfig.get();
@@ -43,7 +43,7 @@ final class Waypoints {
 			if (Notebook.bool(o, "mm") && Minimap.drawsInWorld(Notebook.str(o, "name"), here.dim(), xyz)) continue;   // the minimap already shows it
 			double x = p[0] + 0.5, y = p[1], z = p[2] + 0.5;
 			double d = Math.hypot(x - mc.player.getX(), z - mc.player.getZ());
-			if (d < 2.5) continue;
+			if (Math.hypot(d, y - mc.player.getY()) < NEAR) continue;   // you're there (counting height, so a place right below you still shows)
 			marks.add(new Mark(o, x, y, z, d, Notebook.str(o, "id").equals(c.trackedPlace)));
 		}
 		if (marks.isEmpty()) return;
@@ -63,13 +63,11 @@ final class Waypoints {
 			if (d < best) { best = d; focus = k; }
 		}
 		for (Mark k : marks) {
-			float[] base = project(m, eye, k.x(), k.y(), k.z(), W, H), top = project(m, eye, k.x(), k.y() + 48, k.z(), W, H);
 			float[] at = project(m, eye, k.x(), k.y() + 1.2, k.z(), W, H);
 			if (at == null) continue;
 			String cat = Notebook.str(k.place(), "cat");
 			int tone = Ui.cat(cat).fg() & 0xFFFFFF;
 			float fade = (float) Math.max(0.45, 1 - k.dist() / 1500);
-			if (base != null && top != null) beam(g, base, top, k.dist() < 200 ? 2 : 1, ((int) (0x58 * fade) << 24) | tone);
 
 			int sx = Math.round(at[0]), sy = Math.round(at[1]);
 			if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
@@ -79,12 +77,12 @@ final class Waypoints {
 			g.pose().translate(sx, sy);
 			g.pose().scale(scale, scale);
 			Ui.rounded(g, -11, -11, 22, 22, 0xC0141414, edge);
-			Compat.drawItem(g, PagePlaces.CAT_ICON.getOrDefault(cat, "paper"), -8, -8);
+			Compat.drawItem(g, PagePlaces.icon(k.place()), -8, -8);
 			g.pose().popMatrix();
 
 			String dist = Math.round(k.dist()) + " m";
 			int ty = sy + Math.round(13 * scale);
-			if (k == focus || k.dist() < 16) {
+			if (k == focus) {
 				String name = Notebook.str(k.place(), "name").isBlank() ? "Place" : Notebook.str(k.place(), "name");
 				String label = Ui.clip(font, name, 150) + "  ·  " + dist;
 				int lw = font.width(label) + 10;
@@ -101,17 +99,5 @@ final class Waypoints {
 		Vector4f v = m.transform(new Vector4f((float) (x - eye.x), (float) (y - eye.y), (float) (z - eye.z), 1f));
 		if (v.w <= 0.05f) return null;
 		return new float[] {(v.x / v.w + 1) / 2 * W, (1 - v.y / v.w) / 2 * H};
-	}
-
-	/** A soft line from the ground spot up into the sky, drawn as small steps so it works at any angle. */
-	private static void beam(GuiGraphicsExtractor g, float[] a, float[] b, int w, int col) {
-		float dx = b[0] - a[0], dy = b[1] - a[1];
-		int steps = (int) Math.min(600, Math.max(Math.abs(dx), Math.abs(dy)) / 2) + 1;
-		for (int i = 0; i < steps; i++) {
-			float t = i / (float) steps;
-			int x = Math.round(a[0] + dx * t), y = Math.round(a[1] + dy * t);
-			int alpha = (int) (((col >>> 24) & 0xFF) * (1 - t * 0.85f));
-			g.fill(x - w / 2, y, x - w / 2 + w, y + 2, (alpha << 24) | (col & 0xFFFFFF));
-		}
 	}
 }

@@ -29,3 +29,14 @@ test('schematic: faces between solid blocks and between glass are hidden', () =>
   assert.equal(g.faces, 11)                              // stone shows through glass, glass is hidden behind stone
   assert.equal(g.glass.idx.length / 6, 5)
 })
+
+test('schematic: block entities are baked quads on their full-size texture, tinted where marked', () => {
+  const quad = (t: number, tint: number) => [t, tint, 0, 16, 0, 0, 0, 16, 16, 0, 16, 16, 16, 16, 0, 0, 16, 0, 16, 16, 0, 16, 0, 0, 0]
+  const d: BlockData = { ...data, rows: 5, big: { 4: [0, 16, 64, 64] }, tex: [...data.tex, 'entity/banner/base'], models: [{ q: [quad(4, 1), quad(4, 0)] }],
+    blocks: { red_banner: { v: [['rotation=0', { m: 0 }]], t: [255, 0, 0] } } }
+  const m = buildMesh({ X: 1, Y: 1, Z: 1, palette: [{ name: 'air', props: {} }, { name: 'red_banner', props: { rotation: '0' } }], data: new Uint16Array([1]), name: '', count: 1 }, d)
+  assert.equal(m.faces, 2)
+  assert.deepEqual([...m.solid.uv.slice(0, 2)].map(v => +v.toFixed(4)), [0, +(1 - 16 / 80).toFixed(4)])   // texture pixel (0, 0) of the full-size picture at (0, 16) on an 80 px tall sheet
+  assert.deepEqual([m.solid.col[1], m.solid.col[2]], [0, 0])                                              // the tinted one is red
+  assert.equal(m.solid.col[12 + 1], m.solid.col[12])                                                     // the other isn't
+})

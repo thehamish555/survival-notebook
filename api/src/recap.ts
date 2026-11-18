@@ -84,19 +84,31 @@ export function recapLine(r: Recap): string | null {
   return bits.length ? listOf(bits, 4) : null
 }
 
-/** Sunday evening (New Zealand time is what most of the current players use, so it's 7 UTC Sunday): sends each notebook's recap once a week. */
+/** Where someone is in their week: their local date, weekday (0 = Sunday) and hour. No timezone saved: UTC. */
+export function localTime(tz: string, now: Date) {
+  let p: Record<string, string>
+  try { p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', hourCycle: 'h23' }).formatToParts(now).map(x => [x.type, x.value])) }
+  catch { return localTime('', now) }
+  return { date: `${p.year}-${p.month}-${p.day}`, day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday), hour: Number(p.hour) }
+}
+export const RECAP_HOUR = 19
+
+/** Sunday at 7pm in each person's own timezone: the week's recap for every notebook they're in, once a week. Run it every few minutes. */
 export function sendWeeklyRecaps(db: DB, notify: (user: string, msg: { title: string; body: string; url: string }, kind: 'recap') => void, now = new Date()) {
-  if (now.getUTCDay() !== 0 || now.getUTCHours() < 7) return 0
-  const week = now.toISOString().slice(0, 10)
+  const cache = new Map<string, ReturnType<typeof recap>>()
   let sent = 0
-  for (const { id } of db.prepare('select id from notebooks').all() as { id: string }[]) {
-    const key = `recap:${id}`
-    if ((db.prepare('select v from kv where k=?').get(key) as { v: string } | undefined)?.v === week) continue
-    db.prepare('insert into kv(k,v) values(?,?) on conflict(k) do update set v=excluded.v').run(key, week)
-    const r = recap(db, id, now.getTime()), line = recapLine(r)
-    if (!line) continue
-    for (const { user } of db.prepare('select user from members where nb=?').all(id) as { user: string }[]) notify(user, { title: `Your week in ${r.title}`, body: line, url: `/n/${id}/recap` }, 'recap')
-    sent++
+  for (const { id: user, tz } of db.prepare('select id, tz from users').all() as { id: string; tz: string }[]) {
+    const t = localTime(tz, now)
+    if (t.day !== 0 || t.hour < RECAP_HOUR) continue
+    for (const { nb } of db.prepare('select nb from members where user=?').all(user) as { nb: string }[]) {
+      const key = `recap:${nb}:${user}`
+      if ((db.prepare('select v from kv where k=?').get(key) as { v: string } | undefined)?.v === t.date) continue
+      db.prepare('insert into kv(k,v) values(?,?) on conflict(k) do update set v=excluded.v').run(key, t.date)
+      if (!cache.has(nb)) cache.set(nb, recap(db, nb, now.getTime()))
+      const r = cache.get(nb)!, line = recapLine(r)
+      if (!line) continue
+      notify(user, { title: `Your week in ${r.title}`, body: line, url: `/n/${nb}/recap` }, 'recap'); sent++
+    }
   }
   return sent
 }

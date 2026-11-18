@@ -41,11 +41,10 @@ export function WeekCard({ id }: { id: string }) {
   useEffect(() => { api(`/notebooks/${id}/recap`).then(setR).catch(() => setR(null)) }, [id])
   if (!r) return null
   const t = r.totals
-  if (!t.ms && !t.places && !t.todos && !t.farms && !t.deaths) return null
   const bits = [t.ms >= 60_000 && `${playTime(t.ms)} played`, t.dist >= 100 && `${blocks(t.dist)} blocks travelled`, t.places && `${t.places} new place${t.places === 1 ? '' : 's'}`,
     t.farms && `${t.farms} farm${t.farms === 1 ? '' : 's'} built`, t.todos && `${t.todos} to-do${t.todos === 1 ? '' : 's'} done`, t.deaths && `${t.deaths} death${t.deaths === 1 ? '' : 's'}`].filter(Boolean)
   return <div className="card weekcard"><div className="row"><h2 className="grow">This week</h2><Link className="btn ghost" href={`/n/${id}/recap`}>See the recap</Link></div>
-    <p className="mut">{bits.join(' · ')}</p>
-    {t.ms > 0 && <DayBars days={r.days} height={64} />}
+    <p className="mut">{bits.length ? bits.join(' · ') : 'Nothing yet this week. Play time shows up for anyone playing with the mod and Share position on.'}</p>
+    <DayBars days={r.days} height={64} />
   </div>
 }

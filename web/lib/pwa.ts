@@ -34,6 +34,16 @@ export async function enablePush(): Promise<void> {
   const { key } = await api('/push/key')
   const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) }))
   await api('/push/subscribe', 'POST', sub.toJSON())
+  await sendTimezone(true)
+}
+
+/** Tells the API which timezone this browser is in, so the weekly recap arrives at 7pm your time. Once per session. */
+export async function sendTimezone(force = false) {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (!tz || (!force && sessionStorage.getItem('sn_tz') === tz)) return
+    await api('/me/tz', 'PUT', { tz }); sessionStorage.setItem('sn_tz', tz)
+  } catch { }
 }
 
 export async function disablePush(): Promise<void> {
