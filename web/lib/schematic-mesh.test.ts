@@ -57,12 +57,61 @@ test('schematic: a head with a skin and a banner with patterns get their own pic
 
 test('schematic: entities are turned to their yaw and placed; ones the viewer can’t draw are counted', () => {
   const front = [-2, 0, 4, 0, 16, 2, 0, 4, 16, 16, 2, 4, 4, 16, 0, -2, 4, 4, 0, 0]   // a square facing +z, at z = 4 px
-  const d: BlockData = { ...data, rows: 5, entities: { iron_golem: { q: [[0, 0, ...front]] }, villager: { q: [[0, 0, ...front]], pic: 'villager' } } }
+  const d: BlockData = { ...data, rows: 5, entities: { iron_golem: { q: [[0, 0, ...front]] }, 'm:villager': { q: [[-1, 0, ...front]] } } }
   const ent = (id: string, yaw: number) => ({ id, x: 1.5, y: 0, z: 1.5, yaw })
   const m = buildMesh({ X: 3, Y: 2, Z: 3, palette: [{ name: 'air', props: {} }], data: new Uint16Array(18), name: '', count: 0,
-    entities: [ent('iron_golem', 90), { ...ent('villager', 0), villager: ['desert', 'farmer'] as [string, string] }, ent('experience_orb', 0), { ...ent('iron_golem', 0), y: 5 }] }, d)
+    entities: [ent('iron_golem', 90), { ...ent('villager', 0), villager: ['desert', 'farmer'] as [string, string] }, ent('arrow', 0), ent('marker', 0), { ...ent('iron_golem', 0), y: 5 }] }, d)
   // yaw 90 (facing west): the corner 4 px in front (+z) and 2 px to the side (-x) ends up 4 px west and 2 px north
   assert.deepEqual([+(m.solid.pos[0] * 16).toFixed(3), +(m.solid.pos[2] * 16).toFixed(3)], [24 - 4, 24 - 2])
   assert.deepEqual(Object.keys(m.custom), ['villager:desert:farmer'])
-  assert.deepEqual(m.missing, { experience_orb: 1 })               // the one above the top isn't drawn or counted
+  assert.deepEqual(m.missing, { arrow: 1 })                        // markers are invisible anyway; the one above the top isn't drawn or counted
+})
+
+test('schematic: slab sides that touch are hidden, like the game; full faces still show', () => {
+  const slab = { b: [[[0, 0, 0], [16, 8, 16], 0, Object.fromEntries(['down', 'up', 'north', 'south', 'west', 'east'].map(d => [d, [0, null, d === 'up' ? 0 : 1, 0, 0]]))]] as any }
+  const d: BlockData = { ...data, models: [...data.models, slab], blocks: { ...data.blocks, stone_slab: { v: [['type=bottom', { m: 5 }]] } } }
+  const row = (n: number) => ({ X: n, Y: 1, Z: 1, palette: [{ name: 'air', props: {} }, { name: 'stone_slab', props: { type: 'bottom' } }], data: new Uint16Array(n).fill(1), name: '', count: n })
+  assert.equal(buildMesh(row(1), d).faces, 6)
+  assert.equal(buildMesh(row(2), d).faces, 10)   // the two half-height sides between them go
+})
+
+test('schematic: water is as high as its level, fills waterlogged blocks, and light and barriers are invisible', () => {
+  const d: BlockData = { ...data, blocks: { ...data.blocks, water: { fluid: 0, t: [63, 118, 228] }, oak_slab: { v: [['', { m: 0 }]] }, light: { v: [['', { m: 1 }]] } }, models: [...data.models.slice(0, 1), { p: 2 }] }
+  const palette = [{ name: 'air', props: {} }, { name: 'water', props: { level: '0' } }, { name: 'water', props: { level: '4' } }, { name: 'oak_slab', props: { waterlogged: 'true' } }, { name: 'light', props: {} }]
+  const one = (id: number) => buildMesh({ X: 1, Y: 1, Z: 1, palette, data: new Uint16Array([id]), name: '', count: 1 }, d)
+  const top = (m: ReturnType<typeof one>) => Math.max(...[...m.glass.pos].filter((_, i) => i % 3 === 1))
+  assert.equal(+top(one(1)).toFixed(3), +(8 / 9).toFixed(3))     // a source block
+  assert.equal(+top(one(2)).toFixed(3), +(4 / 9).toFixed(3))     // flowing, four steps from its source
+  assert.equal(one(3).glass.idx.length / 6, 6)                    // the slab stands in water
+  assert.equal(one(4).faces, 0)                                   // a light block can't be seen
+  const two = buildMesh({ X: 2, Y: 1, Z: 1, palette, data: new Uint16Array([1, 3]), name: '', count: 2 }, d)
+  assert.equal(two.glass.idx.length / 6, 10)                      // no water wall between the water and the waterlogged slab
+})
+
+test('schematic: mobs get their variant\'s texture, and a spawner shows its mob', () => {
+  const front = [-2, 0, 4, 0, 16, 2, 0, 4, 16, 16, 2, 4, 4, 16, 0, -2, 4, 4, 0, 0]
+  const d: BlockData = { ...data, entities: { 'm:cow': { q: [[-1, 0, ...front]], s: [64, 64] }, 'm:warm_cow_baby': { q: [[-1, 0, ...front]], s: [64, 64] }, 'm:zombie': { q: [[-1, 0, ...front]], s: [64, 64] } } }
+  const tiles = new Map([[0, { spawn: 'zombie' }]])
+  const m = buildMesh({ X: 2, Y: 1, Z: 1, palette: [{ name: 'air', props: {} }], data: new Uint16Array(2), name: '', count: 0, tiles,
+    entities: [{ id: 'cow', x: 1, y: 0, z: 0.5, yaw: 0 }, { id: 'cow', x: 1, y: 0, z: 0.5, yaw: 0, variant: 'warm', baby: true }] }, d)
+  assert.deepEqual(Object.keys(m.custom).sort(), ['tex:cow/cow_temperate', 'tex:cow/cow_warm_baby', 'tex:zombie/zombie'])
+  assert.deepEqual([...m.custom['tex:cow/cow_temperate'].uv.slice(0, 2)], [0, 16 / 64])   // mob textures are mapped 0..1 of their model's texture size
+  assert.ok(Math.max(...m.custom['tex:zombie/zombie'].pos.filter((_, i) => i % 3 === 0)) < 1)   // the zombie is inside its spawner block
+  assert.deepEqual(m.missing, {})
+})
+
+test('schematic: signs get their text, and armour and held items are drawn on mobs that have them', () => {
+  const front = [-2, 0, 4, 0, 16, 2, 0, 4, 16, 16, 2, 4, 4, 16, 0, -2, 4, 4, 0, 0], I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+  const part = (n: string, p: number, q: number[][]) => ({ n, p, a: [0, 0, 0], r: [0, 0, 0], s: [1, 1, 1], q })
+  const d: BlockData = { ...data, blocks: { ...data.blocks, oak_sign: { v: [['', { m: 0 }]] } }, held: { t: [[0, 0, 0, 0, 0, 0, 1, 1, 1]], i: { iron_sword: [0, 0, 0, 0, 0, 0], carved_pumpkin: [0, 0, 0, 1, 0, 0] } },
+    entities: { 'm:zombie': { rig: { m: I, parts: [part('root', -1, [[-1, 0, ...front]]), part('right_arm', 0, []), part('left_arm', 0, []), part('head', 0, [])] }, s: [64, 64] }, 'armor:head': { q: [[-1, 0, ...front]], s: [64, 32] } } }
+  const tiles = new Map([[0, { sign: { front: { lines: ['Hi', '', '', ''], colour: 'red', glow: true } } }]])
+  const m = buildMesh({ X: 1, Y: 1, Z: 1, palette: [{ name: 'air', props: {} }, { name: 'oak_sign', props: { rotation: '4' } }], data: new Uint16Array([1]), name: '', count: 1, tiles,
+    entities: [{ id: 'zombie', x: 0.5, y: 0, z: 0.5, yaw: 0, hands: ['iron_sword'], armor: { head: { id: 'iron_helmet' }, feet: { id: 'elytra' } } }, { id: 'zombie', x: 0.5, y: 0, z: 0.5, yaw: 0, riding: true, armor: { head: { id: 'white_banner', patterns: [['rhombus', 'cyan']] } } }] }, d)
+  assert.ok(Object.keys(m.custom).includes('sign:94:10:red:1:Hi|||'))
+  assert.ok(Object.keys(m.custom).includes('tex:equipment/humanoid/iron'))   // an elytra isn't armour, so only the helmet
+  assert.ok(Object.keys(m.custom).includes('item:iron_sword'))
+  assert.ok(!Object.keys(m.custom).some(k => k.startsWith('banner')))   // no banner model in this test's data: it falls back to the flat picture
+  assert.ok(Object.keys(m.custom).includes('item:white_banner'))
+  assert.deepEqual(m.missing, {})
 })

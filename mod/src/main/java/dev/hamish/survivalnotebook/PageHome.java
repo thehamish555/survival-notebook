@@ -55,6 +55,25 @@ final class PageHome {
 		}
 		y += 3 * 37 + 5;
 
+		NbConfig cfg = NbConfig.get();
+		if (cfg.weeklyRecap) {   // the last 7 days, like the website's This week card; clicking it opens the full recap there
+			Recap.refresh(false);
+			JsonObject r = Recap.week;
+			final String line = r == null ? "Loading…" : Recap.line(r).isEmpty() ? "Nothing yet this week." : Recap.line(r), top = Recap.highlight(r);
+			s.text("This week", s.cx, y, p.gold);
+			y += 12;
+			final int yy = y, h = top.isEmpty() ? 15 : 27;
+			s.row(s.cx, yy, s.cw, h, s.cw, 0, () -> Compat.openUrl(s, cfg.web() + "/n/" + cfg.notebookId + "/recap"));
+			s.paint((g, mx, my) -> {
+				String more = "See the recap ↗";
+				int room = s.cw - s.font().width(more) - 18;
+				g.text(s.font(), Ui.clip(s.font(), line, room), s.cx + 6, yy + 4, p.ink, false);
+				if (!top.isEmpty()) g.text(s.font(), Ui.clip(s.font(), top, room), s.cx + 6, yy + 16, p.mut, false);
+				g.text(s.font(), more, s.cx + s.cw - s.font().width(more) - 6, yy + 4, p.mut, false);
+			});
+			y += h + 6;
+		}
+
 		s.text("Assigned to you", s.cx, y, p.gold);
 		y += 12;
 		int shown = 0;

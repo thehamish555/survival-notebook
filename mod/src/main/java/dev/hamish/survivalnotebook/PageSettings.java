@@ -28,6 +28,19 @@ final class PageSettings {
 		s.pill(s.cx + s.cw - 84, y + 3, 66, 16, on ? "On" : "Off", on ? p.green : p.gray, () -> { flip.run(); NbConfig.save(); s.rebuild(); }, true);
 	}
 
+	/** One choice row: a label with a short hint and a dropdown, for settings with more than two options. */
+	private static void choice(NotebookScreen s, int y, String id, String label, String hint, List<String> opts, String cur, java.util.function.Consumer<String> pick) {
+		Ui.Pal p = Ui.pal();
+		s.row(s.cx, y - 1, s.cw - 8, ROW - 2, 0, 0, null);
+		s.paint((g, mx, my) -> {
+			g.fill(s.cx + 1, y + 2, s.cx + 4, y + 20, cur.equals("Off") ? p.mut : p.green.fg());
+			g.text(s.font(), label, s.cx + 10, y + 2, p.ink, false);
+			g.text(s.font(), Ui.clip(s.font(), hint, s.cw - 130), s.cx + 10, y + 13, p.mut, false);
+		});
+		s.dropdown(id, s.cx + s.cw - 104, y + 2, 86, 18, "", opts, cur, cur.equals("Off") ? p.gray : p.green, v -> { pick.accept(v); NbConfig.save(); s.rebuild(); });
+	}
+
+
 	static void build(NotebookScreen s) {
 		NbConfig c = NbConfig.get();
 		Ui.Pal p = Ui.pal();
@@ -36,7 +49,8 @@ final class PageSettings {
 		y += 28;
 		if (cat.equals("Members")) { PageMembers.build(s, y); return; }
 		int visible = Math.max(1, (s.bottom - y) / ROW);
-		int rows = switch (cat) { case "Connection" -> 5; case "Overlays" -> 5; case "Sync & privacy" -> 9; default -> 3; };
+		boolean xaero = !Minimaps.installed().isEmpty();   // a minimap mod the notebook can work with
+		int rows = switch (cat) { case "Connection" -> 5; case "Overlays" -> xaero ? 7 : 6; case "Sync & privacy" -> 9; default -> 3; };
 		s.setScroll(rows, visible);
 		final int base = y - NotebookScreen.scroll * ROW, first = NotebookScreen.scroll;
 		java.util.function.IntPredicate show = r -> r >= first && r < first + visible;
@@ -71,7 +85,13 @@ final class PageSettings {
 				if (show.test(1)) toggle(s, base + ROW, "Overlay shows everyone's to-dos", "Off shows only yours", !c.hudMineOnly, () -> c.hudMineOnly = !c.hudMineOnly);
 				if (show.test(2)) toggle(s, base + 2 * ROW, "Enchants needed list", "Items you're making and missing enchants", c.hudGoals, () -> c.hudGoals = !c.hudGoals);
 				if (show.test(3)) toggle(s, base + 3 * ROW, "Compass arrow", "Points to the place you're tracking", c.compass, () -> c.compass = !c.compass);
-				if (show.test(4)) toggle(s, base + 4 * ROW, "Waypoints in the world", "Your places with a beam and distance. Skips ones your minimap shows", c.waypoints, () -> c.waypoints = !c.waypoints);
+				if (show.test(4)) {
+					if (xaero) choice(s, base + 4 * ROW, "settings-wp", "Waypoints in the world", "Whose show in the world. Not the minimap", Minimaps.modes(), Minimaps.mode(), Minimaps::setMode);
+					else toggle(s, base + 4 * ROW, "Waypoints in the world", "Your places' icons, with the name and distance when you look at one", c.waypoints, () -> c.waypoints = !c.waypoints);
+				}
+				int r = 5;
+				if (xaero) { if (show.test(r)) toggle(s, base + r * ROW, "Places on your minimap", "On " + String.join(" and ", Minimaps.installed()) + ", minimap and full map", c.minimapPlaces, () -> c.minimapPlaces = !c.minimapPlaces); r++; }
+				if (show.test(r)) toggle(s, base + r * ROW, "Weekly recap", "On Home, and a note on Sunday at 7pm", c.weeklyRecap, () -> c.weeklyRecap = !c.weeklyRecap);
 			}
 			case "Sync & privacy" -> {
 				if (show.test(0)) toggle(s, base, "Auto-sync gear", "Keeps your gear list up to date", c.autoSyncGear, () -> c.autoSyncGear = !c.autoSyncGear);

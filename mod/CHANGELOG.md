@@ -1,3 +1,11 @@
+## 1.7.0 – Feature
+- Notifications: the mod no longer writes in chat. Everything it tells you pops up as a toast, and the bell in the notebook's top right keeps a list of it, with a red count of what you haven't seen. Problems show in red.
+- Weekly recap: what your team did this week shows on the Home tab, and on Sunday from 7pm a toast sums up the week. Turn it off in Settings > Overlays.
+- Works with Xaero's Minimap and JourneyMap: choose whose waypoints show in the world in Settings > Overlays (Ours, the minimap's or Off). The minimap itself keeps showing everything.
+- Your notebook's places show on Xaero's Minimap and JourneyMap, on the minimap and the full map. JourneyMap shows each place's icon. Xaero's can't show icons, so it shows their initials in a colour close to their category's. They aren't saved into the minimap's own waypoints, and places that came from the minimap aren't added twice.
+- Waypoints in the world show the name and the distance on separate rows.
+- Fix: the waypoints setting no longer mentions a beam.
+
 ## 1.6.0 – Feature
 - Waypoints in the world: your notebook's places show on screen where they are, with their icon and the distance. Look at one to see its name. They go away once you're within 16 blocks. Turn them off in Settings > Overlays.
 - Places can have their own icon: press the icon beside the name when editing a place. Places without one keep their category's icon.

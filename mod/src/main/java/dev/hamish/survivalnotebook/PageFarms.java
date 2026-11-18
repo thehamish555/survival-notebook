@@ -192,8 +192,8 @@ final class PageFarms {
 		int by = s.bottom - 20;
 		s.btn(s.cx, by, 64, "Save", 0, () -> {
 			String url = Notebook.str(draft, "tutorial");
-			if (!url.isBlank() && Names.ytId(url) == null) { Notebook.msg("The tutorial link needs to be a YouTube link"); return; }
-			if (Notebook.str(draft, "name").isBlank() && url.isBlank()) { Notebook.msg("Give the farm a name or a YouTube link"); return; }
+			if (!url.isBlank() && Names.ytId(url) == null) { Notebook.error("The tutorial link needs to be a YouTube link"); return; }
+			if (Notebook.str(draft, "name").isBlank() && url.isBlank()) { Notebook.error("Give the farm a name or a YouTube link"); return; }
 			Notebook.autoLink(draft);
 			uploadedHere.clear();   // the file now belongs to the saved farm
 			Notebook.saveRow("farms", draft);   // fills in the video title (and the name, if blank) in the background

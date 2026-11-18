@@ -30,14 +30,14 @@ final class Commands {
 
 	private static boolean ready(FabricClientCommandSource src) {
 		if (Notebook.canEdit()) return true;
-		src.sendError(Component.literal(Notebook.ok ? "You can only view this notebook" : "Not connected. Press N, then Settings."));
+		Notebook.error(Notebook.ok ? "You can only view this notebook" : "Not connected. Press N, then Settings.");
 		return false;
 	}
 
 	private static int place(FabricClientCommandSource src, String name) {
 		if (!ready(src)) return 0;
 		Names.Spot spot = Names.here();
-		if (spot == null) { src.sendError(Component.literal("Can't read your position in this dimension")); return 0; }
+		if (spot == null) { Notebook.error("Can't read your position in this dimension"); return 0; }
 		Notebook.savePlace(name.trim(), "Important", spot);
 		return 1;
 	}
@@ -67,10 +67,10 @@ final class Commands {
 
 	private static int todo(FabricClientCommandSource src, String text) {
 		if (!ready(src)) return 0;
-		if (text.isBlank()) { src.sendError(Component.literal("Say what the to-do is")); return 0; }
+		if (text.isBlank()) { Notebook.error("Say what the to-do is"); return 0; }
 		JsonObject row = todoRow(text);
 		Notebook.saveRow("todos", row);
-		src.sendFeedback(Component.literal("[Survival Notebook] Added to-do “" + text.trim() + "”" + (row.has("qty") ? " (shopping list: " + row.get("qty").getAsInt() + ")" : "")));
+		Notebook.msg("Added to-do “" + text.trim() + "”" + (row.has("qty") ? " (shopping list: " + row.get("qty").getAsInt() + ")" : ""));
 		return 1;
 	}
 }

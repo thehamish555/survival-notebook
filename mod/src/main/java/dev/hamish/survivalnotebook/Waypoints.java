@@ -15,7 +15,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Your notebook's places shown in the world: the place's icon and the distance, with the name when you look at it. They go away once
+ * Your notebook's places shown in the world: the place's icon and the distance, with the name above the distance when you look at it. They go away once
  * you're within 16 blocks. Drawn on the HUD from the camera's own projection, so it lines up with the world without hooking the renderer. Places that a
  * synced minimap mod already draws are skipped, so nothing shows twice.
  */
@@ -36,11 +36,12 @@ final class Waypoints {
 		Vec3 eye = cam.position();
 
 		List<Mark> marks = new ArrayList<>();
+		boolean xaeroOff = !Minimaps.installed().isEmpty() && !Minimaps.anyInWorld();   // you chose ours over the minimap's, so its waypoints aren't drawn in the world
 		for (JsonObject o : Notebook.rows("coords")) {
 			String xyz = Notebook.str(o, here.dim());
 			double[] p = Names.parse(xyz);
 			if (p == null) continue;
-			if (Notebook.bool(o, "mm") && Minimap.drawsInWorld(Notebook.str(o, "name"), here.dim(), xyz)) continue;   // the minimap already shows it
+			if (Notebook.bool(o, "mm") && !xaeroOff && Minimap.drawsInWorld(Notebook.str(o, "name"), here.dim(), xyz)) continue;   // the minimap already shows it
 			double x = p[0] + 0.5, y = p[1], z = p[2] + 0.5;
 			double d = Math.hypot(x - mc.player.getX(), z - mc.player.getZ());
 			if (Math.hypot(d, y - mc.player.getY()) < NEAR) continue;   // you're there (counting height, so a place right below you still shows)
@@ -82,12 +83,12 @@ final class Waypoints {
 
 			String dist = Math.round(k.dist()) + " m";
 			int ty = sy + Math.round(13 * scale);
-			if (k == focus) {
-				String name = Notebook.str(k.place(), "name").isBlank() ? "Place" : Notebook.str(k.place(), "name");
-				String label = Ui.clip(font, name, 150) + "  ·  " + dist;
-				int lw = font.width(label) + 10;
+			if (k == focus) {   // the name on one row, the distance on the next
+				String name = Ui.clip(font, Notebook.str(k.place(), "name").isBlank() ? "Place" : Notebook.str(k.place(), "name"), 150);
+				int lw = font.width(name) + 10;
 				Ui.rounded(g, sx - lw / 2, ty, lw, 13, 0xC0141414, 0x80000000 | tone);
-				g.text(font, label, sx - lw / 2 + 5, ty + 3, 0xFFFFFFFF, false);
+				g.text(font, name, sx - lw / 2 + 5, ty + 3, 0xFFFFFFFF, false);
+				g.text(font, dist, sx - font.width(dist) / 2, ty + 16, 0xFFE6E6E6, true);
 			} else {
 				g.text(font, dist, sx - font.width(dist) / 2, ty + 1, ((int) (0xFF * fade) << 24) | 0xE6E6E6, true);
 			}

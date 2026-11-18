@@ -132,7 +132,7 @@ final class PageTodo {
 
 		int by = s.bottom - 20;
 		s.btn(s.cx, by, 64, "Save", 0, () -> {
-			if (Notebook.str(draft, "project").isBlank()) { Notebook.msg("Give the to-do a name first"); return; }
+			if (Notebook.str(draft, "project").isBlank()) { Notebook.error("Give the to-do a name first"); return; }
 			if (isNew && Notebook.str(draft, "project").isBlank() && Notebook.str(draft, "notes").isBlank()) { draft = null; s.rebuild(); return; }   // nothing typed: don't create an empty to-do
 			Notebook.saveRow("todos", draft);
 			draft = null; s.rebuild();

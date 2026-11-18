@@ -48,10 +48,10 @@ final class PagePlaces {
 	/** The Paste button: reads F3+C (or /tp, or x y z) from the clipboard. Without a dimension in it, it's for the dimension you're in. */
 	private static void pasteClipboard(NotebookScreen s) {
 		Names.Pasted p;
-		try { p = Names.parsePaste(Compat.clipboard()); } catch (IllegalArgumentException e) { Notebook.msg(e.getMessage()); return; }
-		if (p == null) { Notebook.msg("Nothing to paste. Press F3 + C to copy where you are."); return; }
+		try { p = Names.parsePaste(Compat.clipboard()); } catch (IllegalArgumentException e) { Notebook.error(e.getMessage()); return; }
+		if (p == null) { Notebook.error("Nothing to paste. Press F3 + C to copy where you are."); return; }
 		String dim = p.dim();
-		if (dim == null) { Names.Spot h = Names.here(); if (h == null) { Notebook.msg("That has no dimension and you're not in one the notebook knows"); return; } dim = h.dim(); }
+		if (dim == null) { Names.Spot h = Names.here(); if (h == null) { Notebook.error("That has no dimension and you're not in one the notebook knows"); return; } dim = h.dim(); }
 		offer(s, dim, p.xyz(), "Pasted");
 	}
 
@@ -59,7 +59,7 @@ final class PagePlaces {
 	private static void typed(NotebookScreen s, String key, String v) {
 		if (!Names.looksPasted(v)) { draft.addProperty(key, v); return; }
 		Names.Pasted p;
-		try { p = Names.parsePaste(v); } catch (IllegalArgumentException e) { Notebook.msg(e.getMessage()); return; }
+		try { p = Names.parsePaste(v); } catch (IllegalArgumentException e) { Notebook.error(e.getMessage()); return; }
 		if (p == null) { draft.addProperty(key, v); return; }
 		String dim = p.dim() == null ? key : p.dim();
 		if (!dim.equals(key)) Notebook.msg("That's a position in " + Names.dimName(dim) + ", so it goes in that row");
@@ -223,7 +223,7 @@ final class PagePlaces {
 			s.pill(bx + bw - 106, yy, 50, 20, "Copy", p.secondary, () -> { String v = Notebook.str(draft, key).trim(); Notebook.msg(Compat.copy(v) ? "Copied " + v : "Couldn't copy"); }, !Notebook.str(draft, key).isBlank());
 			s.pill(bx + bw - 52, yy, 50, 20, "Here", p.secondary, () -> {
 				Names.Spot h = Names.here();
-				if (h == null || !h.dim().equals(key)) { Notebook.msg("You're not in that dimension right now"); return; }
+				if (h == null || !h.dim().equals(key)) { Notebook.error("You're not in that dimension right now"); return; }
 				offer(s, key, h.xyz(), "Where you are");   // replacing existing coordinates: ask first
 			}, true);
 			y += 26;
@@ -232,7 +232,7 @@ final class PagePlaces {
 					String ow = Notebook.str(draft, "ow"), ne = Notebook.str(draft, "nether");
 					if (Names.isXyz(ow) && ne.isBlank()) draft.addProperty("nether", Names.convert(ow, 1 / 8.0));
 					else if (Names.isXyz(ne) && ow.isBlank()) draft.addProperty("ow", Names.convert(ne, 8));
-					else { Notebook.msg("Leave the other side empty to convert."); return; }
+					else { Notebook.error("Leave the other side empty to convert."); return; }
 					s.rebuild();
 				}, true);
 				y += 26;
@@ -245,7 +245,7 @@ final class PagePlaces {
 		s.btn(x, by, 64, "Save", 0, () -> {
 			for (String k : new String[] {"ow", "nether", "end"}) {
 				String v = Notebook.str(draft, k);
-				if (!v.isBlank() && !Names.isXyz(v)) { Notebook.msg("Use the format 120 64 -33"); return; }
+				if (!v.isBlank() && !Names.isXyz(v)) { Notebook.error("Use the format 120 64 -33"); return; }
 			}
 			if (Notebook.str(draft, "name").isBlank()) draft.addProperty("name", "Place");
 			Notebook.saveRow("coords", draft);

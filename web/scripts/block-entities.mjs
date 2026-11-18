@@ -28,35 +28,58 @@ const cube = (u, v, x, y, z, w, h, d, { grow = 0, only = null } = {}) => ({ u, v
 /** PartDefinition: cubes, its offset and rotation (in pixels and radians), and child parts. */
 const part = (cubes, { at = [0, 0, 0], rot = [0, 0, 0], scale = [1, 1, 1], kids = [] } = {}) => ({ cubes, at, rot, scale, kids })
 
-/** Every face as a quad: [texture, tint, then x y z u v for each corner], positions in block pixels, uv in texture pixels. */
+/** One cube's faces as quads: [texture, tint, then x y z u v for each corner]. Positions go through `out` (block units in, pixels out);
+ *  m1 is where the cube really ends up, used to wind each face so the viewer's normal points out (the renderers' mirroring flips some). */
+function cubeQuads(c, m1, out, texI, tint) {
+  const quads = []
+  const g = Array.isArray(c.grow) ? c.grow : [c.grow, c.grow, c.grow]
+  let x0 = c.x - g[0], x1 = c.x + c.w + g[0]; const y0 = c.y - g[1], z0 = c.z - g[2], y1 = c.y + c.h + g[1], z1 = c.z + c.d + g[2]
+  if (c.mirror) [x0, x1] = [x1, x0]   // a mirrored cube: the texture is flipped left to right
+  const V = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]
+  const { u, v, w, h, d } = c, U = [u, u + d, u + d + w, u + d + w + w, u + d + w + d, u + d + w + d + w], W = [v, v + d, v + d + h]
+  const polys = { down: [[5, 4, 0, 1], U[1], W[0], U[2], W[1]], up: [[2, 3, 7, 6], U[2], W[1], U[3], W[0]], west: [[0, 4, 7, 3], U[0], W[1], U[1], W[2]],
+    north: [[1, 0, 3, 2], U[1], W[1], U[2], W[2]], east: [[5, 1, 2, 6], U[2], W[1], U[4], W[2]], south: [[4, 5, 6, 7], U[4], W[1], U[5], W[2]] }
+  for (const [dir, [vs, u1, v1, u2, v2]] of Object.entries(polys)) {
+    if (c.only && !c.only.includes(dir)) continue
+    const uv = [[u2, v1], [u1, v1], [u1, v2], [u2, v2]], real = vs.map(i => apply(m1, V[i].map(n => n / 16)).map(n => n * 16))
+    const same = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 1e-6
+    if (same(real[0], real[1]) || same(real[1], real[2])) continue   // the zero-thickness sides of a flat cube
+    // (p3 - p0) x (p1 - p0) along the face's direction
+    const n0 = { down: [0, -1, 0], up: [0, 1, 0], north: [0, 0, -1], south: [0, 0, 1], west: [c.mirror ? 1 : -1, 0, 0], east: [c.mirror ? -1 : 1, 0, 0] }[dir], o = [0, 1, 2].map(r => m1[r * 4] * n0[0] + m1[r * 4 + 1] * n0[1] + m1[r * 4 + 2] * n0[2])
+    const a = [0, 1, 2].map(i => real[1][i] - real[0][i]), b = [0, 1, 2].map(i => real[3][i] - real[0][i]), n = [b[1] * a[2] - b[2] * a[1], b[2] * a[0] - b[0] * a[2], b[0] * a[1] - b[1] * a[0]]
+    const order = n[0] * o[0] + n[1] * o[1] + n[2] * o[2] < 0 ? [0, 3, 2, 1] : [0, 1, 2, 3]
+    const pts = vs.map(i => apply(out, V[i].map(n => n / 16)).map(n => +(n * 16).toFixed(4)))
+    const q = [texI, tint]; order.forEach(k => q.push(...pts[k], uv[k][0], uv[k][1])); quads.push(q)
+  }
+  return quads
+}
+const poseM = p => chain(T(p.at[0] / 16, p.at[1] / 16, p.at[2] / 16), RZ(p.rot[2]), RY(p.rot[1]), RX(p.rot[0]), S(...(p.scale || [1, 1, 1])))   // ModelPart.translateAndRotate
+
+/** Every face as a quad, positions in block pixels, uv in texture pixels: the parts baked in their pose through matrix m. */
 function bake(parts, m, texI, tint = 0) {
   const quads = []
   const walk = (p, m0) => {
-    const sc = p.scale || [1, 1, 1], m1 = chain(m0, T(p.at[0] / 16, p.at[1] / 16, p.at[2] / 16), RZ(p.rot[2]), RY(p.rot[1]), RX(p.rot[0]), S(sc[0], sc[1], sc[2]))   // ModelPart.translateAndRotate
-    for (const c of p.cubes) {
-      const g = Array.isArray(c.grow) ? c.grow : [c.grow, c.grow, c.grow]
-      let x0 = c.x - g[0], x1 = c.x + c.w + g[0]; const y0 = c.y - g[1], z0 = c.z - g[2], y1 = c.y + c.h + g[1], z1 = c.z + c.d + g[2]
-      if (c.mirror) [x0, x1] = [x1, x0]   // a mirrored cube: the texture is flipped left to right
-      const V = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]
-      const { u, v, w, h, d } = c, U = [u, u + d, u + d + w, u + d + w + w, u + d + w + d, u + d + w + d + w], W = [v, v + d, v + d + h]
-      const polys = { down: [[5, 4, 0, 1], U[1], W[0], U[2], W[1]], up: [[2, 3, 7, 6], U[2], W[1], U[3], W[0]], west: [[0, 4, 7, 3], U[0], W[1], U[1], W[2]],
-        north: [[1, 0, 3, 2], U[1], W[1], U[2], W[2]], east: [[5, 1, 2, 6], U[2], W[1], U[4], W[2]], south: [[4, 5, 6, 7], U[4], W[1], U[5], W[2]] }
-      for (const [dir, [vs, u1, v1, u2, v2]] of Object.entries(polys)) {
-        if (c.only && !c.only.includes(dir)) continue
-        const uv = [[u2, v1], [u1, v1], [u1, v2], [u2, v2]], pts = vs.map(i => apply(m1, V[i].map(n => n / 16)).map(n => +(n * 16).toFixed(4)))
-        const same = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 1e-6
-        if (same(pts[0], pts[1]) || same(pts[1], pts[2])) continue   // the zero-thickness sides of a flat cube
-        // Wind it so the viewer's normal points out (the renderers' mirroring flips some): (p3 - p0) x (p1 - p0) along the face's direction
-        const n0 = { down: [0, -1, 0], up: [0, 1, 0], north: [0, 0, -1], south: [0, 0, 1], west: [c.mirror ? 1 : -1, 0, 0], east: [c.mirror ? -1 : 1, 0, 0] }[dir], out = [0, 1, 2].map(r => m1[r * 4] * n0[0] + m1[r * 4 + 1] * n0[1] + m1[r * 4 + 2] * n0[2])
-        const a = [0, 1, 2].map(i => pts[1][i] - pts[0][i]), b = [0, 1, 2].map(i => pts[3][i] - pts[0][i]), n = [b[1] * a[2] - b[2] * a[1], b[2] * a[0] - b[0] * a[2], b[0] * a[1] - b[1] * a[0]]
-        const order = n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0 ? [0, 3, 2, 1] : [0, 1, 2, 3]
-        const q = [texI, tint]; order.forEach(k => q.push(...pts[k], uv[k][0], uv[k][1])); quads.push(q)
-      }
-    }
+    const m1 = chain(m0, poseM(p))
+    for (const c of p.cubes) quads.push(...cubeQuads(c, m1, m1, texI, tint))
     for (const k of p.kids) walk(k, m1)
   }
   for (const p of parts) walk(p, m)
   return quads
+}
+
+/**
+ * The parts kept apart, so the viewer can pose them (armor stand poses, zombies' arms, sitting in a boat): each part's name, parent,
+ * pivot, rotation and scale, with its quads in its own space. m places the whole model (the renderer's transform).
+ */
+function rigOf(parts, m) {
+  const out = []
+  const walk = (p, parent, m0) => {
+    const m1 = chain(m0, poseM(p)), i = out.length
+    out.push({ n: p.name || '', p: parent, a: p.at.map(v => +v.toFixed(4)), r: p.rot.map(v => +v.toFixed(5)), s: (p.scale || [1, 1, 1]).map(v => +v.toFixed(5)), q: p.cubes.flatMap(c => cubeQuads(c, m1, I, -1, 0)) })
+    for (const k of p.kids) walk(k, i, m1)
+  }
+  for (const p of parts) walk(p, -1, m)
+  return { m: m.map(v => +v.toFixed(6)), parts: out }
 }
 
 const without = d => ['down', 'up', 'north', 'south', 'west', 'east'].filter(x => x !== d)
@@ -68,7 +91,7 @@ const chestParts = type => {
 }
 
 /** Adds the block entities to `models` and `blocks`. `tex(path)` registers a texture; returns the ones to keep at full size. */
-export function addBlockEntities({ hasBlock, tex, models, blocks }) {
+export function addBlockEntities({ hasBlock, tex, models, blocks, roots }) {
   const big = new Map()
   const bigTex = p => { const i = tex(p); big.set(i, p); return i }
   const seen = new Map()   // the same shape is stored once (banners of every colour, waxed chests)
@@ -96,10 +119,30 @@ export function addBlockEntities({ hasBlock, tex, models, blocks }) {
 
   // Heads and skulls (SkullModel, SkullBlockRenderer): on the ground in 16 turns, or on a wall
   const HEADS = { skeleton_skull: ['skeleton/skeleton', 0], wither_skeleton_skull: ['skeleton/wither_skeleton', 0], zombie_head: ['zombie/zombie', 1], creeper_head: ['creeper/creeper', 0], player_head: ['player/wide/steve', 1] }
-  for (const [name, [path, hat]] of Object.entries(HEADS)) {
-    const t = bigTex('entity/' + path), head = [part([cube(0, 0, -4, -8, -4, 8, 8, 8), ...(hat ? [cube(32, 0, -4, -8, -4, 8, 8, 8, { grow: 0.25 })] : [])])]
+  const skull = (name, head, t) => {
     variants(name, Array.from({ length: 16 }, (_, r) => [`rotation=${r}`, bake(head, chain(T(0.5, 0, 0.5), RY(deg(-r * 22.5)), S(-1, -1, 1)), t)]))
     variants(name.replace(/_(skull|head)$/, '_wall_$1'), HORIZ.map(f => [`facing=${f}`, bake(head, chain(T(0.5 - STEP[f][0] * 0.25, 0.25, 0.5 - STEP[f][2] * 0.25), RY(deg(-YROT[OPPOSITE[f]])), S(-1, -1, 1)), t)]))
+  }
+  for (const [name, [path, hat]] of Object.entries(HEADS)) skull(name, [part([cube(0, 0, -4, -8, -4, 8, 8, 8), ...(hat ? [cube(32, 0, -4, -8, -4, 8, 8, 8, { grow: 0.25 })] : [])])], bigTex('entity/' + path))
+  // The dragon's and piglin's heads have shapes of their own (DragonHeadModel, PiglinHeadModel)
+  for (const [name, L, path] of [['dragon_head', 'DRAGON_SKULL', 'enderdragon/dragon'], ['piglin_head', 'PIGLIN_HEAD', 'piglin/piglin']]) {
+    const head = rootParts(roots, L); if (head) skull(name, head, bigTex('entity/' + path))
+  }
+
+  // Conduit, not yet switched on (ConduitRenderer draws just its shell)
+  const conduit = rootParts(roots, 'CONDUIT_SHELL')
+  if (conduit) variants('conduit', [['', bake(conduit, T(0.5, 0.5, 0.5), bigTex('entity/conduit/base'))]])
+
+  // Copper golem statues (CopperGolemStatueBlockRenderer): the copper golem in one of four poses, its root turned upside down as the statue model sets it
+  const POSES = { standing: 'COPPER_GOLEM', running: 'COPPER_GOLEM_RUNNING', sitting: 'COPPER_GOLEM_SITTING', star: 'COPPER_GOLEM_STAR' }
+  for (const [pre, suffix] of [['', ''], ['exposed_', '_exposed'], ['weathered_', '_weathered'], ['oxidized_', '_oxidized']]) {
+    const t = bigTex(`entity/copper_golem/copper_golem${suffix}`), list = []
+    for (const [pose, L] of Object.entries(POSES)) {
+      const golem = rootParts(roots, L); if (!golem) continue
+      golem[0].at = [golem[0].at[0], 0, golem[0].at[2]]; golem[0].rot = [golem[0].rot[0], golem[0].rot[1], Math.PI]
+      for (const f of HORIZ) list.push([`copper_golem_pose=${pose},facing=${f}`, bake(golem, chain(T(0.5, 0, 0.5), RY(deg(-YROT[OPPOSITE[f]]))), t)])
+    }
+    for (const n of [`${pre}copper_golem_statue`, `waxed_${pre}copper_golem_statue`]) variants(n, list)
   }
 
   // Banners (BannerModel, BannerFlagModel, BannerRenderer): the pole in wood, the cloth tinted the banner's colour
@@ -126,6 +169,23 @@ export function addBlockEntities({ hasBlock, tex, models, blocks }) {
     const body = add(bake([part([cube(0, 0, -3, -6, -3, 6, 7, 6)], { at: [8, 12, 8], kids: [part([cube(0, 13, 4, 4, 4, 8, 2, 8)], { at: [-8, -12, -8] })] })], I, bigTex('entity/bell/bell_body')))
     blocks.bell = { mp: [...blocks.bell.v.map(([k, r]) => [k ? Object.fromEntries(k.split(',').map(kv => kv.split('='))) : null, r]), [null, body]] }
   }
+  // Books (BookModel): open on a lectern that has one (LecternRenderer), closed and floating over an enchanting table (EnchantTableRenderer, at rest)
+  const bookParts = (open, flip1, flip2) => {
+    const parts = rootParts(roots, 'BOOK'); if (!parts) return null
+    const set = (n, yRot, x) => { const p = find(parts, n); if (p) { p.rot = [p.rot[0], yRot, p.rot[2]]; if (x !== undefined) p.at = [x, p.at[1], p.at[2]] } }
+    const sx = Math.sin(open)
+    set('left_lid', Math.PI + open); set('right_lid', -open); set('left_pages', open, sx); set('right_pages', -open, sx)
+    set('flip_page1', open - open * 2 * flip1, sx); set('flip_page2', open - open * 2 * flip2, sx)
+    return parts
+  }
+  const bookT = bigTex('entity/enchantment/enchanting_table_book')
+  const toMp = name => (blocks[name]?.v ? blocks[name].v.map(([k, r]) => [k ? Object.fromEntries(k.split(',').map(kv => kv.split('='))) : null, r]) : blocks[name]?.mp)
+  const open = bookParts(1.5, 0.1, 0.9), shut = bookParts(0, 0, 0)
+  if (open && blocks.lectern) {
+    const CW = { north: 'east', east: 'south', south: 'west', west: 'north' }
+    blocks.lectern = { mp: [...toMp('lectern'), ...HORIZ.map(f => [{ facing: f, has_book: 'true' }, add(bake(open, chain(T(0.5, 1.0625, 0.5), RY(deg(-YROT[CW[f]])), RZ(deg(67.5)), T(0, -0.125, 0)), bookT))])] }
+  }
+  if (shut && blocks.enchanting_table) blocks.enchanting_table = { mp: [...toMp('enchanting_table'), [null, add(bake(shut, chain(T(0.5, 0.85, 0.5), RZ(deg(80))), bookT))]] }
   return big
 }
 
@@ -134,7 +194,29 @@ export function addBlockEntities({ hasBlock, tex, models, blocks }) {
 
 /** A parts tree from model-layers.mjs as bake() parts, keeping names so poses can be set and parts picked. */
 const partsOf = node => [...node.children].map(([name, c]) => ({ ...part(c.cubes, { at: [c.pose.x, c.pose.y, c.pose.z], rot: [c.pose.xRot, c.pose.yRot, c.pose.zRot], scale: [c.pose.xScale, c.pose.yScale, c.pose.zScale], kids: partsOf(c) }), name }))
+/** A whole layer from LayerDefinitions.createRoots, its root's pose kept (layers the game shrinks keep their size there), or null. */
+function rootParts(roots, name) {
+  const r = roots?.get(name); if (!r || r.failed) return null
+  const p = r.root.pose
+  return [{ ...part(r.root.cubes, { at: [p.x, p.y, p.z], rot: [p.xRot, p.yRot, p.zRot], scale: [p.xScale, p.yScale, p.zScale], kids: partsOf(r.root) }), name: 'root' }]
+}
+/** ModelPart.translateAndRotate for one part, in block units. */
+const poseOf = p => chain(T(p.at[0] / 16, p.at[1] / 16, p.at[2] / 16), RZ(p.rot[2]), RY(p.rot[1]), RX(p.rot[0]), S(...(p.scale || [1, 1, 1])))
+
+/** The parts from the top down to the one named, or null. */
+const pathTo = (parts, name) => { for (const p of parts) { if (p.name === name) return [p]; const k = pathTo(p.kids, name); if (k) return [p, ...k] } return null }
 const find = (parts, name) => { for (const p of parts) { if (p.name === name) return p; const k = find(p.kids, name); if (k) return k } return null }
+// Model layers (LayerDefinitions names, lower case) drawn as mobs
+const MOB_LAYERS = `allay armadillo armadillo_baby axolotl axolotl_baby bat bee bee_baby blaze bogged bogged_outer_layer breeze camel camel_baby cat cat_baby cave_spider
+  chicken chicken_baby cold_chicken cod copper_golem cow cow_baby cold_cow cold_cow_baby warm_cow warm_cow_baby creaking creeper dolphin dolphin_baby donkey donkey_baby
+  drowned drowned_outer_layer drowned_baby drowned_baby_outer_layer elder_guardian enderman endermite evoker fox fox_baby frog ghast giant glow_squid glow_squid_baby goat
+  goat_baby guardian happy_ghast happy_ghast_baby hoglin hoglin_baby horse horse_baby husk husk_baby illusioner llama llama_baby magma_cube mooshroom mooshroom_baby mule
+  mule_baby nautilus nautilus_baby zombie_nautilus ocelot ocelot_baby panda panda_baby parched parrot phantom pig pig_baby cold_pig piglin piglin_brute piglin_baby pillager
+  polar_bear polar_bear_baby pufferfish_big pufferfish_medium pufferfish_small rabbit rabbit_baby ravager salmon salmon_small salmon_large sheep sheep_baby sheep_wool
+  sheep_baby_wool silverfish skeleton skeleton_horse skeleton_horse_baby slime slime_outer sniffer sniffer_baby spider squid squid_baby stray stray_outer_layer strider
+  strider_baby tadpole trader_llama trader_llama_baby tropical_fish_large tropical_fish_large_pattern tropical_fish_small tropical_fish_small_pattern turtle turtle_baby vex
+  villager villager_baby vindicator wandering_trader warden witch wither wither_skeleton wolf wolf_baby zoglin zoglin_baby zombie zombie_baby zombie_horse zombie_horse_baby
+  zombie_villager zombie_villager_baby zombified_piglin zombified_piglin_baby`.split(/\s+/)
 const DIR3 = ['down', 'up', 'north', 'south', 'west', 'east']   // the Facing byte's order in entity data
 
 /** A block model's boxes (from extract-blocks) as quads on the sheet's 16 px tiles, through matrix m (block units). */
@@ -161,7 +243,7 @@ function boxQuads(boxes, m) {
 }
 
 /** Entity shapes for the viewer: { key: { q, pic? } }. layer(owner, method, desc) reads a model from the game's code; box(ref) gives a block model's boxes. */
-export function addEntities({ layer, bigTex, box }) {
+export function addEntities({ layer, bigTex, box, roots }) {
   const out = {}, L = '()Lnet/minecraft/client/model/geom/builders/LayerDefinition;', M = '()Lnet/minecraft/client/model/geom/builders/MeshDefinition;'
   const model = (cls, method, desc = L) => partsOf(layer('net/minecraft/client/model/' + cls, method, desc).root)
   // LivingEntityRenderer: turned (180 - yaw; the viewer adds the yaw), flipped, and lifted so the feet are on the ground
@@ -179,21 +261,48 @@ export function addEntities({ layer, bigTex, box }) {
     out.snow_golem_sheared = { q: body }
   }
 
-  // Villager: 0.9375 the size of its model (as LayerDefinitions registers it), painted with its biome and job by the viewer
+  // Mobs: every model below as the game registers it (sizes included), stood up by LivingEntityRenderer. Their textures (with the mob's
+  // variant, colour or job) are picked and loaded by the viewer, so these have no texture of their own here.
+  // Texture coordinates are kept in the layer's own texture size (s), which can differ from the picture's (the ghast's is drawn at twice the size)
+  const HIDE = { armadillo: ['cube'], armadillo_baby: ['cube'], breeze: ['wind_body'], turtle: ['egg_belly'], turtle_baby: ['egg_belly'] }   // shown only rolled up, as wind, or with an egg
+  const CHESTS = ['left_chest', 'right_chest']   // donkeys, mules and llamas carrying chests
+  const keep = (parts, drop) => parts.filter(p => !drop.includes(p.name)).map(p => ({ ...p, kids: keep(p.kids, drop) }))
+  const only = (parts, pick) => parts.flatMap(p => (pick.includes(p.name) ? [p] : (() => { const k = only(p.kids, pick); return k.length ? [{ ...p, cubes: [], kids: k }] : [] })()))
+  for (const L of MOB_LAYERS) {
+    const r = roots.get(L.toUpperCase()), parts = rootParts(roots, L.toUpperCase()); if (!parts) { console.warn('No model layer', L); continue }
+    const m = L === 'wither' ? living(2) : living(), body = keep(parts, [...(HIDE[L] || []), ...CHESTS]), chests = only(parts, CHESTS)
+    out['m:' + L] = { rig: rigOf(body, m), s: [r.w, r.h] }
+    if (bake(chests, m, -1).length) out[`m:${L}:chests`] = { rig: rigOf(chests, m), s: [r.w, r.h] }
+  }
+  // Mooshrooms' mushrooms (MushroomCowMushroomLayer): two on the back, one on the head, as red or brown mushroom blocks
   {
-    const parts = model('npc/VillagerModel', 'createBodyModel', M), s = 0.9375
-    out.villager = { q: bake([part([], { at: [0, 24.016 * (1 - s), 0], scale: [s, s, s], kids: parts })], living(), bigTex('entity/villager/villager')), pic: 'villager' }
+    const parts = rootParts(roots, 'MOOSHROOM'), head = parts && pathTo(parts, 'head')
+    if (head) {
+      const back = chain(living(), T(0.2, -0.35, 0.5)), cross = chain(RY(deg(-48)), S(-1, -1, 1), T(-0.5, -0.5, -0.5))
+      const spots = [chain(back, cross), chain(back, RY(deg(42)), T(0.1, 0, -0.6), cross), chain(living(), ...head.map(poseOf), T(0, -0.7, -0.2), RY(deg(-78)), S(-1, -1, 1), T(-0.5, -0.5, -0.5))]
+      for (const c of ['red', 'brown']) out[`mooshroom_mushrooms_${c}`] = { q: spots.flatMap(m => boxQuads(box(`block/${c}_mushroom`), m)) }
+    }
+  }
+  const knot = rootParts(roots, 'LEASH_KNOT'); if (knot) out['m:leash_knot'] = { q: bake(knot, S(-1, -1, 1), -1), s: [roots.get('LEASH_KNOT').w, roots.get('LEASH_KNOT').h] }
+  const crystal = rootParts(roots, 'END_CRYSTAL'); if (crystal) out['m:end_crystal'] = { q: bake(crystal, chain(S(2), T(0, -0.5, 0)), -1), s: [roots.get('END_CRYSTAL').w, roots.get('END_CRYSTAL').h] }
+
+  // Armour (HumanoidArmorLayer): the humanoid model grown a little, keeping each slot's parts. Leggings are the inner, smaller layer.
+  {
+    const MESH = '(Lnet/minecraft/client/model/geom/builders/CubeDeformation;F)Lnet/minecraft/client/model/geom/builders/MeshDefinition;'
+    const humanoid = grow => partsOf(layer('net/minecraft/client/model/HumanoidModel', 'createMesh', MESH, [{ k: 'CubeDeformation', x: grow, y: grow, z: grow }, 0]).root)
+    const SLOTS = { head: [['head'], 1, true], chest: [['body', 'left_arm', 'right_arm'], 1, false], legs: [['body', 'left_leg', 'right_leg'], 0.5, false], feet: [['left_leg', 'right_leg'], 1, false] }
+    const stand = grow => partsOf(layer('net/minecraft/client/model/object/armorstand/ArmorStandArmorModel', 'createBaseMesh', '(Lnet/minecraft/client/model/geom/builders/CubeDeformation;)Lnet/minecraft/client/model/geom/builders/MeshDefinition;', [{ k: 'CubeDeformation', x: grow, y: grow, z: grow }]).root)
+    for (const [slot, [names, grow, kids]] of Object.entries(SLOTS)) {
+      const pick = all => all.filter(p => names.includes(p.name)).map(p => (kids ? p : { ...p, kids: [] }))
+      out['armor:' + slot] = { rig: rigOf(pick(humanoid(grow)), living()), s: [64, 32] }
+      out['armor_stand_armor:' + slot] = { rig: rigOf(pick(stand(grow)), living()), s: [64, 32] }
+    }
   }
 
   // Armor stand in its default pose; arms and base plate kept apart since stands can hide them
   {
-    const parts = model('object/armorstand/ArmorStandModel', 'createBodyLayer'), t = bigTex('entity/armorstand/armorstand')
-    const pose = (n, x, y, z) => { const p = find(parts, n); if (p) p.rot = [deg(x), deg(y), deg(z)] }
-    pose('left_arm', -10, 0, -10); pose('right_arm', -15, 0, 10); pose('left_leg', -1, 0, -1); pose('right_leg', 1, 0, 1)
-    const arms = new Set(['left_arm', 'right_arm']), m = living()
-    out.armor_stand = { q: bake(parts.filter(p => !arms.has(p.name) && p.name !== 'base_plate'), m, t) }
-    out.armor_stand_arms = { q: bake(parts.filter(p => arms.has(p.name)), m, t) }
-    out.armor_stand_plate = { q: bake(parts.filter(p => p.name === 'base_plate'), m, t) }
+    const parts = model('object/armorstand/ArmorStandModel', 'createBodyLayer')
+    out.armor_stand = { rig: rigOf(parts, living()), s: [64, 64] }   // posed, and arms and base plate hidden, by the viewer
   }
 
   // Boats and rafts (AbstractBoatRenderer), paddles resting where the game leaves them
@@ -229,13 +338,11 @@ export function addEntities({ layer, bigTex, box }) {
     for (const c of [null, ...COLOURS]) out[c ? `shulker_${c}` : 'shulker'] = { q: bake(parts, living(), bigTex(`entity/shulker/shulker${c ? '_' + c : ''}`)) }
   }
 
-  // Item frames (ItemFrameRenderer): the frame against its wall, and where the item goes (a square the viewer fills with the item's icon)
+  // Item frames (ItemFrameRenderer): the frame against its wall (the viewer places the item)
   for (const f of DIR3) {
     const horiz = !['up', 'down'].includes(f), xr = horiz ? 0 : (f === 'up' ? -90 : 90), yr = horiz ? 180 - YROT[f] : 180
     const m = chain(T(0.5, 0.5, 0.5), RX(deg(xr)), RY(deg(yr)), T(-0.5, -0.5, -0.5))
     for (const n of ['item_frame', 'glow_item_frame']) out[`${n}:${f}`] = { q: boxQuads(box('block/' + n), m) }
-    const z = 0.5 + 0.4375 - 0.004, at = (x, y) => apply(m, [x, y, z]).map(v => +(v * 16).toFixed(4))
-    out[`frame_item:${f}`] = { q: [[0, 0, ...at(0.75, 0.75), 0, 0, ...at(0.25, 0.75), 64, 0, ...at(0.25, 0.25), 64, 64, ...at(0.75, 0.25), 0, 64]] }
   }
   return out
 }

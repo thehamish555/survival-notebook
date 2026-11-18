@@ -45,7 +45,7 @@ final class NotebookScreen extends Screen {
 	}
 
 	@Override
-	public void onClose() { if (!ddKey.isEmpty()) { ddKey = ""; this.rebuildWidgets(); return; } PageNotes.flush(); PageFarms.discardDraft(); if (parent != null) Compat.setScreen(parent); else super.onClose(); }
+	public void onClose() { if (Inbox.open) { Inbox.open = false; this.rebuildWidgets(); return; } if (!ddKey.isEmpty()) { ddKey = ""; this.rebuildWidgets(); return; } PageNotes.flush(); PageFarms.discardDraft(); if (parent != null) Compat.setScreen(parent); else super.onClose(); }
 
 	Font font() { return this.font; }
 	void rebuild() { this.rebuildWidgets(); }
@@ -87,6 +87,7 @@ final class NotebookScreen extends Screen {
 		scroll = Math.max(0, Math.min(scroll, scrollMax));
 		dragPaint();
 		bottomBar();
+		if (Inbox.open) inboxPanel();
 		if (openDd != null) overlay(openDd);
 	}
 
@@ -165,7 +166,25 @@ final class NotebookScreen extends Screen {
 
 	private static final String[] TAB_ICONS = {"home", "places", "map", "gear", "deaths", "stats", "todo", "farms", "shopping", "notes", "settings"};
 
+	private static final int BELL = 19;
 	private void header() {
+		// The bell (our own pixel icon), right of the world name: everything the mod has told you, with a red count of what you haven't seen
+		final int bx = x0 + pw - 8 - BELL, by = y0 + 4;
+		if (Inbox.open) inboxHits();
+		hit(bx, by, BELL, BELL, () -> { Inbox.open = !Inbox.open; Inbox.markRead(); this.rebuildWidgets(); }, true);
+		paint((g, mx, my) -> {
+			Ui.Pal p = Ui.pal();
+			boolean hov = Ui.over(mx, my, bx, by, BELL, BELL);
+			Ui.rounded(g, bx, by, BELL, BELL, Inbox.open ? p.panel2 : hov ? p.hover : p.panel, Inbox.open ? p.gold : p.edge);
+			TabIcons.draw(g, "inbox", bx + 4, by + 4);   // the notebook's own bell, like the tab icons
+			String n = Inbox.count();
+			if (!n.isEmpty()) {
+				int w = Math.max(9, font.width(n) + 4);
+				Compat.above(g);
+				Ui.rounded(g, bx + BELL - w + 3, by - 2, w, 9, 0xFFD9473A, 0xFF8E1F16);
+				g.text(font, n, bx + BELL - w + 3 + (w - font.width(n)) / 2 + 1, by - 1, 0xFFFFFFFF, false);
+			}
+		});
 		paint((g, mx, my) -> {
 			Ui.Pal p = Ui.pal();
 			Compat.blitTile(g, net.minecraft.resources.Identifier.fromNamespaceAndPath(SurvivalNotebookClient.ID, "textures/gui/logo.png"), x0 + 8, y0 + 6, x0 + 24, y0 + 22);   // the notebook logo
@@ -173,10 +192,49 @@ final class NotebookScreen extends Screen {
 			int tx = x0 + 28 + font.width("Survival Notebook") + 6;
 			g.text(font, "\u203A " + TABS[Math.min(tab, TABS.length - 1)], tx, y0 + 9, p.mut, false);
 			String right = Ui.clip(font, Notebook.title, pw / 3);
-			int rw = font.width(right) + 22, rx = x0 + pw - 8 - rw;
+			int rw = font.width(right) + 22, rx = x0 + pw - 8 - BELL - 4 - rw;
 			Ui.rounded(g, rx, y0 + 6, rw, 15, p.panel, p.edge);
 			g.fill(rx + 6, y0 + 11, rx + 11, y0 + 16, Notebook.live ? p.grassHi : 0xFFD9473A);   // live-sync light
 			g.text(font, right, rx + 16, y0 + 10, p.ink, false);
+		});
+	}
+
+	// ---- the inbox under the bell: newest first, problems in red
+
+	private int inboxX() { return x0 + pw - 8 - INBOX_W; }
+	private static final int INBOX_W = 250;
+	private int inboxRows() { return Math.max(1, Math.min(Inbox.notes().size(), (ph - 70) / 24)); }
+
+	/** Clicks inside the open inbox stay in it (Clear empties it), so nothing behind it is pressed. Added before the page so they win. */
+	private void inboxHits() {
+		int x = inboxX(), y = y0 + 26, h = 22 + inboxRows() * 24;
+		if (!Inbox.notes().isEmpty()) hit(x + INBOX_W - 46, y + 3, 40, 14, () -> { Inbox.clear(); this.rebuildWidgets(); }, true);
+		hit(x, y, INBOX_W, h, () -> { }, true);
+	}
+
+	private void inboxPanel() {
+		paint((g, mx, my) -> {
+			Ui.Pal p = Ui.pal();
+			List<Inbox.Note> notes = Inbox.notes();
+			int x = inboxX(), y = y0 + 26, rows = inboxRows(), h = 22 + rows * 24;
+			Compat.above(g);
+			Ui.rounded(g, x, y, INBOX_W, h, p.panel2, p.gold);
+			g.text(font, "Notifications", x + 8, y + 6, p.gold, false);
+			if (!notes.isEmpty()) {
+				boolean hov = Ui.over(mx, my, x + INBOX_W - 46, y + 3, 40, 14);
+				g.text(font, "Clear", x + INBOX_W - 40, y + 6, hov ? p.gold : p.mut, false);
+			}
+			if (notes.isEmpty()) { g.text(font, "Nothing yet.", x + 8, y + 26, p.mut, false); return; }
+			for (int i = 0; i < rows; i++) {
+				Inbox.Note n = notes.get(i);
+				int ry = y + 20 + i * 24;
+				g.fill(x + 4, ry, x + INBOX_W - 4, ry + 1, p.edge);
+				g.fill(x + 8, ry + 6, x + 12, ry + 10, n.error() ? 0xFFD9473A : p.grassHi);
+				String ago = Ui.ago(n.ts());
+				var lines = font.split(net.minecraft.network.chat.Component.literal(n.text()), INBOX_W - 30 - font.width(ago));
+				for (int k = 0; k < Math.min(2, lines.size()); k++) g.text(font, lines.get(k), x + 18, ry + 3 + k * 10, n.error() ? 0xFFFF9B8E : p.ink, false);
+				g.text(font, ago, x + INBOX_W - 8 - font.width(ago), ry + 3, p.mut, false);
+			}
 		});
 	}
 

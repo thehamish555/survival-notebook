@@ -15,7 +15,8 @@
   "sound",
   "mute",
   "sun",
-  "moon"
+  "moon",
+  "inbox"
  ],
  "icons": {
   "home": {
@@ -330,6 +331,26 @@
     ".oMMMoooo.",
     "..oMMMMo..",
     "...oooo..."
+   ]
+  },
+  "inbox": {
+   "pal": {
+    "o": "#3B2A0C",
+    "y": "#F2C14E",
+    "h": "#FFE7A3",
+    "d": "#B8862B"
+   },
+   "rows": [
+    "....oo....",
+    "...oydo...",
+    "..ohyydo..",
+    "..ohyydo..",
+    "..ohyydo..",
+    ".ohyyyydo.",
+    "ohyyyyyydo",
+    "oooooooooo",
+    "....oo....",
+    ".........."
    ]
   }
  }

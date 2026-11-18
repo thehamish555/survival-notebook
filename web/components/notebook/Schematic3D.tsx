@@ -21,6 +21,15 @@ function loadBlocks() {
   blockData.catch(() => { blockData = null })
   return blockData
 }
+let entityData: Promise<{ entities: BlockData['entities']; held: BlockData['held'] }> | null = null
+/** Mob, boat and minecart shapes: only fetched for schematics that have entities (or spawners) in them. */
+async function withEntities(s: Schematic, b: { data: BlockData; sheet: THREE.Texture }) {
+  if (b.data.entities || (!s.entities?.length && ![...(s.tiles?.values() || [])].some(t => t.spawn))) return b
+  entityData ||= fetch('/mc/entities.json').then(r => { if (!r.ok) throw new Error('Entity models are missing'); return r.json() })
+  entityData.catch(() => { entityData = null })
+  try { const j = await entityData; b.data.entities = j.entities; b.data.held = j.held } catch { /* the blocks still show; the mobs are listed as not shown */ }
+  return b
+}
 
 /** The box around every block that isn't air: [minX, minY, minZ, maxX, maxY, maxZ]. */
 function bounds(s: Schematic) {
@@ -47,6 +56,7 @@ export function Schematic3D({ nb, file, title, onClose }: { nb: string; file: { 
   useEffect(() => {
     let alive = true
     Promise.all([fetchFile(nb, file.id).then(readLitematic), loadBlocks()])
+      .then(([s, b]) => withEntities(s, b).then(b => [s, b] as const))
       .then(([s, b]) => { if (!alive) return; setLayer(s.Y); setSchem(s); start(s, b) })
       .catch(e => alive && setErr(e?.message || 'Couldn’t open this file'))
     return () => { alive = false }
@@ -85,7 +95,9 @@ export function Schematic3D({ nb, file, title, onClose }: { nb: string; file: { 
     cleanup.current = () => { cancelAnimationFrame(frame); ro.disconnect(); controls.dispose(); clear(group); renderer.dispose(); renderer.domElement.remove() }
   }
 
-  const clear = (group: THREE.Group) => { for (const c of [...group.children]) { group.remove(c); (c as THREE.Mesh).geometry?.dispose() } }
+  const clear = (group: THREE.Group) => {
+    for (const c of [...group.children]) { group.remove(c); const m = c as THREE.Mesh; m.geometry?.dispose(); (m.material as THREE.Material)?.dispose() }   // the textures are shared and kept
+  }
 
   // (Re)build the model whenever the layer changes, cutting everything above it
   useEffect(() => {
@@ -96,8 +108,9 @@ export function Schematic3D({ nb, file, title, onClose }: { nb: string; file: { 
     const solid = new THREE.MeshBasicMaterial({ map: v.sheet, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide })
     const glass = new THREE.MeshBasicMaterial({ map: v.sheet, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide })
     v.group.add(new THREE.Mesh(geometry(m.solid), solid)); if (m.glass.idx.length) v.group.add(new THREE.Mesh(geometry(m.glass), glass))
-    for (const [key, part] of Object.entries(m.custom)) {   // player heads with their skin, banners with their patterns: shown once their picture is ready
-      const mat = new THREE.MeshBasicMaterial({ vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }), mesh = new THREE.Mesh(geometry(part), mat)
+    for (const [key, part] of Object.entries(m.custom)) {   // skins, banner patterns, mobs, items and paintings: shown once their picture is ready
+      const seeThrough = key.endsWith('#clear')   // a slime's jelly
+      const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, ...(seeThrough ? { transparent: true, depthWrite: false } : { alphaTest: 0.5 }) }), mesh = new THREE.Mesh(geometry(part), mat)
       mesh.visible = false; v.group.add(mesh)
       pictureFor(key).then(t => { mat.map = t; mat.needsUpdate = true; mesh.visible = true; v.render() }).catch(() => {})
     }
@@ -107,7 +120,7 @@ export function Schematic3D({ nb, file, title, onClose }: { nb: string; file: { 
   const counts = useMemo(() => schem ? `${schem.X} × ${schem.Y} × ${schem.Z} · ${schem.count.toLocaleString()} blocks` : '', [schem])
   return <div className="modal" onClick={onClose}><div className="card schem" onClick={e => e.stopPropagation()}>
     <div className="row" style={{ justifyContent: 'space-between' }}>
-      <div><h2 style={{ margin: 0 }}>{title}</h2><p className="mut small" style={{ margin: '2px 0 0' }}>{file.name}{counts && ` · ${counts}`}</p></div>
+      <div style={{ flex: 1, minWidth: 0 }}><h2 style={{ margin: 0 }}>{title}</h2><p className="mut small" style={{ margin: '2px 0 0' }}>{file.name}{counts && ` · ${counts}`}</p></div>
       <button className="ghost" onClick={onClose}>Close</button>
     </div>
     <div className="schemview" ref={host}>{!schem && !err && <p className="mut schemmsg">Loading…</p>}{err && <p className="err schemmsg">{err}</p>}</div>
