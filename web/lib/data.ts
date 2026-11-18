@@ -1,5 +1,5 @@
 // Enchantments as of Java 26.3 / Bedrock 26.60 (spear + Lunge added in 1.21.11).
-export const VERSION = { java: '26.3', bedrock: '26.60', updated: 'November 17th, 2026' }
+export const VERSION = { java: '26.3', bedrock: '26.60', updated: 'November 18th, 2026' }
 export type Ench = [string, number]
 export const ENCHANTS: Record<string, Ench[]> = {
   'All Purpose': [['Unbreaking', 3], ['Mending', 1], ['Curse of Binding', 1], ['Curse of Vanishing', 1]],
