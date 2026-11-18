@@ -41,7 +41,7 @@ const geometry = (m: MeshPart) => {
 /** A farm's Litematica file in 3D: drag to turn it, scroll to zoom, right-drag to move. The layer slider shows it up to one height, for building it layer by layer. */
 export function Schematic3D({ nb, file, title, onClose }: { nb: string; file: { id: string; name: string }; title: string; onClose: () => void }) {
   const host = useRef<HTMLDivElement>(null)
-  const [schem, setSchem] = useState<Schematic | null>(null), [err, setErr] = useState(''), [layer, setLayer] = useState(0), [faces, setFaces] = useState(0)
+  const [schem, setSchem] = useState<Schematic | null>(null), [err, setErr] = useState(''), [layer, setLayer] = useState(0), [faces, setFaces] = useState(0), [missing, setMissing] = useState<Record<string, number>>({})
   const view = useRef<{ scene: THREE.Scene; group: THREE.Group; sheet: THREE.Texture; data: BlockData; render: () => void; follow: (y: number) => void } | null>(null)
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export function Schematic3D({ nb, file, title, onClose }: { nb: string; file: { 
   useEffect(() => {
     const v = view.current; if (!v || !schem) return
     const cut = layer >= schem.Y ? schem : { ...schem, data: schem.data.slice(0, layer * schem.X * schem.Z), Y: layer }
-    const m = buildMesh(cut, v.data); setFaces(m.faces)
+    const m = buildMesh(cut, v.data); setFaces(m.faces); setMissing(m.missing)
     clear(v.group)
     const solid = new THREE.MeshBasicMaterial({ map: v.sheet, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide })
     const glass = new THREE.MeshBasicMaterial({ map: v.sheet, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide })
@@ -116,6 +116,7 @@ export function Schematic3D({ nb, file, title, onClose }: { nb: string; file: { 
       <input type="range" min={1} max={schem.Y} value={layer} onChange={e => setLayer(Number(e.target.value))} className="grow" />
       <span className="small" style={{ minWidth: 70, textAlign: 'right' }}>{layer >= schem.Y ? 'All' : `${layer} of ${schem.Y}`}</span>
     </div>}
-    <p className="mut small" style={{ margin: '6px 0 0' }}>Drag to turn, scroll to zoom, right-drag to move.{faces > 400_000 ? ' This one is big, so it may be slow.' : ''}</p>
+    <p className="mut small" style={{ margin: '6px 0 0' }}>Drag to turn, scroll to zoom, right-drag to move.{faces > 400_000 ? ' This one is big, so it may be slow.' : ''}
+      {Object.keys(missing).length > 0 && ` Not shown: ${Object.entries(missing).map(([id, n]) => `${n} ${id.replace(/_/g, ' ')}${n === 1 ? '' : 's'}`).join(', ')}.`}</p>
   </div></div>
 }

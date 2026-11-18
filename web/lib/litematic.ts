@@ -5,7 +5,13 @@
 export type Block = { name: string; props: Record<string, string> }
 /** What a block entity adds to how it looks: a player head's skin (a texture hash, a UUID or a name) or a banner's pattern layers. */
 export type Tile = { skin?: string; patterns?: [string, string][] }
-export type Schematic = { X: number; Y: number; Z: number; palette: Block[]; data: Uint16Array; name: string; count: number; tiles?: Map<number, Tile> }
+/** A mob, armor stand, boat, minecart or item frame: where it is (in blocks, from the schematic's corner), which way it faces, and the few details that change its look. */
+export type Entity = {
+  id: string; x: number; y: number; z: number; yaw: number
+  wood?: string; arms?: boolean; plate?: boolean; small?: boolean; hidden?: boolean; pumpkin?: boolean; colour?: number
+  villager?: [string, string]; facing?: number; item?: string; turn?: number
+}
+export type Schematic = { X: number; Y: number; Z: number; palette: Block[]; data: Uint16Array; name: string; count: number; tiles?: Map<number, Tile>; entities?: Entity[] }
 const MAX_VOLUME = 8_000_000
 
 function readNbt(buf: Uint8Array): any {
@@ -70,6 +76,21 @@ function skinOf(t: any): string | undefined {
   const name = prof.name ?? prof.Name
   return typeof name === 'string' && /^[A-Za-z0-9_]{1,16}$/.test(name) ? name : undefined
 }
+const bare = (v: any) => (typeof v === 'string' ? v.replace(/^minecraft:/, '') : undefined)
+const flag = (v: any) => (v === undefined ? undefined : !!v)
+function entityOf(e: any, ox: number, oy: number, oz: number): Entity | null {
+  const id = bare(e?.id), pos = e?.Pos
+  if (!id || !Array.isArray(pos) || pos.length < 3 || !pos.every((n: any) => Number.isFinite(n))) return null
+  const vd = e.VillagerData ?? e.villager_data
+  return {
+    id, x: ox + pos[0], y: oy + pos[1], z: oz + pos[2], yaw: Number(e.Rotation?.[0]) || 0,
+    wood: bare(e.Type), arms: flag(e.ShowArms), plate: e.NoBasePlate === undefined ? undefined : !e.NoBasePlate, small: flag(e.Small), hidden: flag(e.Invisible),
+    pumpkin: flag(e.Pumpkin), colour: typeof e.Color === 'number' ? e.Color : undefined,
+    villager: vd ? [bare(vd.type) || 'plains', bare(vd.profession) || 'none'] : undefined,
+    facing: typeof e.Facing === 'number' ? e.Facing : undefined, item: bare(e.Item?.id), turn: typeof e.ItemRotation === 'number' ? e.ItemRotation : undefined,
+  }
+}
+
 function patternsOf(t: any): [string, string][] | undefined {
   const list = Array.isArray(t.patterns) ? t.patterns : Array.isArray(t.Patterns) ? t.Patterns : null
   if (!list) return undefined
@@ -96,8 +117,11 @@ export async function readLitematic(file: ArrayBuffer): Promise<Schematic> {
   if (X * Y * Z > MAX_VOLUME) throw new Error('This schematic is too big to show in 3D')
   const data = new Uint16Array(X * Y * Z), palette: Block[] = [{ name: 'air', props: {} }], keyIdx = new Map<string, number>([['air', 0]])
   let count = 0
-  const tiles = new Map<number, Tile>()
+  const tiles = new Map<number, Tile>(), entities: Entity[] = []
   for (const b of box) {
+    for (const e of Array.isArray(b.r.Entities) ? b.r.Entities.slice(0, 5000) : []) {   // positions are from the region's corner, like block entities
+      const en = entityOf(e, b.x - minX, b.y - minY, b.z - minZ); if (en) entities.push(en)
+    }
     for (const t of Array.isArray(b.r.TileEntities) ? b.r.TileEntities : []) {   // positions are from the region's corner
       const x = Number(t?.x), y = Number(t?.y), z = Number(t?.z)
       if (![x, y, z].every(Number.isInteger) || x < 0 || y < 0 || z < 0 || x >= b.sx || y >= b.sy || z >= b.sz) continue
@@ -127,5 +151,5 @@ export async function readLitematic(file: ArrayBuffer): Promise<Schematic> {
       count++
     }
   }
-  return { X, Y, Z, palette, data, name: String(root?.Metadata?.Name || ''), count, tiles }
+  return { X, Y, Z, palette, data, name: String(root?.Metadata?.Name || ''), count, tiles, entities }
 }

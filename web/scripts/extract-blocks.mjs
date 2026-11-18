@@ -8,7 +8,8 @@ import sharp from 'sharp'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { addBlockEntities } from './block-entities.mjs'
+import { addBlockEntities, addEntities } from './block-entities.mjs'
+import { makeReader } from './model-layers.mjs'
 
 let jar = process.argv[2]
 if (!jar) {
@@ -92,6 +93,12 @@ for (const [k, t] of [['water', 'block/water_still'], ['lava', 'block/lava_still
 
 // Chests, shulker boxes, banners, heads, pots and bells: drawn by code in the game, shapes copied in block-entities.mjs
 const big = addBlockEntities({ hasBlock: n => !!zip.getEntry(`assets/minecraft/blockstates/${n}.json`), tex, models, blocks })
+// Mobs, armor stands, boats, minecarts and item frames: their shapes read from the game's model code
+const entities = addEntities({
+  layer: makeReader(name => zip.getEntry(name + '.class')?.getData()),
+  bigTex: p => { const i = tex(p); big.set(i, p); return i },
+  box: ref => models[model(ref)].b || [],
+})
 
 // ---- the texture sheet: 16x16 tiles (first frame of animated ones), then the block entity textures at full size below them
 const COLS = 64, W = COLS * 16, tileRows = Math.ceil(texList.length / COLS)
@@ -124,6 +131,10 @@ for (const e of zip.getEntries()) {
   const n = e.entryName.match(/^assets\/minecraft\/textures\/entity\/banner\/([a-z0-9_]+)\.png$/)?.[1]
   if (n && n !== 'banner_base') fs.writeFileSync(path.join(ent, 'banner', n + '.png'), e.getData())
 }
+for (const e of zip.getEntries()) {   // villager biome and job layers, painted over the villager by the viewer
+  const n = e.entryName.match(/^assets\/minecraft\/textures\/entity\/villager\/((type|profession)\/[a-z0-9_]+|villager)\.png$/)?.[1]
+  if (n) { fs.mkdirSync(path.join(ent, 'villager', path.dirname(n)), { recursive: true }); fs.writeFileSync(path.join(ent, 'villager', n + '.png'), e.getData()) }
+}
 fs.writeFileSync(path.join(ent, 'steve.png'), zip.getEntry('assets/minecraft/textures/entity/player/wide/steve.png').getData())
-fs.writeFileSync(path.join(out, 'blocks.json'), JSON.stringify({ cols: COLS, rows, tex: texList, big: rects, models, blocks }))
+fs.writeFileSync(path.join(out, 'blocks.json'), JSON.stringify({ cols: COLS, rows, tex: texList, big: rects, models, blocks, entities }))
 console.log(`${Object.keys(blocks).length} blocks, ${models.length} models, ${texList.length} textures -> public/mc/blocks.json, blocks.png (${(fs.statSync(path.join(out, 'blocks.json')).size / 1024).toFixed(0)} KB json)`)

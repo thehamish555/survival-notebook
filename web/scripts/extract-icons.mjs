@@ -160,12 +160,22 @@ async function flatIcon(ref, tints = []) {
   })
 }
 /** A block item: its block model (or several, for a composite like a bed) drawn at the inventory angle by block-render.mjs. */
+/** An item model's transformation (translation, left_rotation, scale, right_rotation, as the game applies them) for points in pixels and directions. */
+const quat = (q, v) => {   // rotate v by the quaternion [x, y, z, w]
+  const [x, y, z, w] = q, [a, b, c] = v, ix = w * a + y * c - z * b, iy = w * b + z * a - x * c, iz = w * c + x * b - y * a, iw = -x * a - y * b - z * c
+  return [ix * w + iw * -x + iy * -z - iz * -y, iy * w + iw * -y + iz * -x - ix * -z, iz * w + iw * -z + ix * -y - iy * -x]
+}
+function transformation(t = {}) {
+  const tr = (t.translation || [0, 0, 0]).map(v => v * 16), L = t.left_rotation || [0, 0, 0, 1], R = t.right_rotation || [0, 0, 0, 1], S = t.scale || [1, 1, 1]
+  const lin = v => quat(L, quat(R, v).map((n, i) => n * S[i]))
+  return { pt: p => lin(p).map((n, i) => n + tr[i]), dir: v => { const d = lin(v), l = Math.hypot(...d) || 1; return d.map(n => n / l) } }
+}
 async function blockIcon(parts, tints = []) {   // tints: the item's own tint list (leaves, grass); a face with no colour there stays as it is
   const elements = [], names = new Map(); let gui = null
   for (const [pi, { ref, at }] of parts.entries()) {
     const c = chain(ref); if (c.flat || !c.elements) return null
     gui = gui || c.gui
-    const sh = at.map(v => v * 16), move = p => [p[0] + sh[0], p[1] + sh[1], p[2] + sh[2]]
+    const place = transformation(at)
     for (const el of c.elements) {
       const faces = {}
       for (const [dir, f] of Object.entries(el.faces || {})) {
@@ -173,11 +183,11 @@ async function blockIcon(parts, tints = []) {   // tints: the item's own tint li
         if (typeof t === 'string' && !t.startsWith('#')) names.set(key, t)
         faces[dir] = { ...f, texture: key }
       }
-      elements.push({ ...el, from: move(el.from), to: move(el.to), faces, rotation: el.rotation ? { ...el.rotation, origin: move(el.rotation.origin || [8, 8, 8]) } : undefined })
+      elements.push({ ...el, faces, place })
     }
   }
   const textures = [...new Set(names.values())]
-  return encode(textures, get => renderModel({ elements, gui, texture: k => (names.has(k) ? get(names.get(k)) : null), tint: (k, i) => tintColour(tints[i]) ?? TINT[names.get(k)?.split('/').pop()] ?? null }, 64))
+  return encode(textures, get => renderModel({ elements, gui, fit: parts.length > 1, texture: k => (names.has(k) ? get(names.get(k)) : null), tint: (k, i) => tintColour(tints[i]) ?? TINT[names.get(k)?.split('/').pop()] ?? null }, 64))
 }
 
 // Items the game shows as a sequence: the clock's face turning, compasses spinning, the bow and crossbow being drawn, light levels.
@@ -322,13 +332,13 @@ async function iconFor(n) {
   const s = await seriesIcon(n); if (s) return { buf: s, kind: 'animated' }
   const node = pick(readJson(`assets/minecraft/items/${n}.json`)?.model)
   if (node?.type === 'minecraft:composite') {
-    const parts = (node.models || []).map(m => ({ ref: pick(m)?.model, at: m.transformation?.translation || [0, 0, 0] }))
+    const parts = (node.models || []).map(m => ({ ref: pick(m)?.model, at: m.transformation }))
     if (parts.every(p => typeof p.ref === 'string')) { const b = await blockIcon(parts); if (b) return { buf: b, kind: '3d' } }
   }
   if (node?.type === 'minecraft:model' && typeof node.model === 'string') {
     const c = chain(node.model)
     if (c.flat) { const f = await flatIcon(node.model, node.tints); if (f) return { buf: f, kind: 'flat' } }
-    else if (c.elements) { const b = await blockIcon([{ ref: node.model, at: [0, 0, 0] }], node.tints); if (b) return { buf: b, kind: '3d' } }
+    else if (c.elements) { const b = await blockIcon([{ ref: node.model, at: node.transformation }], node.tints); if (b) return { buf: b, kind: '3d' } }
   }
   if (SPECIAL[n]) { const t = await SPECIAL[n]().catch(() => null); if (t) return { buf: await toPng(t), kind: 'flat' } }
   if (node?.type === 'minecraft:special' && typeof node.base === 'string') {   // something we don't model (copper golem statues): the texture its model names

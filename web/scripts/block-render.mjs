@@ -39,11 +39,11 @@ function elementRot(p, r) {
   return [q[0] + o[0], q[1] + o[1], q[2] + o[2]]
 }
 
-/** model: { elements?, quads?, texture(name) -> {w,h,data} | null, gui: {rotation, translation, scale}, tint(textureName, tintindex) -> [r,g,b] | null }
+/** model: { elements? (each may have place: { pt, dir } to move it, for parts of composite items), quads?, texture(name) -> {w,h,data} | null, gui: {rotation, translation, scale}, tint(textureName, tintindex) -> [r,g,b] | null }
  *  frontLight: lit flat from the front, like items whose model says gui_light "front" (shields, banners).
  *  quads are for entity models (chests, heads, banners): { pts: four [x,y,z] in block pixels, uv: four [u,v] in 0..16, texture, tint? }.
  *  Returns { w, h, data } RGBA at size x size, or null if nothing was drawn. */
-export function renderModel({ elements, quads: extra, texture, gui, tint, frontLight }, size = 64) {
+export function renderModel({ elements, quads: extra, texture, gui, tint, frontLight, fit }, size = 64) {
   const rot = gui?.rotation || [30, 225, 0], tr = gui?.translation || [0, 0, 0], sc = gui?.scale || [0.625, 0.625, 0.625]
   // Model space (0..16) -> centred -> gui scale and rotation (Z, then Y, then X, as the game applies them) -> screen pixels.
   const view = p => {
@@ -64,7 +64,8 @@ export function renderModel({ elements, quads: extra, texture, gui, tint, frontL
       let uvc = [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]]
       const steps = ((f.rotation || 0) / 90) & 3
       for (let i = 0; i < steps; i++) uvc = [uvc[3], uvc[0], uvc[1], uvc[2]]   // a rotated face turns its texture clockwise
-      quads.push({ pts: corners(dir, el.from, el.to).map(p => elementRot(p, el.rotation)), uv: uvc, texture: f.texture, normal: n, shade: el.shade !== false,
+      const place = el.place || { pt: p => p, dir: v => v }   // the item's own transformation of this part (composite items like beds)
+      quads.push({ pts: corners(dir, el.from, el.to).map(p => place.pt(elementRot(p, el.rotation))), uv: uvc, texture: f.texture, normal: place.dir(n), shade: el.shade !== false,
         tint: f.tintindex !== undefined && f.tintindex >= 0 ? tint(f.texture, f.tintindex) : null })
     }
   }
@@ -76,9 +77,16 @@ export function renderModel({ elements, quads: extra, texture, gui, tint, frontL
   }
   const data = Buffer.alloc(size * size * 4), depth = new Float32Array(size * size).fill(-Infinity)
   let drawn = 0
+  // fit: a model that would spill out of the box (straw bed frills) is shrunk about the middle until it fits, like a slot shows it whole
+  let f = 1
+  if (fit) {
+    const c = size / 2, far = Math.max(0, ...quads.filter(q => texture(q.texture)).flatMap(q => q.pts.map(view)).map(p => Math.max(Math.abs(p[0] - c), Math.abs(p[1] - c))))
+    if (far > c + 1) f = (c - 1) / far
+  }
+  const place = p => { const v = view(p); return f === 1 ? v : [size / 2 + (v[0] - size / 2) * f, size / 2 + (v[1] - size / 2) * f, v[2]] }
   for (const qd of quads) {
       const tex = texture(qd.texture); if (!tex) continue
-      const pts = qd.pts.map(view)
+      const pts = qd.pts.map(place)
       let nn = turn(qd.normal)
       if (nn[2] < -1e-4) { if (!qd.twoSided) continue; nn = nn.map(x => -x) }   // facing away (entity faces just light the side we see)
       // Lighting by where the face points after turning: tops brightest, the left side a little darker, the right side darker still.
