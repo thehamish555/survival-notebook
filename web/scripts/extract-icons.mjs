@@ -187,7 +187,7 @@ async function blockIcon(parts, tints = []) {   // tints: the item's own tint li
     }
   }
   const textures = [...new Set(names.values())]
-  return encode(textures, get => renderModel({ elements, gui, texture: k => (names.has(k) ? get(names.get(k)) : null), tint: (k, i) => tintColour(tints[i]) ?? TINT[names.get(k)?.split('/').pop()] ?? null }, 64))
+  return encode(textures, get => renderModel({ elements, gui, fit: parts.length > 1, texture: k => (names.has(k) ? get(names.get(k)) : null), tint: (k, i) => tintColour(tints[i]) ?? TINT[names.get(k)?.split('/').pop()] ?? null }, 64))
 }
 
 // Items the game shows as a sequence: the clock's face turning, compasses spinning, the bow and crossbow being drawn, light levels.
