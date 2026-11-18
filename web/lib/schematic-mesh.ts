@@ -1,6 +1,6 @@
 // Turns a schematic into triangles using the game's own block models (public/mc/blocks.json, made by scripts/extract-blocks.mjs).
 // Faces hidden against a full solid neighbour are skipped, like the game does, so big builds stay light.
-import type { Block, Schematic, Tile } from './litematic'
+import type { Block, Entity, Schematic, Tile } from './litematic'
 
 type Face = [number, number[] | null, number, number, number]   // texture, uv, cull, tint, uv rotation
 type Box = [number[], number[], 0 | [string, number, number, number, number], Record<string, Face>]
@@ -10,10 +10,11 @@ export type BlockData = {
   big?: Record<number, number[]>   // block entity textures kept at full size: [x, y, w, h] on the sheet
   models: ({ b: Box[] } | { p: number } | { q: number[][] })[]   // q: baked block entity quads, [texture, tint, then x y z u v for each corner]
   blocks: Record<string, { v?: [string, ModelRef][]; mp?: [any, ModelRef][]; t?: number[]; fluid?: number }>
+  entities?: Record<string, { q: number[][]; pic?: string }>   // mobs, boats, minecarts and frames, facing yaw 0 with the entity at the origin
 }
 export type MeshPart = { pos: Float32Array; uv: Float32Array; col: Float32Array; idx: Uint32Array }
 /** custom: parts drawn with their own picture instead of the sheet, keyed "skin:<hash, uuid or name>" or "banner:<colour>:<pattern/colour,...>". Their uv is in that picture's pixels. */
-export type Mesh = { solid: MeshPart; glass: MeshPart; custom: Record<string, MeshPart>; faces: number }
+export type Mesh = { solid: MeshPart; glass: MeshPart; custom: Record<string, MeshPart>; faces: number; missing: Record<string, number> }
 
 const DIRS: Record<string, number[]> = { down: [0, -1, 0], up: [0, 1, 0], north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0] }
 const corners = (dir: string, [x0, y0, z0]: number[], [x1, y1, z1]: number[]): number[][] => {
@@ -156,8 +157,60 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
       }
     }
   }
+  // Entities: each model turned to the entity's yaw (and shrunk for small armor stands), at its position. Item frames sit in their block.
+  const missing: Record<string, number> = {}
+  for (const e of s.entities || []) {
+    if (Math.floor(e.y) >= Y || e.y < -1) continue   // above the layer cut
+    const pieces = entityPieces(e)
+    if (!pieces) { missing[e.id] = (missing[e.id] || 0) + 1; continue }
+    const frame = e.facing !== undefined && /item_frame$/.test(e.id), F = frame ? FACING[e.facing!] : null
+    const bx = frame ? Math.floor(e.x + F![0] * 0.46875) : e.x, by = frame ? Math.floor(e.y + F![1] * 0.46875) : e.y, bz = frame ? Math.floor(e.z + F![2] * 0.46875) : e.z
+    const a = rad(-e.yaw), c = Math.cos(a), sn = Math.sin(a), k = e.small ? 0.5 : 1
+    for (const { key, pic, turn } of pieces) {
+      const m = data.entities?.[key]; if (!m) { missing[e.id] = (missing[e.id] || 0) + 1; continue }
+      const own = pic || m.pic ? (custom[pic || m.pic!] ||= { p: [], u: [], c: [], i: [] }) : undefined
+      for (const q of m.q) {
+        let pts = [0, 1, 2, 3].map(i => q.slice(2 + i * 5, 5 + i * 5))
+        if (frame) { if (turn) pts = spin(pts, F!, -turn * Math.PI / 4) }
+        else pts = pts.map(([x, y, z]) => [(x * c + z * sn) * k, y * k, (-x * sn + z * c) * k])
+        const uv = [0, 1, 2, 3].map(i => q.slice(5 + i * 5, 7 + i * 5))
+        const l = light(normalOf(pts))
+        quad(false, pts, uv, 0, q[0], [l, l, l], bx, by, bz, own)
+      }
+    }
+  }
   const pack = (g: typeof parts.solid): MeshPart => ({ pos: new Float32Array(g.p), uv: new Float32Array(g.u), col: new Float32Array(g.c), idx: new Uint32Array(g.i) })
-  return { solid: pack(parts.solid), glass: pack(parts.glass), custom: Object.fromEntries(Object.entries(custom).map(([k, g]) => [k, pack(g)])), faces }
+  return { solid: pack(parts.solid), glass: pack(parts.glass), custom: Object.fromEntries(Object.entries(custom).map(([k, g]) => [k, pack(g)])), faces, missing }
+}
+
+const FACING = [[0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1], [-1, 0, 0], [1, 0, 0]], FACING_NAME = ['down', 'up', 'north', 'south', 'west', 'east']
+const COLOURS = ['white', 'orange', 'magenta', 'light_blue', 'yellow', 'lime', 'pink', 'gray', 'light_gray', 'cyan', 'purple', 'blue', 'brown', 'green', 'red', 'black']
+/** Turns points (block pixels) about their middle, around axis n, by angle a: an item turned in its frame. */
+function spin(pts: number[][], n: number[], a: number) {
+  const m = [0, 1, 2].map(i => pts.reduce((s, p) => s + p[i], 0) / pts.length), c = Math.cos(a), s = Math.sin(a)
+  return pts.map(p => {
+    const v = [p[0] - m[0], p[1] - m[1], p[2] - m[2]], d = v[0] * n[0] + v[1] * n[1] + v[2] * n[2], x = [n[1] * v[2] - n[2] * v[1], n[2] * v[0] - n[0] * v[2], n[0] * v[1] - n[1] * v[0]]
+    return [0, 1, 2].map(i => m[i] + v[i] * c + x[i] * s + n[i] * d * (1 - c))
+  })
+}
+const MINECARTS = new Set(['minecart', 'chest_minecart', 'hopper_minecart', 'furnace_minecart', 'tnt_minecart'])
+/** Which shapes make up an entity (and any picture of its own), or null for one the viewer can't draw. */
+function entityPieces(e: Entity): { key: string; pic?: string; turn?: number }[] | null {
+  const id = e.id
+  if (id === 'iron_golem') return [{ key: id }]
+  if (id === 'snow_golem') return [{ key: e.pumpkin === false ? 'snow_golem_sheared' : 'snow_golem' }]
+  if (id === 'villager') { const [t, p] = e.villager || ['plains', 'none']; return [{ key: id, pic: `villager:${t}:${p}` }] }
+  if (id === 'shulker') return [{ key: e.colour !== undefined && COLOURS[e.colour] ? `shulker_${COLOURS[e.colour]}` : 'shulker' }]
+  if (id === 'armor_stand') return e.hidden ? [] : [{ key: id }, ...(e.arms ? [{ key: 'armor_stand_arms' }] : []), ...(e.plate !== false ? [{ key: 'armor_stand_plate' }] : [])]
+  if (MINECARTS.has(id)) return [{ key: id }]
+  if (/^(spawner|command_block)_minecart$/.test(id)) return [{ key: 'minecart' }]
+  if (id === 'boat' || id === 'chest_boat') { const w = e.wood || 'oak'; return [{ key: w === 'bamboo' ? (id === 'boat' ? 'bamboo_raft' : 'bamboo_chest_raft') : `${w}_${id}` }] }
+  if (/_(chest_)?(boat|raft)$/.test(id)) return [{ key: id }]
+  if ((id === 'item_frame' || id === 'glow_item_frame') && e.facing !== undefined && FACING_NAME[e.facing]) {
+    const f = FACING_NAME[e.facing]
+    return [...(e.hidden ? [] : [{ key: `${id}:${f}` }]), ...(e.item ? [{ key: `frame_item:${f}`, pic: `item:${e.item}`, turn: e.turn }] : [])]
+  }
+  return null
 }
 
 /** Which blocks get their own picture: player heads with a skin (the whole head) and banners with patterns (the cloth). */

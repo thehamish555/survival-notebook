@@ -54,3 +54,15 @@ test('schematic: a head with a skin and a banner with patterns get their own pic
   assert.equal(m.solid.idx.length / 6, 3)                                   // the plain banner, and the patterned one's pole
   assert.deepEqual([...m.custom['skin:Notch'].uv.slice(0, 2)], [8, 0])     // in the skin's own pixels
 })
+
+test('schematic: entities are turned to their yaw and placed; ones the viewer can’t draw are counted', () => {
+  const front = [-2, 0, 4, 0, 16, 2, 0, 4, 16, 16, 2, 4, 4, 16, 0, -2, 4, 4, 0, 0]   // a square facing +z, at z = 4 px
+  const d: BlockData = { ...data, rows: 5, entities: { iron_golem: { q: [[0, 0, ...front]] }, villager: { q: [[0, 0, ...front]], pic: 'villager' } } }
+  const ent = (id: string, yaw: number) => ({ id, x: 1.5, y: 0, z: 1.5, yaw })
+  const m = buildMesh({ X: 3, Y: 2, Z: 3, palette: [{ name: 'air', props: {} }], data: new Uint16Array(18), name: '', count: 0,
+    entities: [ent('iron_golem', 90), { ...ent('villager', 0), villager: ['desert', 'farmer'] as [string, string] }, ent('experience_orb', 0), { ...ent('iron_golem', 0), y: 5 }] }, d)
+  // yaw 90 (facing west): the corner 4 px in front (+z) and 2 px to the side (-x) ends up 4 px west and 2 px north
+  assert.deepEqual([+(m.solid.pos[0] * 16).toFixed(3), +(m.solid.pos[2] * 16).toFixed(3)], [24 - 4, 24 - 2])
+  assert.deepEqual(Object.keys(m.custom), ['villager:desert:farmer'])
+  assert.deepEqual(m.missing, { experience_orb: 1 })               // the one above the top isn't drawn or counted
+})

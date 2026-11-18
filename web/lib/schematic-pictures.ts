@@ -38,12 +38,33 @@ async function skin(key: string) {
   return c
 }
 
+/** A villager painted like the game: the base villager, its biome's clothes, then its job's. */
+async function villager(type: string, job: string) {
+  const base = await image('/mc/entity/villager/villager.png'), w = base.width, h = base.height
+  const c = canvasOf(w, h), ctx = c.getContext('2d')!
+  ctx.drawImage(base, 0, 0)
+  for (const layer of [SAFE.test(type) && `type/${type}`, SAFE.test(job) && job !== 'none' && `profession/${job}`]) {
+    if (layer) try { ctx.drawImage(await image(`/mc/entity/villager/${layer}.png`), 0, 0) } catch { /* a biome or job from a newer version: left plain */ }
+  }
+  return c
+}
+
+/** An item's icon, for what's in an item frame, at 64 pixels with its pixels kept sharp. */
+async function item(id: string) {
+  const c = canvasOf(64, 64), ctx = c.getContext('2d')!
+  if (!SAFE.test(id)) return c
+  const pic = await image(`/mc/item/${id}.png`)
+  ctx.imageSmoothingEnabled = false; ctx.drawImage(pic, 0, 0, 64, 64)
+  return c
+}
+
 const made = new Map<string, Promise<THREE.Texture>>()
 /** The texture for a mesh's custom part. Its uv is in picture pixels, so the texture scales them to fit. */
 export function pictureFor(key: string): Promise<THREE.Texture> {
   if (!made.has(key)) {
     const [kind, a, b] = key.split(':')
-    const draw = kind === 'skin' ? skin(a) : banner(a, (b || '').split(',').filter(Boolean).map(p => p.split('/') as [string, string]))
+    const draw = kind === 'skin' ? skin(a) : kind === 'villager' ? villager(a, b || 'none') : kind === 'item' ? item(a)
+      : banner(a, (b || '').split(',').filter(Boolean).map(p => p.split('/') as [string, string]))
     made.set(key, draw.then(c => {
       const t = new THREE.CanvasTexture(c)
       t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.colorSpace = THREE.SRGBColorSpace
