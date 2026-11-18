@@ -168,7 +168,7 @@ final class NotebookScreen extends Screen {
 
 	private static final int BELL = 19;
 	private void header() {
-		// The bell, right of the world name: everything the mod has told you, with a red count of what you haven't seen
+		// The bell (our own pixel icon), right of the world name: everything the mod has told you, with a red count of what you haven't seen
 		final int bx = x0 + pw - 8 - BELL, by = y0 + 4;
 		if (Inbox.open) inboxHits();
 		hit(bx, by, BELL, BELL, () -> { Inbox.open = !Inbox.open; Inbox.markRead(); this.rebuildWidgets(); }, true);
@@ -176,7 +176,7 @@ final class NotebookScreen extends Screen {
 			Ui.Pal p = Ui.pal();
 			boolean hov = Ui.over(mx, my, bx, by, BELL, BELL);
 			Ui.rounded(g, bx, by, BELL, BELL, Inbox.open ? p.panel2 : hov ? p.hover : p.panel, Inbox.open ? p.gold : p.edge);
-			Compat.drawItem(g, "bell", bx + 1, by + 1);
+			TabIcons.draw(g, "inbox", bx + 4, by + 4);   // the notebook's own bell, like the tab icons
 			String n = Inbox.count();
 			if (!n.isEmpty()) {
 				int w = Math.max(9, font.width(n) + 4);
