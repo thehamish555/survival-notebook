@@ -181,3 +181,57 @@ test('map clean-up: old tiles go unless near a place; the mod can read the map',
   assert.equal((await call('GET', `/notebooks/${nb}/map/ow/5/5`, undefined, mod)).status, 200)
   assert.equal(pruneMap(db, { now: Date.now() + 200 * 86_400_000 }), 1)          // much later, the recent tile ages out too
 })
+
+test('push: choices per kind, and new places are gathered into one notification with their final names', async () => {
+  const { call, user, notebook, sent, db } = mk(), a = await user('alice'), b = await user('bob'), nb = await notebook(a.token)
+  await call('POST', `/notebooks/${nb}/members`, { email: 'bob@x.com', role: 'editor' }, a.token)
+  await call('POST', '/push/subscribe', { endpoint: 'https://push.example/bob', keys: { p256dh: 'p', auth: 'a' } }, b.token)
+  sent.length = 0
+  const prefs = (await call('GET', '/push/prefs', undefined, b.token)).json
+  assert.equal(prefs.assigned, true); assert.equal(prefs.places, false)
+  const put = (await call('PUT', '/push/prefs', { assigned: false, places: true, nonsense: true }, b.token)).json
+  assert.equal(put.assigned, false); assert.equal(put.places, true); assert.equal('nonsense' in put, false)
+  assert.equal(JSON.parse((db.prepare('select notify from users where id=?').get(b.id) as { notify: string }).notify).places, true)
+
+  await call('PUT', `/notebooks/${nb}/s/todos`, { data: [{ id: 't1', project: 'Glass', assignee: b.id }] }, a.token)
+  await call('PUT', `/notebooks/${nb}/s/coords`, { data: [{ id: 'p1', name: '' }] }, a.token)                         // the website adds a blank row...
+  await call('PUT', `/notebooks/${nb}/s/coords`, { data: [{ id: 'p1', name: 'Mesa' }, { id: 'p2', name: 'Base' }] }, a.token)   // ...then it's named
+  await new Promise(r => setTimeout(r, 60))
+  assert.deepEqual(sent.map(x => x.msg.body), ['alice added 2 places: Mesa and Base'])   // no assignment push: bob turned those off
+  assert.equal(sent[0].msg.url, `/n/${nb}#coordinates`)
+})
+
+test('play time, "is playing" and the weekly recap', async () => {
+  const { call, user, notebook, sent, db } = mk(), a = await user('alice'), b = await user('bob'), nb = await notebook(a.token)
+  await call('POST', `/notebooks/${nb}/members`, { email: 'bob@x.com', role: 'editor' }, a.token)
+  await call('POST', '/push/subscribe', { endpoint: 'https://push.example/bob', keys: { p256dh: 'p', auth: 'a' } }, b.token)
+  await call('PUT', '/push/prefs', { online: true }, b.token)
+  sent.length = 0
+  const pos = (x: number, z: number) => call('PUT', `/notebooks/${nb}/pos`, { dim: 'ow', x, y: 64, z }, a.token)
+  await pos(0, 0); assert.deepEqual(sent.map(x => x.msg.body), ['alice is playing'])
+  await new Promise(r => setTimeout(r, 15)); await pos(30, 40)
+  assert.equal(sent.length, 1)                                                           // still playing: no repeat
+  const row = db.prepare('select ms, dist from play where nb=? and user=?').get(nb, a.id) as { ms: number; dist: number }
+  assert.ok(row.ms > 0); assert.equal(row.dist, 50)
+  db.prepare('update play set ms=? where nb=?').run(2 * 3_600_000, nb)                 // pretend it was a long session
+
+  await call('PUT', `/notebooks/${nb}/s/coords`, { data: [{ id: 'p1', name: 'Mesa' }] }, a.token)
+  await call('PUT', `/notebooks/${nb}/s/farms`, { data: [{ id: 'f1', name: 'Iron farm', built: false }] }, b.token)
+  await call('PUT', `/notebooks/${nb}/s/farms`, { data: [{ id: 'f1', name: 'Iron farm', built: true }] }, b.token)
+  await call('PUT', `/notebooks/${nb}/s/deaths`, { data: [{ id: 'd1', uid: a.id, ts: Date.now(), cause: 'alice fell from a high place' }, { id: 'd0', uid: a.id, ts: Date.now() - 30 * 86_400_000, cause: 'old' }] }, a.token)
+  const r = (await call('GET', `/notebooks/${nb}/recap`, undefined, b.token)).json
+  assert.deepEqual(r.totals, { ms: 2 * 3_600_000, dist: 50, places: 1, todos: 0, farms: 1, deaths: 1, players: 1 })
+  assert.deepEqual(r.places, [{ name: 'Mesa', by: 'alice' }]); assert.deepEqual(r.farms, [{ name: 'Iron farm', by: 'bob' }])
+  assert.equal(r.days.length, 7); assert.equal(r.days[6].ms, 2 * 3_600_000)
+  assert.deepEqual(r.highlights.map((h: any) => `${h.key}:${h.name}`), ['ms:alice', 'places:alice', 'farms:bob', 'deaths:alice'])   // 50 blocks is too little to count as a highlight
+  assert.equal((await call('GET', `/notebooks/${nb}/recap?back=1`, undefined, b.token)).json.totals.places, 0)
+  assert.equal((await call('GET', `/notebooks/${nb}/recap`)).status, 401)
+
+  const { recap, recapLine, sendWeeklyRecaps } = await import('../src/recap')
+  assert.equal(recapLine(recap(db, nb)), '2h 0m played, 1 new place, 1 farm built and 1 death')
+  const got: string[] = [], notify = (u: string, m: { body: string }) => { got.push(`${u === a.id ? 'alice' : 'bob'}: ${m.body}`) }
+  const sunday = new Date(); sunday.setUTCDate(sunday.getUTCDate() + (7 - sunday.getUTCDay()) % 7); sunday.setUTCHours(23, 59)   // the coming Sunday: this week's events are in its recap
+  assert.equal(sendWeeklyRecaps(db, notify, new Date(sunday.getTime() - 86_400_000)), 0)   // only on Sundays
+  sendWeeklyRecaps(db, notify, sunday); sendWeeklyRecaps(db, notify, sunday)                // once per week
+  assert.equal(got.length, 2)
+})

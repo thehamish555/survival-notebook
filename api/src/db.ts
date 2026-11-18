@@ -40,6 +40,11 @@ const MIGRATIONS: ((db: DB) => void)[] = [
   db => db.exec(`
     create table if not exists positions(nb text not null, user text not null, dim text not null, x real not null, y integer not null, z real not null, yaw integer not null,
       ts integer not null, online integer not null default 1, mc_name text not null default '', mc_uuid text not null default '', primary key(nb, user));`),
+  // 3.5: time played and distance travelled per player per day (for the weekly recap), and each person's notification choices.
+  db => {
+    db.exec(`create table if not exists play(nb text not null, user text not null, day text not null, ms integer not null default 0, dist real not null default 0, primary key(nb, user, day));`)
+    if (!db.prepare("select 1 from pragma_table_info('users') where name='notify'").get()) db.exec("alter table users add column notify text not null default '{}'")
+  },
 ]
 
 export function openDb(path: string): DB {

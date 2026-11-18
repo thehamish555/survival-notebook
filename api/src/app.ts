@@ -42,5 +42,5 @@ export function createApp(config: Config, db: DB = openDb(config.DB_PATH), verif
 
   app.notFound(c => c.json({ error: 'not found' }, 404))
   app.onError((e, c) => { console.error(e); return c.json({ error: 'Internal error' }, 500) })
-  return { app, db, bus }
+  return { app, db, bus, notify: ctx.notify }
 }

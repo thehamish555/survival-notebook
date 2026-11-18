@@ -55,7 +55,7 @@ export function logActivity(db: DB, nb: string, user: string, section: string, d
     return
   }
   db.prepare('insert into activity(nb,user,section,detail,via,ts) values(?,?,?,?,?,?)').run(nb, user, section, JSON.stringify(d), via, now)
-  db.prepare('delete from activity where nb=? and id not in (select id from activity where nb=? order by id desc limit 200)').run(nb, nb)
+  db.prepare('delete from activity where nb=? and id not in (select id from activity where nb=? order by id desc limit 2000)').run(nb, nb)
 }
 
 const LABEL: Record<string, [string, string]> = { coords: ['place', 'places'], todos: ['to-do', 'to-dos'], farms: ['farm', 'farms'], gear: ['gear item', 'gear items'], deaths: ['death', 'deaths'] }

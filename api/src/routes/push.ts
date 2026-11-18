@@ -1,12 +1,13 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { requireAuth } from '../middleware'
-import { vapidKeys } from '../push'
+import { KINDS, notifyPrefs, vapidKeys } from '../push'
 import { readBody } from '../validate'
 import type { AppEnv, Ctx } from '../types'
 
 const Sub = z.object({ endpoint: z.string().url().max(1000).refine(u => u.startsWith('https://'), 'Bad endpoint'), keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }) })
 const Drop = z.object({ endpoint: z.string().max(1000) })
+const Prefs = z.record(z.string(), z.boolean())
 
 /** Browser push: the site asks for the public key, subscribes the browser, and sends the subscription here. One row per device. */
 export const pushRoutes = (ctx: Ctx) => {
@@ -27,6 +28,16 @@ export const pushRoutes = (ctx: Ctx) => {
     const b = await readBody(c, Drop); if (!b.ok) return b.res
     db.prepare('delete from push_subs where endpoint=? and user=?').run(b.data.endpoint, c.get('uid'))
     return c.json({ ok: true })
+  })
+
+  // Which kinds of notification you get. One set for the whole account, on every device.
+  r.get('/push/prefs', auth, c => c.json(notifyPrefs(db, c.get('uid'))))
+  r.put('/push/prefs', auth, async c => {
+    const b = await readBody(c, Prefs); if (!b.ok) return b.res
+    const next = { ...notifyPrefs(db, c.get('uid')) } as Record<string, boolean>
+    for (const [k, v] of Object.entries(b.data)) if (k in KINDS) next[k] = v
+    db.prepare('update users set notify=? where id=?').run(JSON.stringify(next), c.get('uid'))
+    return c.json(next)
   })
 
   r.post('/push/test', auth, c => {

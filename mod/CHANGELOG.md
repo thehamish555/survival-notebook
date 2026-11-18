@@ -1,3 +1,8 @@
+## 1.6.0 – Feature
+- Waypoints in the world: your notebook's places show where they are, with a faint beam, their category icon and the distance. Look at one to see its name. Turn them off in Settings > Overlays.
+- If you sync places with Xaero's Minimap or JourneyMap, places it already shows are skipped so nothing appears twice. Places from teammates, places you added yourself and waypoints you've hidden in the minimap still show.
+- Time played and distance travelled now count towards the weekly recap on the website (with Share position on).
+
 ## 1.5.0 – Feature
 - Getting started: the first time you open the notebook, press Link this game. The website opens with a code to approve, and the game connects by itself, with no token to copy. Pasting a token in Settings still works.
 - Recent activity on the Home tab shows each change's section icon and marks changes made in game, and clicking one opens that section, like on the website.

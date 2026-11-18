@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { canEdit, getRole } from '../access'
 import { describe } from '../activity'
+import { recap } from '../recap'
 import { requireAuth } from '../middleware'
 import { SECTIONS, seed } from '../seed'
 import { readBody } from '../validate'
@@ -24,6 +25,13 @@ export const notebookRoutes = (ctx: Ctx) => {
     const rows = db.prepare(`select a.id, a.user, a.section, a.detail, a.via, a.ts, coalesce(nullif(m.nick,''), u.name, 'Someone') as name
       from activity a left join users u on u.id=a.user left join members m on m.nb=a.nb and m.user=a.user where a.nb=? order by a.id desc limit ?`).all(id, limit) as any[]
     return c.json(rows.map(x => ({ id: x.id, user: x.user, name: x.name, via: x.via, ts: x.ts, section: x.section, text: describe(x.section, JSON.parse(x.detail)) })))
+  })
+
+  // The weekly recap: ?back=1 for the week before, up to 12 weeks back
+  r.get('/notebooks/:id/recap', auth, c => {
+    const id = c.req.param('id'); if (!getRole(db, id, c.get('uid'))) return c.json({ error: 'not found' }, 404)
+    const back = Math.min(12, Math.max(0, Math.floor(Number(c.req.query('back')) || 0)))
+    return c.json(recap(db, id, Date.now() - back * 7 * 86_400_000))
   })
 
   r.post('/notebooks', auth, async c => {
@@ -58,7 +66,7 @@ export const notebookRoutes = (ctx: Ctx) => {
 
   r.delete('/notebooks/:id', auth, c => {
     const id = c.req.param('id'); if (getRole(db, id, c.get('uid')) !== 'owner') return c.json({ error: 'forbidden' }, 403)
-    db.transaction(() => { db.prepare('delete from notebooks where id=?').run(id); for (const t of ['sections', 'members', 'files', 'activity', 'invites', 'map_tiles', 'positions']) db.prepare(`delete from ${t} where nb=?`).run(id) })()
+    db.transaction(() => { db.prepare('delete from notebooks where id=?').run(id); for (const t of ['sections', 'members', 'files', 'activity', 'invites', 'map_tiles', 'positions', 'play']) db.prepare(`delete from ${t} where nb=?`).run(id) })()
     return c.json({ ok: true })
   })
   return r

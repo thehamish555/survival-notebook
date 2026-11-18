@@ -24,7 +24,7 @@ export const accountRoutes = (ctx: Ctx) => {
     if (b.data.email.trim().toLowerCase() !== emailOf(uid)) return c.json({ error: 'That is not your email address' }, 403)
     db.transaction(() => {
       for (const { nb } of db.prepare("select nb from members where user=? and role='owner'").all(uid) as { nb: string }[]) {
-        for (const t of ['sections', 'members', 'files', 'activity', 'invites', 'map_tiles', 'positions']) db.prepare(`delete from ${t} where nb=?`).run(nb)
+        for (const t of ['sections', 'members', 'files', 'activity', 'invites', 'map_tiles', 'positions', 'play']) db.prepare(`delete from ${t} where nb=?`).run(nb)
         db.prepare('delete from notebooks where id=?').run(nb)
       }
       for (const { nb } of db.prepare('select nb from members where user=?').all(uid) as { nb: string }[]) {
@@ -32,6 +32,7 @@ export const accountRoutes = (ctx: Ctx) => {
       }
       db.prepare('delete from members where user=?').run(uid)
       db.prepare('delete from positions where user=?').run(uid)
+      db.prepare('delete from play where user=?').run(uid)
       db.prepare('delete from api_tokens where user=?').run(uid)
       db.prepare('delete from push_subs where user=?').run(uid)
       db.prepare('delete from users where id=?').run(uid)

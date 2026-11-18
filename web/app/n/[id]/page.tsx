@@ -13,6 +13,7 @@ import { BookList, Chips, Deaths, EnchantItem, FS, Legend, Table, uid } from '@/
 import { Stats } from '@/components/notebook/Stats'
 import { Shopping } from '@/components/notebook/Shopping'
 import { MapView } from '@/components/notebook/MapView'
+import { WeekCard } from '@/components/notebook/RecapParts'
 import { DIM_LABEL, parsePaste, type Dim, type Pasted } from '@/lib/coords'
 
 const isXYZ = (s: string) => /^-?\d+\s+-?\d+\s+-?\d+$/.test((s || '').trim())
@@ -233,6 +234,7 @@ export default function Notebook() {
           <span className="si"><TabIcon name={icon} size={28} /></span><div className="lbl">{label}</div><div className="big">{value}</div>
           {frac !== undefined && <div className="bar"><div style={{ width: `${frac * 100}%` }} /></div>}</button>)}
         </div>
+        <WeekCard id={id} />
         <div className="card"><h2>Assigned to you</h2>
           {!mineTodos.length && !mineFarms.length && <div className="empty">Nothing assigned to you right now.</div>}
           {mineTodos.map((t: any) => <div className="ench tl" key={t.id}><span className={`pill t-${TONES.priority[t.priority]}`}>{t.priority}</span><b>{t.project || 'Untitled to-do'}</b><span className={`pill t-${TONES.progress[t.progress]}`}>{t.progress}</span><button className="x" onClick={() => go('To-Do')}>Open →</button></div>)}
