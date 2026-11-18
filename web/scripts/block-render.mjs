@@ -39,7 +39,7 @@ function elementRot(p, r) {
   return [q[0] + o[0], q[1] + o[1], q[2] + o[2]]
 }
 
-/** model: { elements?, quads?, texture(name) -> {w,h,data} | null, gui: {rotation, translation, scale}, tint(textureName, tintindex) -> [r,g,b] | null }
+/** model: { elements? (each may have place: { pt, dir } to move it, for parts of composite items), quads?, texture(name) -> {w,h,data} | null, gui: {rotation, translation, scale}, tint(textureName, tintindex) -> [r,g,b] | null }
  *  frontLight: lit flat from the front, like items whose model says gui_light "front" (shields, banners).
  *  quads are for entity models (chests, heads, banners): { pts: four [x,y,z] in block pixels, uv: four [u,v] in 0..16, texture, tint? }.
  *  Returns { w, h, data } RGBA at size x size, or null if nothing was drawn. */
@@ -64,7 +64,8 @@ export function renderModel({ elements, quads: extra, texture, gui, tint, frontL
       let uvc = [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]]
       const steps = ((f.rotation || 0) / 90) & 3
       for (let i = 0; i < steps; i++) uvc = [uvc[3], uvc[0], uvc[1], uvc[2]]   // a rotated face turns its texture clockwise
-      quads.push({ pts: corners(dir, el.from, el.to).map(p => elementRot(p, el.rotation)), uv: uvc, texture: f.texture, normal: n, shade: el.shade !== false,
+      const place = el.place || { pt: p => p, dir: v => v }   // the item's own transformation of this part (composite items like beds)
+      quads.push({ pts: corners(dir, el.from, el.to).map(p => place.pt(elementRot(p, el.rotation))), uv: uvc, texture: f.texture, normal: place.dir(n), shade: el.shade !== false,
         tint: f.tintindex !== undefined && f.tintindex >= 0 ? tint(f.texture, f.tintindex) : null })
     }
   }
