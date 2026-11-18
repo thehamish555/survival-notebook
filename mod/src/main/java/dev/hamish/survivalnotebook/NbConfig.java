@@ -13,7 +13,8 @@ final class NbConfig {
 	String apiUrl = "", token = "", notebookId = "", notebookTitle = "";
 	String trackedPlace = "", webUrl = "", mmDir = "", mmApp = "";
 	java.util.List<String> mmSeen = new java.util.ArrayList<>();
-	boolean autoSyncGear = true, autoSaveDeaths = true, autoTrackDeath = true, autoRecover = true, compass = true, hudGoals = true, shareStats = true, hud = true, hudMineOnly = true, lightTheme = false, sounds = true, worldNotebooks = true, shareInventory = true, shareMap = true, sharePosition = true, waypoints = true;
+	boolean autoSyncGear = true, autoSaveDeaths = true, autoTrackDeath = true, autoRecover = true, compass = true, hudGoals = true, shareStats = true, hud = true, hudMineOnly = true, lightTheme = false, sounds = true, worldNotebooks = true, shareInventory = true, shareMap = true, sharePosition = true, waypoints = true, weeklyRecap = true, xaeroPlaces = true;
+	String recapSeen = "";   // the Sunday the weekly recap was last shown in chat
 	java.util.Map<String, String> worlds = new java.util.HashMap<>();
 
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();

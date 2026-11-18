@@ -75,7 +75,9 @@ public class SurvivalNotebookClient implements ClientModInitializer {
 			if (ticks == 300 || (ticks > 300 && ticks % 6000 == 300)) shareStats();
 			if (ticks > 300 && ticks % 6000 == 200) PlayerStats.requestFromServer(mc);
 		}
-		if (ticks % 60 == 0) Notebook.minimapTick();   // ~every 3s: mirrors the minimap's waypoints if you turned syncing on
+		if (ticks % 60 == 0) Notebook.minimapTick();
+		if (ticks % 60 == 30) Xaero.tick();          // ~every 3s: your places on Xaero's minimap, when they changed
+		if (ticks % 200 == 100) Recap.tick();        // Sunday evening: the week in chat, once   // ~every 3s: mirrors the minimap's waypoints if you turned syncing on
 		if (ticks % 1200 == 0) Notebook.refresh();   // keep to-dos and places fresh (~every minute)
 		if (ticks % 600 == 0 && cfg.autoSyncGear && Notebook.canEdit()) {   // ~every 30s, only writes when your gear actually changed
 			JsonArray gear = GearScanner.scan();

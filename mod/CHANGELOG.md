@@ -1,3 +1,10 @@
+## 1.7.0 – Feature
+- Weekly recap: what your team did this week shows on the Home tab, and on Sunday from 7pm a chat message sums up the week. Turn it off in Settings > Overlays.
+- Waypoints in the world show the name and the distance on separate rows.
+- With Xaero's Minimap: choose whose waypoints show in the world in Settings > Overlays (Ours, Xaero's or Off). The minimap itself keeps showing everything.
+- Your notebook's places show on Xaero's minimap and world map, with their initials and a colour close to their category's. They aren't saved into your Xaero's waypoints, and places that came from Xaero's aren't added twice. Turn it off with Places on Xaero's map.
+- Fix: the waypoints setting no longer mentions a beam.
+
 ## 1.6.0 – Feature
 - Waypoints in the world: your notebook's places show on screen where they are, with their icon and the distance. Look at one to see its name. They go away once you're within 16 blocks. Turn them off in Settings > Overlays.
 - Places can have their own icon: press the icon beside the name when editing a place. Places without one keep their category's icon.

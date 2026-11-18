@@ -112,6 +112,7 @@ test('API tokens: mod scope, optimistic revisions, revocation', async () => {
   assert.equal((await call('GET', `/notebooks/${nb}`, undefined, a.token)).json.sections[`stats:${a.id}`].data[0].deaths, 3)
   assert.equal((await call('PUT', `/notebooks/${nb}/s/stats:00000000-0000-0000-0000-000000000000`, { data: [] }, t)).status, 403)         // never someone else's
   assert.equal((await call('GET', `/notebooks/${nb}/activity`, undefined, t)).status, 200)
+  assert.equal((await call('GET', `/notebooks/${nb}/recap`, undefined, t)).status, 200)              // the weekly recap on the mod's Home tab
   assert.equal((await call('POST', `/notebooks/${nb}/members`, { email: 'nobody@x.com' }, t)).status, 404)   // allowed route, unknown account
   assert.equal((await call('PUT', `/notebooks/${nb}/s/gear:${a.id}`, { data: [{ id: 'g' }], baseRev: 0 }, t)).status, 200)
   assert.equal((await call('PUT', `/notebooks/${nb}/s/coords`, { data: [{ id: 'p' }], baseRev: 1 }, t)).json.rev, 2)
