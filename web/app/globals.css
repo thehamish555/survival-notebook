@@ -495,3 +495,4 @@ td.grip{width:26px;letter-spacing:0;font-size:0;line-height:0}td.grip svg{opacit
 .hl{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}.hl:last-child{border-bottom:0}
 .rface{display:inline-flex;align-items:center;justify-content:center;border-radius:4px;image-rendering:pixelated;font-size:12px;font-weight:700;color:#111;flex:none}
 .weekcard .daybars{max-width:420px}
+input[type=range]{padding:0;border:0;background:none;box-shadow:none;margin:0}input[type=range]:focus{box-shadow:none}   /* a slider, not a text box: its track runs the full width */

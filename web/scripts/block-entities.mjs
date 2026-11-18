@@ -146,6 +146,23 @@ export function addBlockEntities({ hasBlock, tex, models, blocks, roots }) {
     const body = add(bake([part([cube(0, 0, -3, -6, -3, 6, 7, 6)], { at: [8, 12, 8], kids: [part([cube(0, 13, 4, 4, 4, 8, 2, 8)], { at: [-8, -12, -8] })] })], I, bigTex('entity/bell/bell_body')))
     blocks.bell = { mp: [...blocks.bell.v.map(([k, r]) => [k ? Object.fromEntries(k.split(',').map(kv => kv.split('='))) : null, r]), [null, body]] }
   }
+  // Books (BookModel): open on a lectern that has one (LecternRenderer), closed and floating over an enchanting table (EnchantTableRenderer, at rest)
+  const bookParts = (open, flip1, flip2) => {
+    const parts = rootParts(roots, 'BOOK'); if (!parts) return null
+    const set = (n, yRot, x) => { const p = find(parts, n); if (p) { p.rot = [p.rot[0], yRot, p.rot[2]]; if (x !== undefined) p.at = [x, p.at[1], p.at[2]] } }
+    const sx = Math.sin(open)
+    set('left_lid', Math.PI + open); set('right_lid', -open); set('left_pages', open, sx); set('right_pages', -open, sx)
+    set('flip_page1', open - open * 2 * flip1, sx); set('flip_page2', open - open * 2 * flip2, sx)
+    return parts
+  }
+  const bookT = bigTex('entity/enchantment/enchanting_table_book')
+  const toMp = name => (blocks[name]?.v ? blocks[name].v.map(([k, r]) => [k ? Object.fromEntries(k.split(',').map(kv => kv.split('='))) : null, r]) : blocks[name]?.mp)
+  const open = bookParts(1.5, 0.1, 0.9), shut = bookParts(0, 0, 0)
+  if (open && blocks.lectern) {
+    const CW = { north: 'east', east: 'south', south: 'west', west: 'north' }
+    blocks.lectern = { mp: [...toMp('lectern'), ...HORIZ.map(f => [{ facing: f, has_book: 'true' }, add(bake(open, chain(T(0.5, 1.0625, 0.5), RY(deg(-YROT[CW[f]])), RZ(deg(67.5)), T(0, -0.125, 0)), bookT))])] }
+  }
+  if (shut && blocks.enchanting_table) blocks.enchanting_table = { mp: [...toMp('enchanting_table'), [null, add(bake(shut, chain(T(0.5, 0.85, 0.5), RZ(deg(80))), bookT))]] }
   return big
 }
 
@@ -160,6 +177,19 @@ function rootParts(roots, name) {
   const p = r.root.pose
   return [{ ...part(r.root.cubes, { at: [p.x, p.y, p.z], rot: [p.xRot, p.yRot, p.zRot], scale: [p.xScale, p.yScale, p.zScale], kids: partsOf(r.root) }), name: 'root' }]
 }
+/** ModelPart.translateAndRotate for one part, in block units. */
+const poseOf = p => chain(T(p.at[0] / 16, p.at[1] / 16, p.at[2] / 16), RZ(p.rot[2]), RY(p.rot[1]), RX(p.rot[0]), S(...(p.scale || [1, 1, 1])))
+const round = m => m.map(v => +v.toFixed(5))
+/** Where a held item goes for each hand (ItemInHandLayer): the model root, then the arm (ArmedModel.translateToHand), then turned to point forward.
+ *  Block units, through matrix m. Only for models with both arms. */
+function handsOf(parts, m) {
+  const right = pathTo(parts, 'right_arm'), left = pathTo(parts, 'left_arm')
+  if (!right || !left) return {}
+  const hand = (path, side) => round(chain(m, ...path.map(poseOf), RX(deg(-90)), RY(Math.PI), T(side / 16, 2 / 16, -10 / 16)))
+  return { hands: [hand(right, 1), hand(left, -1)] }
+}
+/** The parts from the top down to the one named, or null. */
+const pathTo = (parts, name) => { for (const p of parts) { if (p.name === name) return [p]; const k = pathTo(p.kids, name); if (k) return [p, ...k] } return null }
 const find = (parts, name) => { for (const p of parts) { if (p.name === name) return p; const k = find(p.kids, name); if (k) return k } return null }
 // Model layers (LayerDefinitions names, lower case) drawn as mobs
 const MOB_LAYERS = `allay armadillo armadillo_baby axolotl axolotl_baby bat bee bee_baby blaze bogged bogged_outer_layer breeze camel camel_baby cat cat_baby cave_spider
@@ -226,11 +256,31 @@ export function addEntities({ layer, bigTex, box, roots }) {
   for (const L of MOB_LAYERS) {
     const r = roots.get(L.toUpperCase()), parts = rootParts(roots, L.toUpperCase()); if (!parts) { console.warn('No model layer', L); continue }
     const m = L === 'wither' ? living(2) : living(), body = keep(parts, [...(HIDE[L] || []), ...CHESTS]), chests = only(parts, CHESTS)
-    out['m:' + L] = { q: bake(body, m, -1), s: [r.w, r.h] }
+    out['m:' + L] = { q: bake(body, m, -1), s: [r.w, r.h], ...handsOf(parts, m) }
     if (bake(chests, m, -1).length) out[`m:${L}:chests`] = { q: bake(chests, m, -1), s: [r.w, r.h] }
+  }
+  // Mooshrooms' mushrooms (MushroomCowMushroomLayer): two on the back, one on the head, as red or brown mushroom blocks
+  {
+    const parts = rootParts(roots, 'MOOSHROOM'), head = parts && pathTo(parts, 'head')
+    if (head) {
+      const back = chain(living(), T(0.2, -0.35, 0.5)), cross = chain(RY(deg(-48)), S(-1, -1, 1), T(-0.5, -0.5, -0.5))
+      const spots = [chain(back, cross), chain(back, RY(deg(42)), T(0.1, 0, -0.6), cross), chain(living(), ...head.map(poseOf), T(0, -0.7, -0.2), RY(deg(-78)), S(-1, -1, 1), T(-0.5, -0.5, -0.5))]
+      for (const c of ['red', 'brown']) out[`mooshroom_mushrooms_${c}`] = { q: spots.flatMap(m => boxQuads(box(`block/${c}_mushroom`), m)) }
+    }
   }
   const knot = rootParts(roots, 'LEASH_KNOT'); if (knot) out['m:leash_knot'] = { q: bake(knot, S(-1, -1, 1), -1), s: [roots.get('LEASH_KNOT').w, roots.get('LEASH_KNOT').h] }
   const crystal = rootParts(roots, 'END_CRYSTAL'); if (crystal) out['m:end_crystal'] = { q: bake(crystal, chain(S(2), T(0, -0.5, 0)), -1), s: [roots.get('END_CRYSTAL').w, roots.get('END_CRYSTAL').h] }
+
+  // Armour (HumanoidArmorLayer): the humanoid model grown a little, keeping each slot's parts. Leggings are the inner, smaller layer.
+  {
+    const MESH = '(Lnet/minecraft/client/model/geom/builders/CubeDeformation;F)Lnet/minecraft/client/model/geom/builders/MeshDefinition;'
+    const humanoid = grow => partsOf(layer('net/minecraft/client/model/HumanoidModel', 'createMesh', MESH, [{ k: 'CubeDeformation', x: grow, y: grow, z: grow }, 0]).root)
+    const SLOTS = { head: [['head'], 1, true], chest: [['body', 'left_arm', 'right_arm'], 1, false], legs: [['body', 'left_leg', 'right_leg'], 0.5, false], feet: [['left_leg', 'right_leg'], 1, false] }
+    for (const [slot, [names, grow, kids]] of Object.entries(SLOTS)) {
+      const parts = humanoid(grow).filter(p => names.includes(p.name)).map(p => (kids ? p : { ...p, kids: [] }))
+      out['armor:' + slot] = { q: bake(parts, living(), -1), s: [64, 32] }
+    }
+  }
 
   // Armor stand in its default pose; arms and base plate kept apart since stands can hide them
   {
@@ -238,7 +288,7 @@ export function addEntities({ layer, bigTex, box, roots }) {
     const pose = (n, x, y, z) => { const p = find(parts, n); if (p) p.rot = [deg(x), deg(y), deg(z)] }
     pose('left_arm', -10, 0, -10); pose('right_arm', -15, 0, 10); pose('left_leg', -1, 0, -1); pose('right_leg', 1, 0, 1)
     const arms = new Set(['left_arm', 'right_arm']), m = living()
-    out.armor_stand = { q: bake(parts.filter(p => !arms.has(p.name) && p.name !== 'base_plate'), m, t) }
+    out.armor_stand = { q: bake(parts.filter(p => !arms.has(p.name) && p.name !== 'base_plate'), m, t), ...handsOf(parts, m) }
     out.armor_stand_arms = { q: bake(parts.filter(p => arms.has(p.name)), m, t) }
     out.armor_stand_plate = { q: bake(parts.filter(p => p.name === 'base_plate'), m, t) }
   }

@@ -99,3 +99,16 @@ test('schematic: mobs get their variant\'s texture, and a spawner shows its mob'
   assert.ok(Math.max(...m.custom['tex:zombie/zombie'].pos.filter((_, i) => i % 3 === 0)) < 1)   // the zombie is inside its spawner block
   assert.deepEqual(m.missing, {})
 })
+
+test('schematic: signs get their text, and armour and held items are drawn on mobs that have them', () => {
+  const front = [-2, 0, 4, 0, 16, 2, 0, 4, 16, 16, 2, 4, 4, 16, 0, -2, 4, 4, 0, 0], I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+  const d: BlockData = { ...data, blocks: { ...data.blocks, oak_sign: { v: [['', { m: 0 }]] } }, held: { t: [[0, 0, 0, 0, 0, 0, 1, 1, 1]], i: { iron_sword: [0, 0, 0, 0] } },
+    entities: { 'm:zombie': { q: [[-1, 0, ...front]], s: [64, 64], hands: [I, I] }, 'armor:head': { q: [[-1, 0, ...front]], s: [64, 32] } } }
+  const tiles = new Map([[0, { sign: { front: { lines: ['Hi', '', '', ''], colour: 'red', glow: true } } }]])
+  const m = buildMesh({ X: 1, Y: 1, Z: 1, palette: [{ name: 'air', props: {} }, { name: 'oak_sign', props: { rotation: '4' } }], data: new Uint16Array([1]), name: '', count: 1, tiles,
+    entities: [{ id: 'zombie', x: 0.5, y: 0, z: 0.5, yaw: 0, hands: ['iron_sword'], armor: { head: { id: 'iron_helmet' }, feet: { id: 'elytra' } } }] }, d)
+  assert.ok(Object.keys(m.custom).includes('sign:94:10:red:1:Hi|||'))
+  assert.ok(Object.keys(m.custom).includes('tex:equipment/humanoid/iron'))   // an elytra isn't armour, so only the helmet
+  assert.ok(Object.keys(m.custom).includes('item:iron_sword'))
+  assert.deepEqual(m.missing, {})
+})

@@ -11,7 +11,9 @@ export type BlockData = {
   models: ({ b: Box[] } | { p: number } | { q: number[][] })[]   // q: baked block entity quads, [texture, tint, then x y z u v for each corner]
   blocks: Record<string, { v?: [string, ModelRef][]; mp?: [any, ModelRef][]; t?: number[]; fluid?: number }>
   /** Mobs, boats, minecarts and frames, facing yaw 0 with the entity at the origin. Keys starting "m:" have no texture of their own: the viewer picks one. Loaded separately (entities.json). */
-  entities?: Record<string, { q: number[][]; pic?: string; s?: number[] }>   // s: the texture size the uv is in, for mobs (their pictures are scaled to fit)
+  entities?: Record<string, { q: number[][]; pic?: string; s?: number[]; hands?: number[][] }>   // s: the texture size the uv is in, for mobs (their pictures are scaled to fit); hands: where held items go
+  /** How items are held and dropped: t is a list of display settings (rotation, translation, scale), i maps an item to [right hand, left hand, ground, is a block] */
+  held?: { t: number[][]; i: Record<string, number[]> }
   paintings?: Record<string, number[]>   // how many blocks wide and high
 }
 export type MeshPart = { pos: Float32Array; uv: Float32Array; col: Float32Array; idx: Uint32Array }
@@ -67,6 +69,13 @@ const T = (x: number, y: number, z: number): M4 => [1, 0, 0, x, 0, 1, 0, y, 0, 0
 const S = (x: number, y = x, z = x): M4 => [x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, 0, 0, 0, 1]
 const RY = (a: number): M4 => { const c = Math.cos(a), s = Math.sin(a); return [c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, 0, 0, 0, 1] }
 const RX = (a: number): M4 => { const c = Math.cos(a), s = Math.sin(a); return [1, 0, 0, 0, 0, c, -s, 0, 0, s, c, 0, 0, 0, 0, 1] }
+const RZ = (a: number): M4 => { const c = Math.cos(a), s = Math.sin(a); return [c, -s, 0, 0, s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }
+/** An item model's display setting (ItemTransform.apply): moved, turned X then Y then Z, scaled; mirrored for the left hand. */
+const display = (d: number[] | undefined, left = false): M4 => {
+  if (!d) return S(1)
+  const [rx, ry, rz, tx, ty, tz, sx, sy, sz] = d, k = left ? -1 : 1
+  return chain(T(k * tx / 16, ty / 16, tz / 16), RX(rad(rx)), RY(rad(k * ry)), RZ(rad(k * rz)), S(sx, sy, sz))
+}
 const apply = (m: M4, [x, y, z]: number[]) => [m[0] * x + m[1] * y + m[2] * z + m[3], m[4] * x + m[5] * y + m[6] * z + m[7], m[8] * x + m[9] * y + m[10] * z + m[11]]
 
 /** Which models a block state uses: the variant whose conditions all match, or every multipart piece whose condition matches. */
@@ -258,6 +267,27 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
     }
   }
 
+  /** An item through matrix m (which places its model's 0..1 box): blocks as their 3D block, anything else as its flat picture. */
+  const drawItem = (id: string, m: M4) => {
+    const info = data.held?.i[id], at = chain(m, T(-0.5, -0.5, -0.5))
+    if (info?.[3] && data.blocks[id] && carried({ name: id, props: {} }, at)) return
+    flat(`item:${id}`, chain(at, T(0.5, 0.5, 0.5)), 64, 64)
+  }
+  const shown = (i: number | undefined) => (i === undefined ? undefined : data.held?.t[i])
+  /** What a mob holds (ItemInHandLayer) and wears (HumanoidArmorLayer), through its model matrix m. */
+  const gear = (e: Entity, look: NonNullable<ReturnType<typeof entityLook>>, m: M4) => {
+    if (e.baby) return
+    const hands = data.entities?.[look.handsFrom || look.pieces[0]?.key || '']?.hands
+    if (hands && e.hands) e.hands.forEach((id, k) => { if (id && hands[k]) drawItem(id, chain(m, hands[k], display(shown(data.held?.i[id]?.[k]), k === 1))) })
+    if (e.armor && ARMOURED.has(e.id)) {
+      for (const [slot, w] of Object.entries(e.armor)) {
+        const mat = armourOf(w!.id); if (!mat) continue
+        const dir = slot === 'legs' ? 'humanoid_leggings' : 'humanoid', leather = mat === 'leather'
+        drawPieces([{ key: 'armor:' + slot, pic: `tex:equipment/${dir}/${mat}`, tint: leather ? rgb(w!.dye ?? 0xA06540) : undefined }, ...(leather ? [{ key: 'armor:' + slot, pic: `tex:equipment/${dir}/leather_overlay` }] : [])], m, e.id)
+      }
+    }
+  }
+
   for (const e of s.entities || []) {
     if (Math.floor(e.y) >= Y || e.y < -1) continue   // above the layer cut
     const id = e.id, turnTo = RY(rad(-e.yaw))
@@ -269,11 +299,12 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
       if (e.item) { const md = data.entities?.[`frame_item:${f}`]; if (md) drawModel(md.q.map(r => { const pts = spin([0, 1, 2, 3].map(i => r.slice(2 + i * 5, 5 + i * 5)), F, -(e.turn || 0) * Math.PI / 4); return [r[0], r[1], ...[0, 1, 2, 3].flatMap(i => [...pts[i], ...r.slice(5 + i * 5, 7 + i * 5)])] }), T(bx, by, bz), custom[`item:${e.item}`] ||= newPart()) }
       continue
     }
-    if (id === 'item' || id === 'item_display') {   // a dropped item or an item display: the item's icon, flat
+    if (id === 'item') {   // a dropped item (ItemEntityRenderer): floating a little, as it looks on the ground
       if (!e.item) continue
-      const m = id === 'item' ? chain(T(e.x, e.y + 0.35, e.z), turnTo, S(0.5)) : chain(T(e.x, e.y, e.z), turnTo, RX(rad(e.pitch || 0)), e.transform || S(1))
-      flat(`item:${e.item}`, m, 64, 64); continue
+      const d = shown(data.held?.i[e.item]?.[2])
+      drawItem(e.item, chain(T(e.x, e.y + 0.1 + 0.25 * (d?.[7] ?? 0.5), e.z), turnTo, display(d))); continue
     }
+    if (id === 'item_display') { if (e.item) drawItem(e.item, chain(T(e.x, e.y, e.z), turnTo, RX(rad(e.pitch || 0)), e.transform || S(1))); continue }
     if (id === 'experience_orb') { flat('tex:experience/experience_orb', chain(T(e.x, e.y + 0.25, e.z), turnTo, S(0.3)), 1, 1, [128, 255, 32], [0, 0, 0.25, 0.25]); continue }
     if (id === 'painting') {
       const size = data.paintings?.[String(e.variant || 'kebab')], F = FACING[e.facing ?? 3]
@@ -289,12 +320,31 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
     }
     const look = entityLook(e)
     if (!look) { miss(id); continue }
-    drawPieces(look.pieces, chain(T(e.x, e.y, e.z), turnTo, S(look.scale ?? 1), look.shift ? T(look.shift[0], look.shift[1], look.shift[2]) : S(1)), id)
+    const m = chain(T(e.x, e.y, e.z), turnTo, S(look.scale ?? 1), look.shift ? T(look.shift[0], look.shift[1], look.shift[2]) : S(1))
+    drawPieces(look.pieces, m, id)
+    gear(e, look, m)
+  }
+  // Sign text (StandingSignRenderer, HangingSignRenderer): the game's letters on a picture of their own, on each written side
+  for (const [i, t] of s.tiles || []) {
+    if (!t.sign) continue
+    const x = i % X, z = Math.floor(i / X) % Z, y = Math.floor(i / (X * Z)); if (y >= Y) continue
+    const b = states[at(x, y, z)]?.b; if (!b || !/_sign$/.test(b.name)) continue
+    const hanging = /hanging_sign$/.test(b.name), wall = /_wall_/.test(b.name)
+    const angle = wall ? (YROT[b.props.facing] ?? 0) : (Number(b.props.rotation) || 0) * 22.5
+    const [W, lh, k] = hanging ? [60, 9, 0.0140625] : [90, 10, 1 / 96]
+    for (const [side, text] of [['front', t.sign.front], ['back', t.sign.back]] as const) {
+      if (!text) continue
+      const m = chain(T(x, y, z), hanging ? T(0.5, 0.9375, 0.5) : T(0.5, 0.5, 0.5), RY(rad(-angle)), hanging ? T(0, -0.3125, 0) : wall ? T(0, -0.3125, -0.4375) : S(1),
+        side === 'back' ? RY(Math.PI) : S(1), hanging ? T(0, -0.32, 0.073) : T(0, 0.33333334, 0.046666667), S(k, -k, k), S(W + 4, 4 * lh, 1))
+      const key = `sign:${W + 4}:${lh}:${text.colour}:${text.glow ? 1 : 0}:${text.lines.map(encodeURIComponent).join('|')}`
+      flat(key, chain(m, S(1, -1, 1)), (W + 4) * 4, 4 * lh * 4)
+    }
   }
   // The mob turning slowly in a spawner (SpawnerRenderer), small enough to fit inside
   for (const [i, t] of s.tiles || []) {
     if (!t.spawn) continue
     const x = i % X, z = Math.floor(i / X) % Z, y = Math.floor(i / (X * Z)); if (y >= Y) continue
+    if (states[at(x, y, z)]?.b.props.trial_spawner_state === 'inactive') continue   // a trial spawner that's switched off shows no mob
     const look = entityLook({ id: t.spawn, x: 0, y: 0, z: 0, yaw: 0 }); if (!look) continue
     const [w, h] = SIZE[t.spawn] || [0.6, 1.8], k = 0.53125 / Math.max(1, w, h)
     drawPieces(look.pieces, chain(T(x + 0.5, y + 0.4, z + 0.5), T(0, -0.2, 0), RX(rad(-30)), S(k * (look.scale ?? 1)), look.shift ? T(look.shift[0], look.shift[1], look.shift[2]) : S(1)), t.spawn)
@@ -360,10 +410,20 @@ const OUTER: Record<string, [string, string, string?, string?]> = {
   drowned: ['drowned_outer_layer', 'zombie/drowned_outer_layer', 'drowned_baby_outer_layer', 'zombie/drowned_outer_layer_baby'],
 }
 const named = (v: Entity['variant'], list: string[], fallback = list[0]) => (typeof v === 'number' ? list[v] ?? fallback : typeof v === 'string' && /^[a-z0-9_]+$/.test(v) ? v : fallback)
+const YROT: Record<string, number> = { south: 0, west: 90, north: 180, east: 270 }   // Direction.toYRot()
+// Mobs drawn with armour on (the humanoid ones)
+const ARMOURED = new Set(['zombie', 'husk', 'drowned', 'zombie_villager', 'skeleton', 'stray', 'bogged', 'wither_skeleton', 'parched', 'piglin', 'piglin_brute', 'zombified_piglin', 'armor_stand', 'giant'])
+/** The armour material an item is made of (equipment/humanoid/<material>.png), or null for things that aren't armour. */
+const armourOf = (id: string) => {
+  if (id === 'turtle_helmet') return 'turtle_scute'
+  const m = id.match(/^(leather|chainmail|iron|golden|diamond|netherite|copper)_(helmet|chestplate|leggings|boots)$/)
+  return m ? (m[1] === 'golden' ? 'gold' : m[1]) : null
+}
+const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255]
 const MINECARTS = new Set(['minecart', 'chest_minecart', 'hopper_minecart', 'furnace_minecart', 'tnt_minecart'])
 
 /** How an entity looks: its model pieces (with their pictures and tints) and any size or offset its renderer adds, or null for one the viewer can't draw. */
-function entityLook(e: Entity): { pieces: Piece[]; scale?: number; shift?: number[] } | null {
+function entityLook(e: Entity): { pieces: Piece[]; scale?: number; shift?: number[]; handsFrom?: string } | null {
   const id = e.id, b = e.baby ? '_baby' : ''
   const plainOf = (row: [string, string, string?, string?]) => (e.baby && row[2] ? tex(row[2], row[3]!) : tex(row[0], row[1]))
   if (PLAIN[id]) {
@@ -377,7 +437,7 @@ function entityLook(e: Entity): { pieces: Piece[]; scale?: number; shift?: numbe
     case 'cow': { const v = named(e.variant, ['temperate']), l = v === 'cold' ? 'cold_cow' : v === 'warm' ? 'warm_cow' : 'cow'; return { pieces: [tex(l + b, `cow/cow_${v}${b}`)] } }
     case 'pig': { const v = named(e.variant, ['temperate']); return { pieces: [tex(e.baby ? 'pig_baby' : v === 'cold' ? 'cold_pig' : 'pig', `pig/pig_${v}${b}`)] } }
     case 'chicken': { const v = named(e.variant, ['temperate']); return { pieces: [tex(e.baby ? 'chicken_baby' : v === 'cold' ? 'cold_chicken' : 'chicken', `chicken/chicken_${v}${b}`)] } }
-    case 'mooshroom': return { pieces: [tex('mooshroom' + b, `cow/mooshroom_${e.wood === 'brown' ? 'brown' : 'red'}${b}`)] }
+    case 'mooshroom': { const c = e.wood === 'brown' ? 'brown' : 'red'; return { pieces: [tex('mooshroom' + b, `cow/mooshroom_${c}${b}`), ...(e.baby ? [] : [{ key: `mooshroom_mushrooms_${c}` }])] } }
     case 'sheep': return { pieces: [tex('sheep' + b, `sheep/sheep${b}`), ...(e.sheared ? [] : [tex(e.baby ? 'sheep_baby_wool' : 'sheep_wool', `sheep/sheep_wool${b}`, { tint: DYE[e.colour ?? 0] || DYE[0] })])] }
     case 'cat': return { pieces: [tex('cat' + b, `cat/cat_${named(e.variant, ['tabby'])}${b}`)] }
     case 'wolf': { const v = named(e.variant, ['pale']); return { pieces: [tex('wolf' + b, `wolf/${v === 'pale' ? 'wolf' : 'wolf_' + v}${e.tame ? '_tame' : ''}${b}`)] } }
@@ -413,7 +473,7 @@ function entityLook(e: Entity): { pieces: Piece[]; scale?: number; shift?: numbe
     case 'iron_golem': return { pieces: [{ key: id }] }
     case 'snow_golem': return { pieces: [{ key: e.pumpkin === false ? 'snow_golem_sheared' : 'snow_golem' }] }
     case 'shulker': return { pieces: [{ key: e.colour !== undefined && COLOURS[e.colour] ? `shulker_${COLOURS[e.colour]}` : 'shulker' }] }
-    case 'armor_stand': return { pieces: e.hidden ? [] : [{ key: id }, ...(e.arms ? [{ key: 'armor_stand_arms' }] : []), ...(e.plate !== false ? [{ key: 'armor_stand_plate' }] : [])], scale: e.small ? 0.5 : 1 }
+    case 'armor_stand': return { pieces: e.hidden ? [] : [{ key: id }, ...(e.arms ? [{ key: 'armor_stand_arms' }] : []), ...(e.plate !== false ? [{ key: 'armor_stand_plate' }] : [])], scale: e.small ? 0.5 : 1, handsFrom: id }
   }
   if (MINECARTS.has(id)) return { pieces: [{ key: id }] }
   if (/^(spawner|command_block)_minecart$/.test(id)) return { pieces: [{ key: 'minecart' }] }

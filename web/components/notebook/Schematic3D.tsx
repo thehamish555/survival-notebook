@@ -21,13 +21,13 @@ function loadBlocks() {
   blockData.catch(() => { blockData = null })
   return blockData
 }
-let entityData: Promise<BlockData['entities']> | null = null
+let entityData: Promise<{ entities: BlockData['entities']; held: BlockData['held'] }> | null = null
 /** Mob, boat and minecart shapes: only fetched for schematics that have entities (or spawners) in them. */
 async function withEntities(s: Schematic, b: { data: BlockData; sheet: THREE.Texture }) {
   if (b.data.entities || (!s.entities?.length && ![...(s.tiles?.values() || [])].some(t => t.spawn))) return b
   entityData ||= fetch('/mc/entities.json').then(r => { if (!r.ok) throw new Error('Entity models are missing'); return r.json() })
   entityData.catch(() => { entityData = null })
-  try { b.data.entities = await entityData } catch { /* the blocks still show; the mobs are listed as not shown */ }
+  try { const j = await entityData; b.data.entities = j.entities; b.data.held = j.held } catch { /* the blocks still show; the mobs are listed as not shown */ }
   return b
 }
 

@@ -4,7 +4,11 @@
 
 export type Block = { name: string; props: Record<string, string> }
 /** What a block entity adds to how it looks: a player head's skin (a texture hash, a UUID or a name), a banner's pattern layers, or the mob in a spawner. */
-export type Tile = { skin?: string; patterns?: [string, string][]; spawn?: string }
+export type Tile = { skin?: string; patterns?: [string, string][]; spawn?: string; sign?: { front?: SignText; back?: SignText } }
+/** One side of a sign: its four lines as plain text, the dye colour and whether it glows. */
+export type SignText = { lines: string[]; colour: string; glow: boolean }
+/** Something worn or held: the item, and a leather dye colour if it has one. */
+export type Worn = { id: string; dye?: number }
 /** A mob, armor stand, boat, minecart or item frame: where it is (in blocks, from the schematic's corner), which way it faces, and the few details that change its look. */
 export type Entity = {
   id: string; x: number; y: number; z: number; yaw: number; pitch?: number
@@ -14,6 +18,8 @@ export type Entity = {
   variant?: string | number; baby?: boolean; size?: number; sheared?: boolean; tame?: boolean; chest?: boolean
   /** A falling block, primed TNT or block display's block, and a display's transformation (4x4, row by row) */
   block?: Block; transform?: number[]
+  /** Held in the main and off hand, and worn (head, chest, legs, feet) */
+  hands?: (string | undefined)[]; armor?: Partial<Record<'head' | 'chest' | 'legs' | 'feet', Worn>>
 }
 export type Schematic = { X: number; Y: number; Z: number; palette: Block[]; data: Uint16Array; name: string; count: number; tiles?: Map<number, Tile>; entities?: Entity[] }
 const MAX_VOLUME = 8_000_000
@@ -124,10 +130,61 @@ function entitiesOf(e: any, ox: number, oy: number, oz: number, out: Entity[], d
       item: bare(e.Item?.id ?? e.item?.id), turn: num(e.ItemRotation),
       variant: isPainting ? bare(e.variant ?? e.Motive ?? e.motive) : bare(e.variant) ?? num(e.Variant) ?? num(e.RabbitType) ?? bare(e.MainGene) ?? bare(e.type) ?? num(e.PuffState) ?? bare(e.weather_state),
       baby: (num(e.Age) ?? 0) < 0 || !!e.IsBaby, size: num(e.Size), sheared: flag(e.Sheared), tame: !!(e.Owner ?? e.owner), chest: flag(e.ChestedHorse),
-      block: blockOf(e.BlockState ?? e.block_state), transform: transformOf(e.transformation),
+      block: blockOf(e.BlockState ?? e.block_state), transform: transformOf(e.transformation), ...gearOf(e),
     })
   }
   if (me) for (const p of Array.isArray(e?.Passengers) ? e.Passengers : []) entitiesOf(p, ox, oy, oz, out, depth + 1, me)
+}
+
+// Trial spawners name a config instead (trial_chamber/melee/zombie), until they've spawned something
+const TRIAL: Record<string, string> = { poison_skeleton: 'bogged', baby_zombie: 'zombie' }
+/** The mob a spawner or trial spawner shows: its next spawn, or for a trial spawner the mob its config spawns. */
+function spawnOf(t: any): string | undefined {
+  const direct = bare((t.SpawnData ?? t.spawn_data)?.entity?.id)
+  if (direct) return direct
+  const cfg = t.normal_config ?? t.ominous_config
+  if (typeof cfg === 'string') { const last = bare(cfg)?.split('/').pop(); return last ? TRIAL[last] || last : undefined }
+  const first = Array.isArray(cfg?.spawn_potentials) ? cfg.spawn_potentials[0] : undefined
+  return bare(first?.data?.entity?.id)
+}
+
+/** A text component as plain text: a JSON string, an object with text and extra parts, or a list of them. */
+function plainText(v: any, depth = 0): string {
+  if (depth > 8 || v == null) return ''
+  if (typeof v === 'string') {
+    const t = v.trim()
+    if (/^[[{"]/.test(t)) { try { const j = JSON.parse(t); if (typeof j !== 'string' || j !== v) return plainText(j, depth + 1) } catch { /* plain text that starts with a bracket */ } }
+    return v
+  }
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  if (Array.isArray(v)) return v.map(x => plainText(x, depth + 1)).join('')
+  if (typeof v === 'object') return (typeof v.text === 'string' ? v.text : typeof v.translate === 'string' ? v.translate : '') + (Array.isArray(v.extra) ? v.extra.map((x: any) => plainText(x, depth + 1)).join('') : '')
+  return ''
+}
+/** A sign's text, front and back: saved as front_text and back_text since 1.20, as Text1 to Text4 before. Signs with nothing written are skipped. */
+function signOf(t: any): Tile['sign'] {
+  const side = (o: any): SignText | undefined => {
+    if (!o || typeof o !== 'object') return undefined
+    const lines = (Array.isArray(o.messages) ? o.messages : []).slice(0, 4).map((m: any) => plainText(m).slice(0, 80))
+    return lines.some((l: string) => l.trim()) ? { lines, colour: bare(o.color) || 'black', glow: !!o.has_glowing_text } : undefined
+  }
+  const old = typeof t.Text1 === 'string' ? side({ messages: [t.Text1, t.Text2, t.Text3, t.Text4], color: t.Color, has_glowing_text: t.GlowingText }) : undefined
+  const front = side(t.front_text) || old, back = side(t.back_text)
+  return front || back ? { front, back } : undefined
+}
+/** What a mob or armor stand holds and wears: the equipment map since 1.21.5, HandItems and ArmorItems before. */
+function gearOf(e: any): Pick<Entity, 'hands' | 'armor'> {
+  const worn = (s: any): Worn | undefined => {
+    const id = bare(s?.id); if (!id || id === 'air') return undefined
+    const c = s.components?.['minecraft:dyed_color'] ?? s.components?.dyed_color ?? s.tag?.display?.color
+    const dye = typeof c === 'number' ? c : typeof c?.rgb === 'number' ? c.rgb : undefined
+    return dye === undefined ? { id } : { id, dye }
+  }
+  const eq = e.equipment && typeof e.equipment === 'object' ? e.equipment : {}, hi = Array.isArray(e.HandItems) ? e.HandItems : [], ai = Array.isArray(e.ArmorItems) ? e.ArmorItems : []
+  const hands = [worn(eq.mainhand ?? hi[0])?.id, worn(eq.offhand ?? hi[1])?.id]
+  const armor = { head: worn(eq.head ?? ai[3]), chest: worn(eq.chest ?? ai[2]), legs: worn(eq.legs ?? ai[1]), feet: worn(eq.feet ?? ai[0]) }
+  for (const k of Object.keys(armor) as (keyof typeof armor)[]) if (!armor[k]) delete armor[k]
+  return { ...(hands.some(Boolean) ? { hands } : {}), ...(Object.keys(armor).length ? { armor } : {}) }
 }
 
 function patternsOf(t: any): [string, string][] | undefined {
@@ -162,8 +219,8 @@ export async function readLitematic(file: ArrayBuffer): Promise<Schematic> {
     for (const t of Array.isArray(b.r.TileEntities) ? b.r.TileEntities : []) {   // positions are from the region's corner
       const x = Number(t?.x), y = Number(t?.y), z = Number(t?.z)
       if (![x, y, z].every(Number.isInteger) || x < 0 || y < 0 || z < 0 || x >= b.sx || y >= b.sy || z >= b.sz) continue
-      const tile: Tile = { skin: skinOf(t), patterns: patternsOf(t), spawn: bare((t.SpawnData ?? t.spawn_data)?.entity?.id) }
-      if (tile.skin || tile.patterns || tile.spawn) tiles.set(((b.y - minY + y) * Z + (b.z - minZ + z)) * X + (b.x - minX + x), tile)
+      const tile: Tile = { skin: skinOf(t), patterns: patternsOf(t), spawn: spawnOf(t), sign: signOf(t) }
+      if (tile.skin || tile.patterns || tile.spawn || tile.sign) tiles.set(((b.y - minY + y) * Z + (b.z - minZ + z)) * X + (b.x - minX + x), tile)
     }
     const pal: any[] = Array.isArray(b.r.BlockStatePalette) ? b.r.BlockStatePalette : [], words: Uint32Array = b.r.BlockStates
     if (!pal.length || !(words instanceof Uint32Array)) continue

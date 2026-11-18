@@ -132,10 +132,13 @@ await sharp(sheet, { raw: { width: W, height: rows * 16, channels: 4 } }).png({ 
 const ent = path.join(out, 'entity'); fs.rmSync(ent, { recursive: true, force: true })
 for (const e of zip.getEntries()) {
   const n = e.entryName.match(/^assets\/minecraft\/textures\/entity\/([a-z0-9_/]+)\.png$/)?.[1]
-  if (!n || /^(equipment|signs|bed|chest|shield|decorated_pot)\//.test(n) || (n.startsWith('player/') && n !== 'player/wide/steve')) continue
+  if (!n || /^(equipment\/(?!humanoid)|signs|bed|chest|shield|decorated_pot)/.test(n) || (n.startsWith('player/') && n !== 'player/wide/steve')) continue
   fs.mkdirSync(path.join(ent, path.dirname(n)), { recursive: true }); fs.writeFileSync(path.join(ent, n + '.png'), e.getData())
 }
 fs.writeFileSync(path.join(ent, 'steve.png'), zip.getEntry('assets/minecraft/textures/entity/player/wide/steve.png').getData())
+// The font for sign text: the game's own pixel letters
+fs.mkdirSync(path.join(out, 'font'), { recursive: true })
+fs.writeFileSync(path.join(out, 'font', 'ascii.png'), zip.getEntry('assets/minecraft/textures/font/ascii.png').getData())
 // Paintings: each picture, and how many blocks wide and high it is
 const paint = path.join(out, 'painting'); fs.rmSync(paint, { recursive: true, force: true }); fs.mkdirSync(paint, { recursive: true })
 for (const e of zip.getEntries()) { const n = e.entryName.match(/^assets\/minecraft\/textures\/painting\/([a-z0-9_]+)\.png$/)?.[1]; if (n) fs.writeFileSync(path.join(paint, n + '.png'), e.getData()) }
@@ -145,5 +148,18 @@ for (const e of zip.getEntries()) {
   const { width, height } = await sharp(e.getData()).metadata(); paintings[n] = [Math.round(width / 16), Math.round(height / 16)]
 }
 fs.writeFileSync(path.join(out, 'blocks.json'), JSON.stringify({ cols: COLS, rows, tex: texList, big: rects, models, blocks, paintings }))
-fs.writeFileSync(path.join(out, 'entities.json'), JSON.stringify(entities))   // only loaded for schematics with entities in them
+// How each item is held and dropped: its model's display settings (right hand, left hand, on the ground), and whether it's a block (drawn in 3D)
+const held = { t: [], i: {} }, tIdx = new Map()
+const modelOfItem = d => (!d || typeof d !== 'object' ? null : d.type?.endsWith('model') && typeof d.model === 'string' ? d.model
+  : typeof d.base === 'string' ? d.base : modelOfItem(d.fallback) || modelOfItem(d.on_false) || modelOfItem(d.cases?.[0]?.model) || modelOfItem(d.entries?.[0]?.model) || modelOfItem(d.model))
+const displayOf = ref => { const out = {}; for (let r = ref, k = 0; r && k < 20; k++) { const m = readJson(`assets/minecraft/models/${tpath(r)}.json`); if (!m) break; for (const [n, v] of Object.entries(m.display || {})) if (!(n in out)) out[n] = v; r = m.parent } return out }
+const nine = t => (t ? [...(t.rotation || [0, 0, 0]), ...(t.translation || [0, 0, 0]), ...(t.scale || [1, 1, 1])] : [0, 0, 0, 0, 0, 0, 1, 1, 1])
+const idx = arr => { const k = arr.join(); if (!tIdx.has(k)) { tIdx.set(k, held.t.length); held.t.push(arr) } return tIdx.get(k) }
+for (const e of zip.getEntries()) {
+  const id = e.entryName.match(/^assets\/minecraft\/items\/([a-z0-9_]+)\.json$/)?.[1]; if (!id) continue
+  const ref = modelOfItem(readJson(e.entryName)?.model); if (!ref) continue
+  const d = displayOf(ref)
+  held.i[id] = [idx(nine(d.thirdperson_righthand)), idx(nine(d.thirdperson_lefthand || d.thirdperson_righthand)), idx(nine(d.ground)), tpath(ref).startsWith('block/') ? 1 : 0]
+}
+fs.writeFileSync(path.join(out, 'entities.json'), JSON.stringify({ entities, held }))   // only loaded for schematics with entities in them
 console.log(`${Object.keys(blocks).length} blocks, ${models.length} models, ${texList.length} textures -> public/mc/blocks.json, blocks.png (${(fs.statSync(path.join(out, 'blocks.json')).size / 1024).toFixed(0)} KB json)`)

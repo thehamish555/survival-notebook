@@ -65,12 +65,60 @@ async function file(dir: string, path: string) {
   return copy(await image(`/mc/${dir}/${path}.png`))
 }
 
+// DyeColor's text colours, for sign text
+const TEXT: Record<string, number> = {
+  white: 0xFFFFFF, orange: 0xFF681F, magenta: 0xFF00FF, light_blue: 0x9AC0CD, yellow: 0xFFFF00, lime: 0xBFFF00, pink: 0xFF69B4, gray: 0x808080,
+  light_gray: 0xD3D3D3, cyan: 0x00FFFF, purple: 0xA020F0, blue: 0x0000FF, brown: 0x8B4513, green: 0x00FF00, red: 0xFF0000, black: 0x000000,
+}
+let font: Promise<{ img: HTMLImageElement; widths: number[] }> | null = null
+/** The game's letters (font/ascii.png, 16 x 16 cells) and how wide each one is: up to its last coloured column, plus a gap. */
+function loadFont() {
+  font ||= image('/mc/font/ascii.png').then(img => {
+    const c = canvasOf(img.width, img.height), g = c.getContext('2d')!, cell = img.width / 16
+    g.drawImage(img, 0, 0)
+    const px = g.getImageData(0, 0, img.width, img.height).data, widths: number[] = []
+    for (let ch = 0; ch < 256; ch++) {
+      let w = 0
+      for (let x = 0; x < cell; x++) for (let y = 0; y < cell; y++) if (px[(((ch >> 4) * cell + y) * img.width + (ch & 15) * cell + x) * 4 + 3] > 0) w = x + 1
+      widths.push(ch === 32 ? 3 : w)
+    }
+    return { img, widths: widths.map(w => w * 8 / cell) }
+  })
+  font.catch(() => { font = null })
+  return font
+}
+/** A sign's four lines in the game's letters: centred, line by line, at 4 canvas pixels to a letter pixel. Glowing text gets the light outline. */
+async function sign(width: number, lineHeight: number, colour: string, glow: boolean, lines: string[]) {
+  const { img, widths } = await loadFont(), S = 4, cell = img.width / 16
+  const c = canvasOf(width * S, 4 * lineHeight * S), ctx = c.getContext('2d')!
+  ctx.imageSmoothingEnabled = false
+  const base = TEXT[colour] ?? 0, scale = (v: number, f: number) => ((((v >> 16) & 255) * f) << 16) | ((((v >> 8) & 255) * f) << 8) | ((v & 255) * f)
+  const dark = colour === 'black' && glow ? 0xF0EBCC : scale(base, 0.4), main = glow ? base : dark
+  const tinted = (rgb: number) => {   // the letters in one colour
+    const t = canvasOf(img.width, img.height), g = t.getContext('2d')!
+    g.drawImage(img, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#' + rgb.toString(16).padStart(6, '0'); g.fillRect(0, 0, t.width, t.height)
+    return t
+  }
+  const write = (sheet: HTMLCanvasElement, dx: number, dy: number) => lines.forEach((line, i) => {
+    const chars = [...line], w = chars.reduce((n, ch) => n + (ch.charCodeAt(0) < 256 ? widths[ch.charCodeAt(0)] + 1 : 6), 0) - 1
+    let x = Math.round((width - w) / 2)
+    for (const ch of chars) {
+      const code = ch.charCodeAt(0)
+      if (code < 256) { ctx.drawImage(sheet, (code & 15) * cell, (code >> 4) * cell, cell, cell, (x + dx) * S, (i * lineHeight + dy) * S, 8 * S, 8 * S); x += widths[code] + 1 }
+      else { ctx.font = `${8 * S}px monospace`; ctx.fillStyle = '#' + main.toString(16).padStart(6, '0'); ctx.fillText(ch, (x + dx) * S, (i * lineHeight + dy + 7) * S); x += 6 }   // a letter the pixel font doesn't have
+    }
+  })
+  if (glow) { const o = tinted(dark); for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) write(o, dx, dy) }
+  write(tinted(main), 0, 0)
+  return c
+}
+
 const made = new Map<string, Promise<THREE.Texture>>()
 /** The texture for a mesh's custom part. Its uv is in picture pixels, so the texture scales them to fit; mob textures' uv is already 0..1. */
 export function pictureFor(key: string): Promise<THREE.Texture> {
   if (!made.has(key)) {
     const [kind, a, b, ...rest] = key.replace(/#clear$/, '').split(':')
-    const draw = kind === 'skin' ? skin(a) : kind === 'villager' || kind === 'zombie_villager' ? villager(kind, a, b || 'none') : kind === 'item' ? item(a)
+    const draw = kind === 'sign' ? sign(Number(a), Number(b), rest[0], rest[1] === '1', (rest[2] || '').split('|').map(decodeURIComponent)) : kind === 'skin' ? skin(a) : kind === 'villager' || kind === 'zombie_villager' ? villager(kind, a, b || 'none') : kind === 'item' ? item(a)
       : kind === 'tex' ? file('entity', a) : kind === 'paint' ? file('painting', a)
       : banner(a, [b, ...rest].join(':').split(',').filter(Boolean).map(p => p.split('/') as [string, string]))
     made.set(key, draw.then(c => {
