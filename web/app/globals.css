@@ -474,13 +474,14 @@ td.grip{width:26px;letter-spacing:0;font-size:0;line-height:0}td.grip svg{opacit
 .playerchip i{border:2px solid transparent;box-sizing:border-box}.playerchip.off{opacity:.75}
 .linkcode{font:600 34px/1.2 var(--font-display),monospace;letter-spacing:.12em;margin:8px 0 14px;color:var(--gold)}
 /* 3D schematic viewer */
-.card.schem{max-width:960px;display:flex;flex-direction:column;gap:10px}
-.schemview{position:relative;height:min(68vh,620px);border-radius:12px;overflow:hidden;background:radial-gradient(ellipse at 50% 30%,#2a3440,#14181d);touch-action:none}
+.card.schem{max-width:960px;display:flex;flex-direction:column;gap:10px;max-height:calc(100dvh - 32px)}   /* always fits the screen: the 3D view gives up height first */
+.card.schem p,.card.schem h2{overflow-wrap:anywhere}
+.schemview{position:relative;flex:1 1 min(68vh,620px);min-height:180px;border-radius:12px;overflow:hidden;background:radial-gradient(ellipse at 50% 30%,#2a3440,#14181d);touch-action:none}
 .schemview canvas{display:block;width:100%;height:100%;cursor:grab}.schemview canvas:active{cursor:grabbing}
 .schemmsg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;margin:0}
 .schemctl{align-items:center;gap:10px}.schemctl input[type=range]{accent-color:var(--grass)}
 .view3d{margin-top:6px;font-size:12px;padding:3px 10px}
-@media (max-width:600px){.schemview{height:56vh}}
+@media (max-width:600px){.schemview{flex-basis:56vh}.card.schem{max-height:calc(100dvh - 20px)}}
 /* notification choices on the account page */
 .notifylist{margin-top:14px;border-top:1px solid var(--line)}
 .notifyrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line)}

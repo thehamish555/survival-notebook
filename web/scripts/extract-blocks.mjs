@@ -148,7 +148,7 @@ for (const e of zip.getEntries()) {
   const { width, height } = await sharp(e.getData()).metadata(); paintings[n] = [Math.round(width / 16), Math.round(height / 16)]
 }
 fs.writeFileSync(path.join(out, 'blocks.json'), JSON.stringify({ cols: COLS, rows, tex: texList, big: rects, models, blocks, paintings }))
-// How each item is held and dropped: its model's display settings (right hand, left hand, on the ground), and whether it's a block (drawn in 3D)
+// How each item is held, dropped, framed and worn: its model's display settings (right hand, left hand, on the ground, in a frame, on a head), and whether it's a block (drawn in 3D)
 const held = { t: [], i: {} }, tIdx = new Map()
 const modelOfItem = d => (!d || typeof d !== 'object' ? null : d.type?.endsWith('model') && typeof d.model === 'string' ? d.model
   : typeof d.base === 'string' ? d.base : modelOfItem(d.fallback) || modelOfItem(d.on_false) || modelOfItem(d.cases?.[0]?.model) || modelOfItem(d.entries?.[0]?.model) || modelOfItem(d.model))
@@ -159,7 +159,7 @@ for (const e of zip.getEntries()) {
   const id = e.entryName.match(/^assets\/minecraft\/items\/([a-z0-9_]+)\.json$/)?.[1]; if (!id) continue
   const ref = modelOfItem(readJson(e.entryName)?.model); if (!ref) continue
   const d = displayOf(ref)
-  held.i[id] = [idx(nine(d.thirdperson_righthand)), idx(nine(d.thirdperson_lefthand || d.thirdperson_righthand)), idx(nine(d.ground)), tpath(ref).startsWith('block/') ? 1 : 0]
+  held.i[id] = [idx(nine(d.thirdperson_righthand)), idx(nine(d.thirdperson_lefthand || d.thirdperson_righthand)), idx(nine(d.ground)), tpath(ref).startsWith('block/') ? 1 : 0, idx(nine(d.fixed)), idx(nine(d.head))]
 }
 fs.writeFileSync(path.join(out, 'entities.json'), JSON.stringify({ entities, held }))   // only loaded for schematics with entities in them
 console.log(`${Object.keys(blocks).length} blocks, ${models.length} models, ${texList.length} textures -> public/mc/blocks.json, blocks.png (${(fs.statSync(path.join(out, 'blocks.json')).size / 1024).toFixed(0)} KB json)`)

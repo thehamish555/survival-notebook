@@ -1,6 +1,6 @@
 // Turns a schematic into triangles using the game's own block models (public/mc/blocks.json, made by scripts/extract-blocks.mjs).
 // Faces hidden against a neighbour that covers them are skipped, like the game does, so big builds stay light.
-import type { Block, Entity, Schematic, Tile } from './litematic'
+import type { Block, Entity, Schematic, Tile, Worn } from './litematic'
 
 type Face = [number, number[] | null, number, number, number]   // texture, uv, cull, tint, uv rotation
 type Box = [number[], number[], 0 | [string, number, number, number, number], Record<string, Face>]
@@ -11,11 +11,16 @@ export type BlockData = {
   models: ({ b: Box[] } | { p: number } | { q: number[][] })[]   // q: baked block entity quads, [texture, tint, then x y z u v for each corner]
   blocks: Record<string, { v?: [string, ModelRef][]; mp?: [any, ModelRef][]; t?: number[]; fluid?: number }>
   /** Mobs, boats, minecarts and frames, facing yaw 0 with the entity at the origin. Keys starting "m:" have no texture of their own: the viewer picks one. Loaded separately (entities.json). */
-  entities?: Record<string, { q: number[][]; pic?: string; s?: number[]; hands?: number[][] }>   // s: the texture size the uv is in, for mobs (their pictures are scaled to fit); hands: where held items go
+  /** q: quads already placed; rig: a model kept in parts so it can be posed. s: the texture size the uv is in, for mobs (their pictures are scaled to fit). */
+  entities?: Record<string, { q?: number[][]; rig?: Rig; pic?: string; s?: number[] }>
   /** How items are held and dropped: t is a list of display settings (rotation, translation, scale), i maps an item to [right hand, left hand, ground, is a block] */
   held?: { t: number[][]; i: Record<string, number[]> }
   paintings?: Record<string, number[]>   // how many blocks wide and high
 }
+/** A model in parts (ModelPart): each part's name, parent (-1 for none), pivot (pixels), rotation (radians, Z then Y then X), scale and quads in its own space. m places the whole model. */
+export type Rig = { m: number[]; parts: { n: string; p: number; a: number[]; r: number[]; s: number[]; q: number[][] }[] }
+/** Changes to a rig's parts: rotations set or added (radians), and parts hidden. */
+type Pose = { set?: Record<string, number[]>; add?: Record<string, number[]>; hide?: Set<string> }
 export type MeshPart = { pos: Float32Array; uv: Float32Array; col: Float32Array; idx: Uint32Array }
 /** custom: parts drawn with their own picture instead of the sheet, keyed by what the picture is ("skin:<hash>", "banner:<colour>:<patterns>", "tex:<entity texture>",
  *  "item:<id>", "paint:<painting>" and so on); a key ending "#clear" is see-through. Their uv is in that picture's pixels, except mob textures (tex, villager,
@@ -247,44 +252,80 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
     const l = light(normalOf(pts))
     quad(false, pts, [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]], 0, 0, [t[0] * l, t[1] * l, t[2] * l], 0, 0, 0, own)
   }
-  /** A block (falling sand, primed TNT, a block display) through matrix m, from its corner. */
-  const carried = (b: Block, m: M4) => {
+  /** A block (falling sand, primed TNT, a block display, a block item) through matrix m, from its corner. A banner's patterns or a head's skin come in tile. */
+  const carried = (b: Block, m: M4, tile?: Tile) => {
     const st = { b, refs: modelsFor(data, b), solid: false, glass: TRANSLUCENT.test(b.name), tint: data.blocks[b.name]?.t, fluid: undefined, wet: false, lava: false, covers: null }
+    const key = ownPicture(b.name, tile)
     for (const ref of st.refs) {
       const md = data.models[ref.m]
       if ('b' in md) for (const [from, to, rot, f] of md.b) box(st, 0, 0, 0, 0, ref, from, to, rot, f, m)
-      else if ('q' in md) drawModel(md.q.map(r => [r[0], r[1], ...[0, 1, 2, 3].flatMap(k => [...turn(ref, r.slice(2 + k * 5, 5 + k * 5)), ...r.slice(5 + k * 5, 7 + k * 5)])]), m)
+      else if ('q' in md) for (const r of md.q) {
+        const own = key && (key.all || r[1]) ? (custom[key.key] ||= newPart()) : undefined   // a banner's patterned cloth, a head's skin
+        const turned = [r[0], r[1], ...[0, 1, 2, 3].flatMap(k => [...turn(ref, r.slice(2 + k * 5, 5 + k * 5)), ...r.slice(5 + k * 5, 7 + k * 5)])]
+        drawModel([turned], m, own, !own && r[1] && st.tint ? st.tint : undefined)
+      }
     }
     return st.refs.length > 0
   }
-  /** A mob or other modelled entity: its pieces through matrix m. */
-  const drawPieces = (pieces: Piece[], m: M4, id: string) => {
-    for (const [k, p] of pieces.entries()) {
-      const md = data.entities?.[p.key]; if (!md) { if (k === 0) { miss(id); return } continue }   // a missing extra (a chest the model has no room for) is just left off
-      const pic = p.pic || md.pic, own = pic ? (custom[pic + (p.clear ? '#clear' : '')] ||= newPart()) : undefined
-      if (!own && p.key.startsWith('m:')) { miss(id); return }
-      drawModel(md.q, p.at ? chain(m, p.at) : m, own, p.tint, own ? md.s : undefined)
+  /** A rig in a pose: its quads (block pixels, model space) and where each part ended up (block units, model space, by name). */
+  const posed = (rig: Rig, pose?: Pose) => {
+    const mats: M4[] = [], byName: Record<string, M4> = {}, q: number[][] = []
+    for (const [i, pt] of rig.parts.entries()) {
+      let r = pose?.set?.[pt.n] || pt.r
+      const add = pose?.add?.[pt.n]; if (add) r = [r[0] + add[0], r[1] + add[1], r[2] + add[2]]
+      const m = chain(pt.p >= 0 ? mats[pt.p] : rig.m, T(pt.a[0] / 16, pt.a[1] / 16, pt.a[2] / 16), RZ(r[2]), RY(r[1]), RX(r[0]), S(pt.s[0], pt.s[1], pt.s[2]))   // ModelPart.translateAndRotate
+      mats.push(m); if (pt.n && !byName[pt.n]) byName[pt.n] = m
+      let hidden = false
+      for (let k: number = i; k >= 0 && !hidden; k = rig.parts[k].p) hidden = !!pose?.hide?.has(rig.parts[k].n)   // hiding a part hides what hangs off it
+      if (hidden) continue
+      for (const quadOf of pt.q) q.push([quadOf[0], quadOf[1], ...[0, 1, 2, 3].flatMap(c => [...apply(m, quadOf.slice(2 + c * 5, 5 + c * 5).map(v => v / 16)).map(v => v * 16), quadOf[5 + c * 5], quadOf[6 + c * 5]])])
     }
+    return { q, byName }
   }
+  /** A mob or other modelled entity: its pieces through matrix m, posed. Returns where the first piece's parts ended up (for what it holds and wears). */
+  const drawPieces = (pieces: Piece[], m: M4, id: string, pose?: Pose) => {
+    let parts: Record<string, M4> | undefined
+    for (const [k, p] of pieces.entries()) {
+      const md = data.entities?.[p.key]; if (!md) { if (k === 0) { miss(id); return parts } continue }   // a missing extra (a chest the model has no room for) is just left off
+      const pic = p.pic || md.pic, own = pic ? (custom[pic + (p.clear ? '#clear' : '')] ||= newPart()) : undefined
+      if (!own && p.key.startsWith('m:')) { miss(id); return parts }
+      let q = md.q || []
+      if (md.rig) { const r = posed(md.rig, pose); q = r.q; if (k === 0) parts = r.byName }
+      drawModel(q, p.at ? chain(m, p.at) : m, own, p.tint, own ? md.s : undefined)
+    }
+    return parts
+  }
+  /** Where a body's parts are, without drawing it (an invisible armor stand still holds and wears things). */
+  const partsOf = (key: string, pose?: Pose) => { const md = data.entities?.[key]; return md?.rig ? posed(md.rig, pose).byName : undefined }
 
-  /** An item through matrix m (which places its model's 0..1 box): blocks as their 3D block, anything else as its flat picture. */
-  const drawItem = (id: string, m: M4) => {
-    const info = data.held?.i[id], at = chain(m, T(-0.5, -0.5, -0.5))
-    if (info?.[3] && data.blocks[id] && carried({ name: id, props: {} }, at)) return
+  /** An item through matrix m (which places its model's 0..1 box): blocks (and banners, heads and chests, drawn like their block) in 3D, anything else as its flat picture. */
+  const drawItem = (id: string, m: M4, worn?: Worn) => {
+    const info = data.held?.i[id], at = chain(m, T(-0.5, -0.5, -0.5)), first = data.blocks[id] && modelsFor(data, { name: id, props: {} })[0]
+    const blockLike = !!info?.[3] || (!!first && 'q' in data.models[first.m])
+    if (blockLike && data.blocks[id] && carried({ name: id, props: /_banner$|_(skull|head)$/.test(id) ? { rotation: '0' } : {} }, at, worn?.patterns ? { patterns: worn.patterns } : undefined)) return
     flat(`item:${id}`, chain(at, T(0.5, 0.5, 0.5)), 64, 64)
   }
   const shown = (i: number | undefined) => (i === undefined ? undefined : data.held?.t[i])
-  /** What a mob holds (ItemInHandLayer) and wears (HumanoidArmorLayer), through its model matrix m. */
-  const gear = (e: Entity, look: NonNullable<ReturnType<typeof entityLook>>, m: M4) => {
-    if (e.baby) return
-    const hands = data.entities?.[look.handsFrom || look.pieces[0]?.key || '']?.hands
-    if (hands && e.hands) e.hands.forEach((id, k) => { if (id && hands[k]) drawItem(id, chain(m, hands[k], display(shown(data.held?.i[id]?.[k]), k === 1))) })
-    if (e.armor && ARMOURED.has(e.id)) {
-      for (const [slot, w] of Object.entries(e.armor)) {
-        const mat = armourOf(w!.id); if (!mat) continue
-        const dir = slot === 'legs' ? 'humanoid_leggings' : 'humanoid', leather = mat === 'leather'
-        drawPieces([{ key: 'armor:' + slot, pic: `tex:equipment/${dir}/${mat}`, tint: leather ? rgb(w!.dye ?? 0xA06540) : undefined }, ...(leather ? [{ key: 'armor:' + slot, pic: `tex:equipment/${dir}/leather_overlay` }] : [])], m, e.id)
+  /**
+   * What a mob holds (ItemInHandLayer), wears (HumanoidArmorLayer) and has on its head (CustomHeadLayer: a banner, a pumpkin, a mob head),
+   * through its model matrix m, following its pose. parts: where its body's parts are.
+   */
+  const gear = (e: Entity, m: M4, parts: Record<string, M4> | undefined, pose?: Pose) => {
+    if (e.baby || !parts) return
+    if (e.hands) e.hands.forEach((id, k) => {   // ArmedModel.translateToHand, then turned to point forward
+      const arm = parts[k === 0 ? 'right_arm' : 'left_arm']
+      if (id && arm) drawItem(id, chain(m, arm, RX(rad(-90)), RY(Math.PI), T((k === 0 ? 1 : -1) / 16, 2 / 16, -10 / 16), display(shown(data.held?.i[id]?.[k]), k === 1)))
+    })
+    if (!e.armor) return
+    for (const [slot, w] of Object.entries(e.armor)) {
+      const mat = armourOf(w!.id)
+      if (!mat) {   // not armour: worn on the head like a hat
+        if (slot === 'head' && parts.head) drawItem(w!.id, chain(m, parts.head, T(0, -0.25, 0), RY(Math.PI), S(0.625, -0.625, -0.625), display(shown(data.held?.i[w!.id]?.[5]))), w)
+        continue
       }
+      if (!ARMOURED.has(e.id)) continue
+      const key = (e.id === 'armor_stand' ? 'armor_stand_armor:' : 'armor:') + slot, dir = slot === 'legs' ? 'humanoid_leggings' : 'humanoid', leather = mat === 'leather'
+      drawPieces([{ key, pic: `tex:equipment/${dir}/${mat}`, tint: leather ? rgb(w!.dye ?? 0xA06540) : undefined }, ...(leather ? [{ key, pic: `tex:equipment/${dir}/leather_overlay` }] : [])], m, e.id, pose)
     }
   }
 
@@ -296,7 +337,10 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
       const F = FACING[e.facing ?? -1]; if (!F) { miss(id); continue }
       const f = FACING_NAME[e.facing!], bx = Math.floor(e.x + F[0] * 0.46875), by = Math.floor(e.y + F[1] * 0.46875), bz = Math.floor(e.z + F[2] * 0.46875)
       if (!e.hidden) { const md = data.entities?.[`${id}:${f}`]; if (md) drawModel(md.q, T(bx, by, bz)); else miss(id) }
-      if (e.item) { const md = data.entities?.[`frame_item:${f}`]; if (md) drawModel(md.q.map(r => { const pts = spin([0, 1, 2, 3].map(i => r.slice(2 + i * 5, 5 + i * 5)), F, -(e.turn || 0) * Math.PI / 4); return [r[0], r[1], ...[0, 1, 2, 3].flatMap(i => [...pts[i], ...r.slice(5 + i * 5, 7 + i * 5)])] }), T(bx, by, bz), custom[`item:${e.item}`] ||= newPart()) }
+      if (e.item) {   // ItemFrameRenderer: turned to the wall, out from it a little, turned in 45 degree steps, half size, then the item's frame setting
+        const face = F[1] === 0 ? chain(RX(0), RY(rad(180 - (YROT[f] ?? 0)))) : chain(RX(rad(-90 * F[1])), RY(Math.PI))
+        drawItem(e.item, chain(T(bx + 0.5, by + 0.5, bz + 0.5), face, T(0, 0, e.hidden ? 0.5 : 0.4375), RZ(rad((e.turn || 0) * 45)), S(0.5), display(shown(data.held?.i[e.item]?.[4]))))
+      }
       continue
     }
     if (id === 'item') {   // a dropped item (ItemEntityRenderer): floating a little, as it looks on the ground
@@ -321,8 +365,9 @@ export function buildMesh(s: Schematic, data: BlockData): Mesh {
     const look = entityLook(e)
     if (!look) { miss(id); continue }
     const m = chain(T(e.x, e.y, e.z), turnTo, S(look.scale ?? 1), look.shift ? T(look.shift[0], look.shift[1], look.shift[2]) : S(1))
-    drawPieces(look.pieces, m, id)
-    gear(e, look, m)
+    const pose = poseOf(e)
+    const parts = drawPieces(look.pieces, m, id, pose) || (look.body ? partsOf(look.body, pose) : undefined)
+    gear(e, m, parts, pose)
   }
   // Sign text (StandingSignRenderer, HangingSignRenderer): the game's letters on a picture of their own, on each written side
   for (const [i, t] of s.tiles || []) {
@@ -365,15 +410,6 @@ const SIZE: Record<string, [number, number]> = {
   spider: [1.4, 0.9], cave_spider: [0.7, 0.5], blaze: [0.6, 1.8], silverfish: [0.4, 0.3], magma_cube: [0.52, 0.52], slime: [0.52, 0.52], creeper: [0.6, 1.7], breeze: [0.6, 1.77],
   pig: [0.9, 0.9], cow: [0.9, 1.4], chicken: [0.4, 0.7], sheep: [0.9, 1.3], enderman: [0.6, 2.9], iron_golem: [1.4, 2.7], guardian: [0.85, 0.85], piglin: [0.6, 1.95], zombified_piglin: [0.6, 1.95],
 }
-/** Turns points (block pixels) about their middle, around axis n, by angle a: an item turned in its frame. */
-function spin(pts: number[][], n: number[], a: number) {
-  const m = [0, 1, 2].map(i => pts.reduce((s, p) => s + p[i], 0) / pts.length), c = Math.cos(a), s = Math.sin(a)
-  return pts.map(p => {
-    const v = [p[0] - m[0], p[1] - m[1], p[2] - m[2]], d = v[0] * n[0] + v[1] * n[1] + v[2] * n[2], x = [n[1] * v[2] - n[2] * v[1], n[2] * v[0] - n[0] * v[2], n[0] * v[1] - n[1] * v[0]]
-    return [0, 1, 2].map(i => m[i] + v[i] * c + x[i] * s + n[i] * d * (1 - c))
-  })
-}
-
 type Piece = { key: string; pic?: string; tint?: number[]; clear?: boolean; at?: M4 }
 const tex = (key: string, path: string, more: Partial<Piece> = {}): Piece => ({ key: 'm:' + key, pic: 'tex:' + path, ...more })
 // Mobs with one look: model layer and texture, then the baby's if it has its own
@@ -411,6 +447,29 @@ const OUTER: Record<string, [string, string, string?, string?]> = {
 }
 const named = (v: Entity['variant'], list: string[], fallback = list[0]) => (typeof v === 'number' ? list[v] ?? fallback : typeof v === 'string' && /^[a-z0-9_]+$/.test(v) ? v : fallback)
 const YROT: Record<string, number> = { south: 0, west: 90, north: 180, east: 270 }   // Direction.toYRot()
+// Mobs that hold their arms out in front (AnimationUtils.animateZombieArms, standing still)
+const ZOMBIE_ARMS = new Set(['zombie', 'husk', 'drowned', 'zombie_villager', 'giant', 'zombified_piglin'])
+const STAND_POSE: Record<string, [string, number[]]> = {   // armor stand Pose keys, the parts they turn and their default (degrees)
+  Head: ['head', [0, 0, 0]], Body: ['body', [0, 0, 0]], LeftArm: ['left_arm', [-10, 0, -10]], RightArm: ['right_arm', [-15, 0, 10]], LeftLeg: ['left_leg', [-1, 0, -1]], RightLeg: ['right_leg', [1, 0, 1]],
+}
+/** How an entity's model is posed: an armor stand's saved pose, zombies' arms held out, legs forward when riding something. */
+function poseOf(e: Entity): Pose | undefined {
+  const set: Record<string, number[]> = {}, add: Record<string, number[]> = {}, hide = new Set<string>()
+  if (e.id === 'armor_stand') {   // ArmorStandArmorModel/ArmorStandModel.setupAnim
+    for (const [k, [part, def]] of Object.entries(STAND_POSE)) set[part] = (e.pose?.[k] || def).map(rad)
+    for (const stick of ['right_body_stick', 'left_body_stick', 'shoulder_stick']) set[stick] = set.body
+    set.hat = set.head
+    set.base_plate = [0, rad(-e.yaw), 0]   // the base plate stays square to the world as the stand turns
+    if (!e.arms) { hide.add('left_arm'); hide.add('right_arm') }
+    if (e.plate === false) hide.add('base_plate')
+  }
+  if (ZOMBIE_ARMS.has(e.id)) { set.right_arm = [-Math.PI / 2.25, -0.1, 0]; set.left_arm = [-Math.PI / 2.25, 0.1, 0] }
+  if (e.riding) {   // HumanoidModel.setupAnim when riding: legs forward and out, arms a little forward
+    set.right_leg = [-1.4137167, Math.PI / 10, 0.07853982]; set.left_leg = [-1.4137167, -Math.PI / 10, -0.07853982]
+    add.right_arm = [-Math.PI / 5, 0, 0]; add.left_arm = [-Math.PI / 5, 0, 0]
+  }
+  return Object.keys(set).length || Object.keys(add).length || hide.size ? { set, add, hide } : undefined
+}
 // Mobs drawn with armour on (the humanoid ones)
 const ARMOURED = new Set(['zombie', 'husk', 'drowned', 'zombie_villager', 'skeleton', 'stray', 'bogged', 'wither_skeleton', 'parched', 'piglin', 'piglin_brute', 'zombified_piglin', 'armor_stand', 'giant'])
 /** The armour material an item is made of (equipment/humanoid/<material>.png), or null for things that aren't armour. */
@@ -423,7 +482,7 @@ const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255]
 const MINECARTS = new Set(['minecart', 'chest_minecart', 'hopper_minecart', 'furnace_minecart', 'tnt_minecart'])
 
 /** How an entity looks: its model pieces (with their pictures and tints) and any size or offset its renderer adds, or null for one the viewer can't draw. */
-function entityLook(e: Entity): { pieces: Piece[]; scale?: number; shift?: number[]; handsFrom?: string } | null {
+function entityLook(e: Entity): { pieces: Piece[]; scale?: number; shift?: number[]; body?: string } | null {
   const id = e.id, b = e.baby ? '_baby' : ''
   const plainOf = (row: [string, string, string?, string?]) => (e.baby && row[2] ? tex(row[2], row[3]!) : tex(row[0], row[1]))
   if (PLAIN[id]) {
@@ -473,7 +532,7 @@ function entityLook(e: Entity): { pieces: Piece[]; scale?: number; shift?: numbe
     case 'iron_golem': return { pieces: [{ key: id }] }
     case 'snow_golem': return { pieces: [{ key: e.pumpkin === false ? 'snow_golem_sheared' : 'snow_golem' }] }
     case 'shulker': return { pieces: [{ key: e.colour !== undefined && COLOURS[e.colour] ? `shulker_${COLOURS[e.colour]}` : 'shulker' }] }
-    case 'armor_stand': return { pieces: e.hidden ? [] : [{ key: id }, ...(e.arms ? [{ key: 'armor_stand_arms' }] : []), ...(e.plate !== false ? [{ key: 'armor_stand_plate' }] : [])], scale: e.small ? 0.5 : 1, handsFrom: id }
+    case 'armor_stand': return { pieces: e.hidden ? [] : [{ key: id, pic: 'tex:armorstand/armorstand' }], scale: e.small ? 0.5 : 1, body: id }
   }
   if (MINECARTS.has(id)) return { pieces: [{ key: id }] }
   if (/^(spawner|command_block)_minecart$/.test(id)) return { pieces: [{ key: 'minecart' }] }

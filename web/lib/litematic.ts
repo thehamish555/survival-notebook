@@ -8,7 +8,7 @@ export type Tile = { skin?: string; patterns?: [string, string][]; spawn?: strin
 /** One side of a sign: its four lines as plain text, the dye colour and whether it glows. */
 export type SignText = { lines: string[]; colour: string; glow: boolean }
 /** Something worn or held: the item, and a leather dye colour if it has one. */
-export type Worn = { id: string; dye?: number }
+export type Worn = { id: string; dye?: number; patterns?: [string, string][] }
 /** A mob, armor stand, boat, minecart or item frame: where it is (in blocks, from the schematic's corner), which way it faces, and the few details that change its look. */
 export type Entity = {
   id: string; x: number; y: number; z: number; yaw: number; pitch?: number
@@ -20,6 +20,8 @@ export type Entity = {
   block?: Block; transform?: number[]
   /** Held in the main and off hand, and worn (head, chest, legs, feet) */
   hands?: (string | undefined)[]; armor?: Partial<Record<'head' | 'chest' | 'legs' | 'feet', Worn>>
+  /** An armor stand's pose (degrees, by part: Head, Body, LeftArm and so on), and whether it's riding something */
+  pose?: Record<string, number[]>; riding?: boolean
 }
 export type Schematic = { X: number; Y: number; Z: number; palette: Block[]; data: Uint16Array; name: string; count: number; tiles?: Map<number, Tile>; entities?: Entity[] }
 const MAX_VOLUME = 8_000_000
@@ -130,7 +132,7 @@ function entitiesOf(e: any, ox: number, oy: number, oz: number, out: Entity[], d
       item: bare(e.Item?.id ?? e.item?.id), turn: num(e.ItemRotation),
       variant: isPainting ? bare(e.variant ?? e.Motive ?? e.motive) : bare(e.variant) ?? num(e.Variant) ?? num(e.RabbitType) ?? bare(e.MainGene) ?? bare(e.type) ?? num(e.PuffState) ?? bare(e.weather_state),
       baby: (num(e.Age) ?? 0) < 0 || !!e.IsBaby, size: num(e.Size), sheared: flag(e.Sheared), tame: !!(e.Owner ?? e.owner), chest: flag(e.ChestedHorse),
-      block: blockOf(e.BlockState ?? e.block_state), transform: transformOf(e.transformation), ...gearOf(e),
+      block: blockOf(e.BlockState ?? e.block_state), transform: transformOf(e.transformation), ...gearOf(e), pose: poseOfStand(e.Pose), riding: !!vehicle,
     })
   }
   if (me) for (const p of Array.isArray(e?.Passengers) ? e.Passengers : []) entitiesOf(p, ox, oy, oz, out, depth + 1, me)
@@ -172,13 +174,21 @@ function signOf(t: any): Tile['sign'] {
   const front = side(t.front_text) || old, back = side(t.back_text)
   return front || back ? { front, back } : undefined
 }
+/** An armor stand's Pose: each part's three angles in degrees. */
+function poseOfStand(p: any): Entity['pose'] {
+  if (!p || typeof p !== 'object') return undefined
+  const out: Record<string, number[]> = {}
+  for (const k of ['Head', 'Body', 'LeftArm', 'RightArm', 'LeftLeg', 'RightLeg']) if (Array.isArray(p[k]) && p[k].length === 3 && p[k].every((n: any) => Number.isFinite(Number(n)))) out[k] = p[k].map(Number)
+  return Object.keys(out).length ? out : undefined
+}
 /** What a mob or armor stand holds and wears: the equipment map since 1.21.5, HandItems and ArmorItems before. */
 function gearOf(e: any): Pick<Entity, 'hands' | 'armor'> {
   const worn = (s: any): Worn | undefined => {
     const id = bare(s?.id); if (!id || id === 'air') return undefined
     const c = s.components?.['minecraft:dyed_color'] ?? s.components?.dyed_color ?? s.tag?.display?.color
     const dye = typeof c === 'number' ? c : typeof c?.rgb === 'number' ? c.rgb : undefined
-    return dye === undefined ? { id } : { id, dye }
+    const patterns = patternsOf({ patterns: s.components?.['minecraft:banner_patterns'] ?? s.components?.banner_patterns }) ?? patternsOf(s.tag?.BlockEntityTag ?? {})   // a banner, like a raid captain's
+    return { id, ...(dye === undefined ? {} : { dye }), ...(patterns ? { patterns } : {}) }
   }
   const eq = e.equipment && typeof e.equipment === 'object' ? e.equipment : {}, hi = Array.isArray(e.HandItems) ? e.HandItems : [], ai = Array.isArray(e.ArmorItems) ? e.ArmorItems : []
   const hands = [worn(eq.mainhand ?? hi[0])?.id, worn(eq.offhand ?? hi[1])?.id]

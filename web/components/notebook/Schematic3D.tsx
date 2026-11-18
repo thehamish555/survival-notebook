@@ -120,7 +120,7 @@ export function Schematic3D({ nb, file, title, onClose }: { nb: string; file: { 
   const counts = useMemo(() => schem ? `${schem.X} × ${schem.Y} × ${schem.Z} · ${schem.count.toLocaleString()} blocks` : '', [schem])
   return <div className="modal" onClick={onClose}><div className="card schem" onClick={e => e.stopPropagation()}>
     <div className="row" style={{ justifyContent: 'space-between' }}>
-      <div><h2 style={{ margin: 0 }}>{title}</h2><p className="mut small" style={{ margin: '2px 0 0' }}>{file.name}{counts && ` · ${counts}`}</p></div>
+      <div style={{ flex: 1, minWidth: 0 }}><h2 style={{ margin: 0 }}>{title}</h2><p className="mut small" style={{ margin: '2px 0 0' }}>{file.name}{counts && ` · ${counts}`}</p></div>
       <button className="ghost" onClick={onClose}>Close</button>
     </div>
     <div className="schemview" ref={host}>{!schem && !err && <p className="mut schemmsg">Loading…</p>}{err && <p className="err schemmsg">{err}</p>}</div>
