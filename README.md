@@ -102,7 +102,7 @@ The whole notebook is a key away (<kbd>N</kbd>), in the game's own style. Everyt
 ## Getting started
 
 1. Sign in at **[notebook.hamish555.com](https://notebook.hamish555.com)** and make a notebook. Invite your friends from its settings.
-2. Install the mod with **Fabric Loader 0.20.1+** and **Fabric API** for Minecraft Java **26.3**.
+2. Install the mod (from [Modrinth](https://modrinth.com/mod/survival-notebook), or the jar on the [latest release](https://github.com/thehamish555/survival-notebook/releases/latest)) with **Fabric Loader 0.20.1+** and **Fabric API** for Minecraft Java **26.3**.
 3. In game, press <kbd>N</kbd> and choose **Link this game**. Approve the code on the page that opens, and you're connected.
 
 What the mod shares (stats, inventory, map, position, play time) can each be turned off in its Settings.
