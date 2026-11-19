@@ -1,6 +1,6 @@
 # Tags each new version on main and makes a GitHub release with its changelog entry:
 # mod-vX.Y.Z from mod/gradle.properties and mod/CHANGELOG.md, web-vX.Y.Z from the newest entry in web/lib/data.ts.
-# A version that's already tagged is left alone, so pushes that don't bump a version do nothing.
+# A version that's already tagged is left alone, so pushes that don't bump a version do nothing. Mod releases get the jar attached.
 name: Tag releases
 on:
   push:
@@ -17,14 +17,26 @@ jobs:
         with: { fetch-depth: 0 }
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
+      - name: Is this mod version new?
+        id: mod
+        run: |
+          MOD=$(grep -E '^version=' mod/gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          git rev-parse -q --verify "refs/tags/mod-v$MOD" > /dev/null && echo "new=false" >> "$GITHUB_OUTPUT" || echo "new=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@v6
+        if: steps.mod.outputs.new == 'true'
+        with: { distribution: temurin, java-version: 25 }
+      - name: Build the mod jar
+        if: steps.mod.outputs.new == 'true'
+        working-directory: mod
+        run: chmod +x gradlew && ./gradlew build
       - name: Tag and release new versions
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          release() {   # tag, title, notes file
+          release() {   # tag, title, notes file, latest, files to attach
             if git rev-parse -q --verify "refs/tags/$1" > /dev/null; then echo "$1 is already tagged"; return; fi
-            gh release create "$1" --target "$GITHUB_SHA" --title "$2" --notes-file "$3" --latest="$4"
+            gh release create "$1" --target "$GITHUB_SHA" --title "$2" --notes-file "$3" --latest="$4" "${@:5}"
           }
           MOD=$(grep -E '^version=' mod/gradle.properties | cut -d= -f2 | tr -d '[:space:]')
           { echo "Mod version $MOD for Minecraft Java $(grep -E '^minecraft_version=' mod/gradle.properties | cut -d= -f2 | tr -d '[:space:]') (Fabric)."; echo
@@ -39,4 +51,5 @@ jobs:
             })'
           WEB=$(cat web-version)
           release "web-v$WEB" "Website $WEB" web-notes.md false
-          release "mod-v$MOD" "Mod $MOD" mod-notes.md true
+          JAR=$(ls mod/build/libs/survival-notebook-*.jar 2>/dev/null | grep -v sources | head -1 || true)
+          release "mod-v$MOD" "Mod $MOD" mod-notes.md true $JAR
