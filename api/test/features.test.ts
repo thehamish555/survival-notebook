@@ -201,6 +201,22 @@ test('push: choices per kind, and new places are gathered into one notification 
   assert.equal(sent[0].msg.url, `/n/${nb}#coordinates`)
 })
 
+test('play time on its own: the heartbeat without a position, and positions that skip play time', async () => {
+  const { call, user, notebook, db, modToken } = mk(), a = await user('alice'), b = await user('bob'), nb = await notebook(a.token)
+  const ms = (u: string) => ((db.prepare('select coalesce(sum(ms),0) ms from play where nb=? and user=?').get(nb, u) as { ms: number }).ms)
+  assert.equal((await call('PUT', `/notebooks/${nb}/play`, {}, a.token)).status, 200); assert.equal(ms(a.id), 0)   // the first one starts the clock
+  await new Promise(r => setTimeout(r, 15)); await call('PUT', `/notebooks/${nb}/play`, {}, a.token)
+  assert.ok(ms(a.id) > 0)
+  assert.equal((db.prepare('select count(*) n from positions where nb=?').get(nb) as { n: number }).n, 0)   // nobody's position was stored
+  assert.equal((await call('PUT', `/notebooks/${nb}/play`, {}, b.token)).status, 404)                     // not a member
+  const pos = (x: number) => call('PUT', `/notebooks/${nb}/pos`, { dim: 'ow', x, y: 64, z: 0, play: false }, b.token)
+  await call('POST', `/notebooks/${nb}/members`, { email: 'bob@x.com', role: 'editor' }, a.token)
+  await pos(0); await new Promise(r => setTimeout(r, 15)); await pos(40)
+  assert.equal(ms(b.id), 0)                                                                                 // Share play time off: on the map, no time
+  // a mod token may send it
+  assert.equal((await call('PUT', `/notebooks/${nb}/play`, {}, await modToken(a.token))).status, 200)
+})
+
 test('play time, "is playing" and the weekly recap', async () => {
   const { call, user, notebook, sent, db } = mk(), a = await user('alice'), b = await user('bob'), nb = await notebook(a.token)
   await call('POST', `/notebooks/${nb}/members`, { email: 'bob@x.com', role: 'editor' }, a.token)

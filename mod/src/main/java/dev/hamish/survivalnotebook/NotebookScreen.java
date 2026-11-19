@@ -467,11 +467,24 @@ final class NotebookScreen extends Screen {
 		return e;
 	}
 
-	/** A search box at the right edge of the controls row; returns its x so a count can sit to its left. */
-	int searchRight(String id, int y, int w, String value, Consumer<String> onChange) {
-		int x = cx + cw - 8 - w;
-		searchBox(id, x, y, w, "Search", value, onChange);
-		return x;
+
+	/**
+	 * The search box (with a count before it) at the end of a page's row of controls, which take up {@code used} pixels from cx.
+	 * When it doesn't fit there (a narrow window or a big GUI scale), it goes on a row of its own underneath, starting at row2x.
+	 * Returns where the list starts below the controls.
+	 */
+	int searchRow(String id, int y, int used, int w, String count, int row2x, String value, Consumer<String> onChange) {
+		Ui.Pal p = Ui.pal();
+		int countW = count.isEmpty() ? 0 : font.width(count) + 6, right = cx + cw - 8;
+		if (cx + used + 6 + countW + w <= right) {
+			searchBox(id, right - w, y, w, "Search", value, onChange);
+			if (!count.isEmpty()) textRight(count, right - w - 6, y + 6, p.mut);
+			return y + 26;
+		}
+		int y2 = y + 26, bw = Math.max(60, Math.min(w + 60, right - row2x - countW));
+		searchBox(id, row2x, y2, bw, "Search", value, onChange);
+		if (!count.isEmpty()) text(count, row2x + bw + 6, y2 + 6, p.mut);
+		return y2 + 26;
 	}
 
 	static boolean has(String query, String... fields) {

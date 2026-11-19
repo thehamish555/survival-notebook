@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { defaultFace, playerColour } from '@/components/notebook/MapView'
+import { defaultFace, playerColour, skinFace } from '@/components/notebook/MapView'
 
 export type Recap = {
   from: number; to: number; title: string
@@ -28,9 +28,12 @@ export function DayBars({ days, height = 120 }: { days: Recap['days']; height?: 
   </div>
 }
 
-export function Face({ uuid, uid, name, size = 28 }: { uuid: string; uid: string; name: string; size?: number }) {
-  const f = uuid ? defaultFace(uuid) : null
-  return f ? <img className="rface" src={`/mc/face/${f}.png`} width={size} height={size} alt="" />
+/** A player's head: their real skin's face (like the map), the game's default face for their UUID while it loads or if there's no skin, else their initial. */
+export function Face({ nb, uuid, uid, name, size = 28 }: { nb: string; uuid: string; uid: string; name: string; size?: number }) {
+  const [real, setReal] = useState('')
+  useEffect(() => { setReal(''); if (uuid) skinFace(nb, uuid).then(c => setReal(c.toDataURL())).catch(() => {}) }, [nb, uuid])
+  const f = uuid ? defaultFace(uuid) : null, src = real || (f ? `/mc/face/${f}.png` : '')
+  return src ? <img className="rface" src={src} width={size} height={size} alt="" />
     : <span className="rface" style={{ width: size, height: size, background: playerColour(uid) }}>{name.slice(0, 1).toUpperCase()}</span>
 }
 
@@ -44,7 +47,7 @@ export function WeekCard({ id }: { id: string }) {
   const bits = [t.ms >= 60_000 && `${playTime(t.ms)} played`, t.dist >= 100 && `${blocks(t.dist)} blocks travelled`, t.places && `${t.places} new place${t.places === 1 ? '' : 's'}`,
     t.farms && `${t.farms} farm${t.farms === 1 ? '' : 's'} built`, t.todos && `${t.todos} to-do${t.todos === 1 ? '' : 's'} done`, t.deaths && `${t.deaths} death${t.deaths === 1 ? '' : 's'}`].filter(Boolean)
   return <div className="card weekcard"><div className="row"><h2 className="grow">This week</h2><Link className="btn ghost" href={`/n/${id}/recap`}>See the recap</Link></div>
-    <p className="mut">{bits.length ? bits.join(' · ') : 'Nothing yet this week. Play time shows up for anyone playing with the mod and Share position on.'}</p>
+    <p className="mut">{bits.length ? bits.join(' · ') : 'Nothing yet this week. Play time shows up for anyone playing with the mod and Share play time on.'}</p>
     <DayBars days={r.days} height={64} />
   </div>
 }

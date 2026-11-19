@@ -50,7 +50,7 @@ final class PageSettings {
 		if (cat.equals("Members")) { PageMembers.build(s, y); return; }
 		int visible = Math.max(1, (s.bottom - y) / ROW);
 		boolean xaero = !Minimaps.installed().isEmpty();   // a minimap mod the notebook can work with
-		int rows = switch (cat) { case "Connection" -> 5; case "Overlays" -> xaero ? 7 : 6; case "Sync & privacy" -> 9; default -> 3; };
+		int rows = switch (cat) { case "Connection" -> 5; case "Overlays" -> xaero ? 7 : 6; case "Sync & privacy" -> 10; default -> 3; };
 		s.setScroll(rows, visible);
 		final int base = y - NotebookScreen.scroll * ROW, first = NotebookScreen.scroll;
 		java.util.function.IntPredicate show = r -> r >= first && r < first + visible;
@@ -103,6 +103,7 @@ final class PageSettings {
 				if (show.test(6)) toggle(s, base + 6 * ROW, "Share inventory", "For the shopping list. Includes shulker boxes and bundles", c.shareInventory, () -> c.shareInventory = !c.shareInventory);
 				if (show.test(7)) toggle(s, base + 7 * ROW, "Share map", "Draws a map of where you explore on the website", c.shareMap, () -> { c.shareMap = !c.shareMap; if (!c.shareMap) MapRecorder.reset(); });
 				if (show.test(8)) toggle(s, base + 8 * ROW, "Share position", "Shows your team where you are on the map, live", c.sharePosition, () -> { c.sharePosition = !c.sharePosition; if (!c.sharePosition) Players.forget(); });
+				if (show.test(9)) toggle(s, base + 9 * ROW, "Share play time", "Counts your time played in the weekly recap", c.sharePlayTime, () -> c.sharePlayTime = !c.sharePlayTime);
 			}
 			default -> {
 				if (show.test(0)) s.dropdown("settings-theme", s.cx, base, 180, "Theme", List.of("Dark", "Light"), c.lightTheme ? "Light" : "Dark", p.gray, v -> { c.lightTheme = v.equals("Light"); NbConfig.save(); s.rebuild(); });

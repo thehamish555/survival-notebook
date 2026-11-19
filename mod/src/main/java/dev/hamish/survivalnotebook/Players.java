@@ -35,7 +35,8 @@ final class Players {
 	/** Called every tick while in a world. Sends at most every 2 seconds, and only when you've moved (or every 30 seconds to stay online). */
 	static void tick(Minecraft mc, int ticks) {
 		NbConfig c = NbConfig.get();
-		if (ticks % 40 != 7 || busy || mc.player == null || !c.connected() || c.notebookId.isBlank() || !c.sharePosition) return;
+		if (ticks % 40 != 7 || busy || mc.player == null || !c.connected() || c.notebookId.isBlank()) return;
+		if (!c.sharePosition) { beat(c); return; }
 		Names.Spot h = Names.here(); if (h == null) return;
 		String key = h.dim() + " " + h.xyz();
 		long now = System.currentTimeMillis();
@@ -43,10 +44,27 @@ final class Players {
 		JsonObject b = new JsonObject();
 		b.addProperty("dim", h.dim()); b.addProperty("x", mc.player.getX()); b.addProperty("y", mc.player.getY()); b.addProperty("z", mc.player.getZ()); b.addProperty("yaw", mc.player.getYRot());
 		b.addProperty("mcName", mc.player.getName().getString()); b.addProperty("mcUuid", mc.player.getUUID().toString());   // for your face on the map
+		b.addProperty("play", c.sharePlayTime);   // counts toward time played only with Share play time on
 		String nb = c.notebookId;
 		busy = true;
 		Api.EXEC.execute(() -> {
 			try { Api.ok(Api.call("PUT", "/notebooks/" + nb + "/pos", b)); lastSent = key; sentTo = nb; lastAt = now; }
+			catch (Api.ApiException ignored) { /* try again next time */ }
+			finally { busy = false; }
+		});
+	}
+
+	private static long beatAt;
+
+	/** Share position off but Share play time on: a heartbeat every 30 seconds, so your time played still counts without anyone seeing where you are. */
+	private static void beat(NbConfig c) {
+		long now = System.currentTimeMillis();
+		if (!c.sharePlayTime || now - beatAt < 30_000) return;
+		beatAt = now;
+		String nb = c.notebookId;
+		busy = true;
+		Api.EXEC.execute(() -> {
+			try { Api.call("PUT", "/notebooks/" + nb + "/play", new JsonObject()); }
 			catch (Api.ApiException ignored) { /* try again next time */ }
 			finally { busy = false; }
 		});

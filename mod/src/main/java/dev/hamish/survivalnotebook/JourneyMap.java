@@ -99,4 +99,27 @@ final class JourneyMap {
 		Identifier id = Identifier.tryParse("minecraft:textures/item/" + item + ".png");
 		return id != null && Minecraft.getInstance().getResourceManager().getResource(id).isPresent() ? id : null;
 	}
+	// ---- deleting your own JourneyMap waypoints (a synced place you deleted from the notebook)
+
+	/** Removes these waypoints (keys as in Minimap.key) from the world JourneyMap has loaded, files included. Returns the ones it didn't find. */
+	static List<String> deleteWaypoints(List<String> keys) {
+		if (!present() || Minecraft.getInstance().level == null) return keys;
+		try {
+			Object store = cls("journeymap.common.waypoint.WaypointStore").getMethod("getInstance").invoke(null);
+			Object scope = call(store, "getActiveScope");
+			List<String> left = new java.util.ArrayList<>(keys);
+			for (Object wp : new java.util.ArrayList<>((java.util.Collection<?>) call(store, "getAll"))) {
+				if (SurvivalNotebookClient.ID.equals(call(wp, "getModId"))) continue;   // our own places on the map, not yours
+				String name = (String) call(wp, "getName"); int x = (Integer) call(wp, "getX"), z = (Integer) call(wp, "getZ");
+				boolean hit = false;
+				for (Object d : (java.util.Collection<?>) call(wp, "getDimensions")) {
+					String ds = String.valueOf(d), dim = ds.endsWith("the_nether") ? "nether" : ds.endsWith("the_end") ? "end" : ds.endsWith("overworld") ? "ow" : "";
+					for (String k : keys) if (Minimap.matches(k, name, dim, x, z)) { left.remove(k); hit = true; }
+				}
+				if (hit) call(store, "remove", wp, Boolean.TRUE, scope);
+			}
+			return left;
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) { }
+		return keys;
+	}
 }

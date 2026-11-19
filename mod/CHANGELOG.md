@@ -1,3 +1,8 @@
+## 1.7.1 – Fix
+- Share play time is its own setting in Settings > Sync & privacy. Your time played counts in the weekly recap even with Share position off, and turning it off stops counting it while you still show on the map.
+- Deleting a place that came from Xaero's Minimap or JourneyMap (in game or on the website) deletes the waypoint there too, so the next sync doesn't bring it back.
+- Places, Farms and To-Do: the search box no longer overlaps the buttons on narrow screens or big GUI scales. It moves to its own row when there isn't room.
+
 ## 1.7.0 – Feature
 - Notifications: the mod no longer writes in chat. Everything it tells you pops up as a toast, and the bell in the notebook's top right keeps a list of it, with a red count of what you haven't seen. Problems show in red.
 - Weekly recap: what your team did this week shows on the Home tab, and on Sunday from 7pm a toast sums up the week. Turn it off in Settings > Overlays.
