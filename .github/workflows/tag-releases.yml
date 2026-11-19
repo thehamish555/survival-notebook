@@ -1,0 +1,42 @@
+# Tags each new version on main and makes a GitHub release with its changelog entry:
+# mod-vX.Y.Z from mod/gradle.properties and mod/CHANGELOG.md, web-vX.Y.Z from the newest entry in web/lib/data.ts.
+# A version that's already tagged is left alone, so pushes that don't bump a version do nothing.
+name: Tag releases
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency: tag-releases
+permissions:
+  contents: write
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v7
+        with: { node-version: 22 }
+      - name: Tag and release new versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          release() {   # tag, title, notes file
+            if git rev-parse -q --verify "refs/tags/$1" > /dev/null; then echo "$1 is already tagged"; return; fi
+            gh release create "$1" --target "$GITHUB_SHA" --title "$2" --notes-file "$3" --latest="$4"
+          }
+          MOD=$(grep -E '^version=' mod/gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          { echo "Mod version $MOD for Minecraft Java $(grep -E '^minecraft_version=' mod/gradle.properties | cut -d= -f2 | tr -d '[:space:]') (Fabric)."; echo
+            awk '/^## /{n++} n==1 && !/^## /' mod/CHANGELOG.md; } > mod-notes.md
+          node --experimental-strip-types -e '
+            import("./web/lib/data.ts").then(({ CHANGELOG }) => {
+              const [v, date, items] = CHANGELOG[0]
+              let md = `Website version ${v}, released ${date}.\n`
+              for (const it of items) md += it.endsWith(":") ? `\n### ${it.slice(0, -1)}\n\n` : `- ${it}\n`
+              require("fs").writeFileSync("web-notes.md", md.trim() + "\n\n**Live at [notebook.hamish555.com](https://notebook.hamish555.com)**\n")
+              require("fs").writeFileSync("web-version", v)
+            })'
+          WEB=$(cat web-version)
+          release "web-v$WEB" "Website $WEB" web-notes.md false
+          release "mod-v$MOD" "Mod $MOD" mod-notes.md true
