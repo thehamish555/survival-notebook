@@ -10,7 +10,6 @@
 </p>
 <p align="center">
   <a href="https://github.com/thehamish555/survival-notebook/releases?q=mod-v&expanded=true"><img alt="Mod version" src="https://img.shields.io/github/v/release/thehamish555/survival-notebook?filter=mod-v*&label=mod&color=F2C14E"></a>
-  <a href="https://github.com/thehamish555/survival-notebook/releases?q=web-v&expanded=true"><img alt="Website version" src="https://img.shields.io/github/v/release/thehamish555/survival-notebook?filter=web-v*&label=website&color=4C8DE0"></a>
   <a href="https://github.com/thehamish555/survival-notebook/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/thehamish555/survival-notebook/ci.yml?branch=main&label=CI"></a>
   <img alt="Mod licence" src="https://img.shields.io/badge/mod%20licence-MIT-9A9889">
 </p>
@@ -131,7 +130,7 @@ The website calls its own `/api` path and Vercel forwards it to the server. The 
 
 Work happens on `dev`. A push there runs the tests, builds a preview of the site, and attaches a test jar of the mod to the Actions run.
 
-Merging `dev` into `main` releases everything at once: Vercel deploys the site, the API restarts on the new code, the mod is published to Modrinth when its version is new, and each new version is tagged with a [release](https://github.com/thehamish555/survival-notebook/releases) and its changelog.
+Merging `dev` into `main` releases everything at once: Vercel deploys the site, the API restarts on the new code, the mod is published to Modrinth when its version is new, and each new mod version gets a [release](https://github.com/thehamish555/survival-notebook/releases) with its changelog and jar.
 
 ### Working on it
 

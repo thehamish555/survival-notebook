@@ -1,10 +1,10 @@
-# Tags each new version on main and makes a GitHub release with its changelog entry:
-# mod-vX.Y.Z from mod/gradle.properties and mod/CHANGELOG.md, web-vX.Y.Z from the newest entry in web/lib/data.ts.
-# A version that's already tagged is left alone, so pushes that don't bump a version do nothing. Mod releases get the jar attached.
+# Tags each new mod version on main (mod-vX.Y.Z, from mod/gradle.properties) and makes a GitHub release with
+# its mod/CHANGELOG.md entry and the jar. A version that's already tagged is left alone, so pushes that don't bump it do nothing.
 name: Tag releases
 on:
   push:
     branches: [main]
+    paths: ['mod/**', '.github/workflows/tag-releases.yml']
   workflow_dispatch:
 concurrency: tag-releases
 permissions:
@@ -15,8 +15,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v7
-        with: { node-version: 22 }
       - name: Is this mod version new?
         id: mod
         run: |
@@ -29,7 +27,7 @@ jobs:
         if: steps.mod.outputs.new == 'true'
         working-directory: mod
         run: chmod +x gradlew && ./gradlew build
-      - name: Tag and release new versions
+      - name: Tag and release the new version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -41,15 +39,5 @@ jobs:
           MOD=$(grep -E '^version=' mod/gradle.properties | cut -d= -f2 | tr -d '[:space:]')
           { echo "Mod version $MOD for Minecraft Java $(grep -E '^minecraft_version=' mod/gradle.properties | cut -d= -f2 | tr -d '[:space:]') (Fabric)."; echo
             awk '/^## /{n++} n==1 && !/^## /' mod/CHANGELOG.md; } > mod-notes.md
-          node --experimental-strip-types -e '
-            import("./web/lib/data.ts").then(({ CHANGELOG }) => {
-              const [v, date, items] = CHANGELOG[0]
-              let md = `Website version ${v}, released ${date}.\n`
-              for (const it of items) md += it.endsWith(":") ? `\n### ${it.slice(0, -1)}\n\n` : `- ${it}\n`
-              require("fs").writeFileSync("web-notes.md", md.trim() + "\n\n**Live at [notebook.hamish555.com](https://notebook.hamish555.com)**\n")
-              require("fs").writeFileSync("web-version", v)
-            })'
-          WEB=$(cat web-version)
-          release "web-v$WEB" "Website $WEB" web-notes.md false
           JAR=$(ls mod/build/libs/survival-notebook-*.jar 2>/dev/null | grep -v sources | head -1 || true)
           release "mod-v$MOD" "Mod $MOD" mod-notes.md true $JAR
