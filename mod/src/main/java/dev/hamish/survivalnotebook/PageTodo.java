@@ -55,13 +55,13 @@ final class PageTodo {
 		}, Notebook.canEdit());
 		s.dropdown("todo-who", s.cx + 96, y, 116, "Show", List.of("Mine", "Everyone"), mineOnly ? "Mine" : "Everyone", p.gray, v -> { mineOnly = v.equals("Mine"); NotebookScreen.scroll = 0; });
 		s.dropdown("todo-done", s.cx + 218, y, 126, "Done", List.of("Hidden", "Shown"), showDone ? "Shown" : "Hidden", p.gray, v -> { showDone = v.equals("Shown"); NotebookScreen.scroll = 0; });
-		boolean autoOn = Notebook.autoFarmsOn();
-		s.pill(s.cx + 350, y, 128, 20, "Farm to-do: " + (autoOn ? "on" : "off"), autoOn ? p.green : p.gray, Notebook::toggleAutoFarms, Notebook.canEdit());
+		boolean autoOn = Notebook.autoFarmsOn(), narrow = 478 > s.cw - 8;   // too narrow for all four: Farm to-do goes on the next row, with the search
+		s.pill(narrow ? s.cx : s.cx + 350, narrow ? y + 26 : y, 128, 20, "Farm to-do: " + (autoOn ? "on" : "off"), autoOn ? p.green : p.gray, Notebook::toggleAutoFarms, Notebook.canEdit());
 
 		List<JsonObject> all = new ArrayList<>();
 		for (JsonObject o : Notebook.todoList(mineOnly, showDone)) if (NotebookScreen.has(query, Notebook.str(o, "project"), Notebook.str(o, "notes"), Notebook.memberName(Notebook.str(o, "assignee")))) all.add(o);
-		s.searchRight("todo-q", y, 120, query, v -> { query = v; NotebookScreen.scroll = 0; });
-		int listTop = y + 26;
+		int listTop = narrow ? s.searchRow("todo-q", y + 26, 128, 120, "", s.cx + 134, query, v -> { query = v; NotebookScreen.scroll = 0; })
+			: s.searchRow("todo-q", y, 478, 120, "", s.cx + 134, query, v -> { query = v; NotebookScreen.scroll = 0; });
 		final JsonObject farm = Notebook.farmSection(showDone);
 		if (farm != null) {   // automatic section: worked out from the farms page, can't be edited here
 			final String fp = Notebook.str(farm, "project"), fprog = Notebook.str(farm, "progress");

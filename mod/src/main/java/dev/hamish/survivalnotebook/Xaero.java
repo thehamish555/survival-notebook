@@ -151,4 +151,41 @@ final class Xaero {
 		}
 	}
 
+	// ---- deleting your own Xaero's waypoints (a synced place you deleted from the notebook)
+
+	/**
+	 * Removes these waypoints (keys as in Minimap.key) from Xaero's, when it has the synced world's folder loaded, and saves it.
+	 * Returns the ones it couldn't handle, for the caller to remove from the files instead.
+	 */
+	static List<String> deleteWaypoints(java.nio.file.Path dir, List<String> keys) {
+		if (!present() || Minecraft.getInstance().level == null) return keys;
+		try {
+			Object session = call(staticField("xaero.hud.minimap.BuiltInHudModules", "MINIMAP"), "getCurrentSession");
+			if (session == null) return keys;
+			Object wm = call(session, "getWorldManager"), io = call(session, "getWorldManagerIO");
+			java.nio.file.Path want = dir.toAbsolutePath().normalize();
+			for (Object root : (Iterable<?>) call(wm, "getRootContainers")) {
+				Object rp = call(root, "getDirectoryPath");
+				if (!(rp instanceof java.nio.file.Path p) || !p.toAbsolutePath().normalize().equals(want)) continue;
+				for (Object world : (Iterable<?>) call(root, "getAllWorldsIterable")) {
+					Object dk = call(call(world, "getContainer"), "getEquivalentDimKey");
+					String dim = Level.OVERWORLD.equals(dk) ? "ow" : Level.NETHER.equals(dk) ? "nether" : Level.END.equals(dk) ? "end" : "";
+					boolean changed = false;
+					for (Object set : (Iterable<?>) call(world, "getIterableWaypointSets")) {
+						List<Object> drop = new ArrayList<>();
+						for (Object wp : (Iterable<?>) call(set, "getWaypoints")) {
+							if (Boolean.TRUE.equals(call(wp, "isTemporary")) || String.valueOf(call(wp, "getPurpose")).contains("DEATH")) continue;
+							String name = (String) call(wp, "getName"); int x = (Integer) call(wp, "getX"), z = (Integer) call(wp, "getZ");
+							for (String k : keys) if (Minimap.matches(k, name, dim, x, z)) { drop.add(wp); break; }
+						}
+						for (Object wp : drop) call(set, "remove", wp);
+						changed |= !drop.isEmpty();
+					}
+					if (changed) call(io, "saveWorld", world);
+				}
+				return List.of();   // Xaero's has this world loaded and saved it: its files are up to date
+			}
+		} catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) { }
+		return keys;
+	}
 }

@@ -97,7 +97,7 @@ final class PagePlaces {
 		int y = s.top;
 		s.text("Sync with a minimap mod", s.cx, y - 1, p.gold);
 		int th = s.wrap("Keeps your places in step with Xaero's Minimap or JourneyMap automatically. Adding, moving or deleting a waypoint updates here too. "
-			+ (NbConfig.get().mmDir.isBlank() ? "Pick one below. Nothing is ever changed in the minimap mod." : "Syncing now. Places you added yourself are never removed."), s.cx, y + 11, s.cw - 12, p.mut);
+			+ (NbConfig.get().mmDir.isBlank() ? "Pick one below. Deleting a synced place here deletes it there too." : "Syncing now. Deleting a synced place here deletes it there too. Places you added yourself are never removed."), s.cx, y + 11, s.cw - 12, p.mut);
 		int listTop = y + 18 + th, rowH = 24, vis = Math.max(1, (s.bottom - 26 - listTop) / rowH), rowW = s.cw - 10;
 		s.setScroll(sources.size(), vis);
 		if (sources.isEmpty()) s.text("No Xaero's or JourneyMap waypoints found.", s.cx + 4, listTop + 6, p.mut);
@@ -146,10 +146,7 @@ final class PagePlaces {
 		Names.Spot here = Names.here();
 		if (nearest && here != null)
 			all.sort(Comparator.comparingDouble(o -> { Double d = Names.distance(Notebook.str(o, here.dim())); return d == null ? Double.MAX_VALUE : d; }));
-		int sx = s.searchRight("places-q", y, 130, query, v -> { query = v; NotebookScreen.scroll = 0; });
-		s.textRight(all.size() + (all.size() == 1 ? " place" : " places"), sx - 6, y + 6, p.mut);
-
-		int listTop = y + 26, vis = Math.max(1, (s.bottom - listTop) / 26);
+		int listTop = s.searchRow("places-q", y, 404, 130, all.size() + (all.size() == 1 ? " place" : " places"), s.cx, query, v -> { query = v; NotebookScreen.scroll = 0; }), vis = Math.max(1, (s.bottom - listTop) / 26);
 		s.setScroll(all.size(), vis);
 		if (all.isEmpty()) s.text("No places yet. Press B in the world to save one.", s.cx + 4, listTop + 6, p.mut);
 		for (int i = 0; i < vis && NotebookScreen.scroll + i < all.size(); i++) {

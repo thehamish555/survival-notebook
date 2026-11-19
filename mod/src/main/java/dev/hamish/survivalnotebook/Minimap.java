@@ -17,7 +17,8 @@ import java.util.stream.Stream;
 
 /**
  * Finds waypoints saved by Xaero's Minimap / World Map and JourneyMap by reading their files on disk. That means it works with
- * any version of those mods and adds no dependency. Read-only: the minimap files are never modified.
+ * any version of those mods and adds no dependency. The only change it ever makes there: a synced place you delete from the notebook
+ * is deleted from the minimap too (see Notebook.forgetDeleted), through the minimap mod itself when it's running, else in its files.
  */
 final class Minimap {
 	private Minimap() { }
@@ -125,7 +126,64 @@ final class Minimap {
 	}
 
 	private static String key(Wp w) { return key(w.name(), w.dim(), w.xyz()); }
-	private static String key(String name, String dim, String xyz) { return name.trim().toLowerCase() + "|" + dim + "|" + xyz.trim().replaceAll("\\s+", " "); }
+	static String key(String name, String dim, String xyz) { return name.trim().toLowerCase() + "|" + dim + "|" + xyz.trim().replaceAll("\\s+", " "); }
+
+	/** Whether a waypoint is the one a key (name|dim|x y z) describes. Height is ignored: Xaero's can store "no height". */
+	static boolean matches(String key, String name, String dim, int x, int z) {
+		String[] p = key.split("\\|", 3);
+		if (p.length < 3 || name == null || !name.trim().toLowerCase().equals(p[0]) || !p[1].equals(dim)) return false;
+		String[] c = p[2].trim().split("\\s+");
+		return c.length == 3 && c[0].equals(String.valueOf(x)) && c[2].equals(String.valueOf(z));
+	}
+	private static int floor(String s) { return (int) Math.floor(Double.parseDouble(s.trim())); }
+
+	/** Deletes these waypoints from the minimap's files (for when that minimap mod isn't running this world). Death markers are left alone. */
+	static void deleteFromFiles(String app, Path world, List<String> keys) {
+		if (app.equals("JourneyMap")) {
+			for (Path f : children(world.resolve("waypoints"))) {
+				if (!f.getFileName().toString().endsWith(".json")) continue;
+				try {
+					JsonObject o = JsonParser.parseString(Files.readString(f, StandardCharsets.UTF_8)).getAsJsonObject();
+					if (o.has("type") && o.get("type").getAsString().equalsIgnoreCase("Death") || !o.has("name") || !o.has("x") || !o.has("z")) continue;
+					String name = o.get("name").getAsString();
+					int x = floor(o.get("x").getAsString()), z = floor(o.get("z").getAsString());
+					com.google.gson.JsonArray dims = o.has("dimensions") && o.get("dimensions").isJsonArray() ? o.getAsJsonArray("dimensions") : null;
+					if (dims == null) { for (String k : keys) if (matches(k, name, "ow", x, z)) { Files.deleteIfExists(f); break; } continue; }
+					com.google.gson.JsonArray keep = new com.google.gson.JsonArray();
+					for (JsonElement d : dims) {
+						String ds = d.getAsString(), dim = ds.endsWith("the_nether") ? "nether" : ds.endsWith("the_end") ? "end" : ds.endsWith("overworld") ? "ow" : "";
+						boolean drop = false;
+						for (String k : keys) if (matches(k, name, dim, x, z)) drop = true;
+						if (!drop) keep.add(d);
+					}
+					if (keep.size() == dims.size()) continue;
+					if (keep.isEmpty()) Files.deleteIfExists(f);
+					else { o.add("dimensions", keep); Files.writeString(f, o.toString(), StandardCharsets.UTF_8); }
+				} catch (IOException | RuntimeException ignored) { }
+			}
+			return;
+		}
+		for (Path d : children(world)) {
+			String n = d.getFileName().toString();
+			String dim = n.equals("dim%0") ? "ow" : n.equals("dim%-1") ? "nether" : n.equals("dim%1") ? "end" : null;
+			if (dim == null || !Files.isDirectory(d)) continue;
+			for (Path f : children(d)) {
+				if (!f.getFileName().toString().endsWith(".txt")) continue;
+				try {
+					List<String> lines = Files.readAllLines(f, StandardCharsets.UTF_8), out = new ArrayList<>();
+					for (String line : lines) {
+						String[] a = line.split(":", -1);
+						boolean drop = false;
+						if (line.startsWith("waypoint:") && a.length >= 6 && !(a.length > 8 && a[8].trim().equals("1"))) {
+							try { for (String k : keys) if (matches(k, a[1].replace("\u00a7\u00a7", ":"), dim, floor(a[3]), floor(a[5]))) drop = true; } catch (NumberFormatException ignored) { }
+						}
+						if (!drop) out.add(line);
+					}
+					if (out.size() != lines.size()) Files.write(f, out, StandardCharsets.UTF_8);
+				} catch (IOException | RuntimeException ignored) { }
+			}
+		}
+	}
 
 	// ---- which places the minimap already draws in the world, so our own waypoints can skip them
 

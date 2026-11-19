@@ -18,6 +18,7 @@ const Body = z.object({
   yaw: z.number().finite().default(0),
   mcName: z.string().max(16).regex(/^[A-Za-z0-9_]*$/).default(''),
   mcUuid: z.string().regex(UUID).or(z.literal('')).default(''),
+  play: z.boolean().default(true),   // count this toward play time (the mod's Share play time setting; older mods don't send it)
 })
 
 export const playerRoutes = (ctx: Ctx) => {
@@ -25,6 +26,24 @@ export const playerRoutes = (ctx: Ctx) => {
   const select = `select p.user as uid, coalesce(nullif(m.nick,''), u.name, 'Someone') as name, p.dim, p.x, p.y, p.z, p.yaw, p.ts, p.online, p.mc_name as mcName, p.mc_uuid as mcUuid
     from positions p join members m on m.nb=p.nb and m.user=p.user join users u on u.id=p.user where p.nb=?`
   const shape = (row: any, now = Date.now()): Pos => ({ ...row, online: !!row.online && now - row.ts < ONLINE_FOR })
+
+  const addPlay = (nb: string, uid: string, now: number, ms: number, dist: number) => db.prepare(`insert into play(nb,user,day,ms,dist) values(?,?,?,?,?) on conflict(nb,user,day) do update set ms=ms+excluded.ms, dist=dist+excluded.dist`)
+    .run(nb, uid, new Date(now).toISOString().slice(0, 10), ms, dist)
+  const playing = (nb: string, uid: string) => {   // back after a while: let the team know, if they want that
+    const { name, title } = whoAndWhere(db, nb, uid)
+    for (const { user } of db.prepare('select user from members where nb=? and user<>?').all(nb, uid) as { user: string }[]) ctx.notify(user, { title, body: `${name} is playing`, url: `/n/${nb}#map` }, 'online')
+  }
+  const lastBeat = new Map<string, number>()   // when each player last counted toward play time (position or heartbeat)
+
+  // Play time without a position: the mod sends this every 30 seconds in a world when Share position is off but Share play time is on.
+  r.put('/notebooks/:id/play', auth, c => {
+    const id = c.req.param('id'), uid = c.get('uid'); if (!getRole(db, id, uid)) return c.json({ error: 'not found' }, 404)
+    const now = Date.now(), key = id + '|' + uid, last = lastBeat.get(key)
+    if (last && now - last < ONLINE_FOR) addPlay(id, uid, now, now - last, 0)
+    else if (!last || now - last > AWAY_FOR) playing(id, uid)
+    lastBeat.set(key, now)
+    return c.json({ ok: true })
+  })
 
   r.get('/notebooks/:id/pos', auth, c => {
     const id = c.req.param('id'); if (!getRole(db, id, c.get('uid'))) return c.json({ error: 'not found' }, 404)
@@ -37,13 +56,9 @@ export const playerRoutes = (ctx: Ctx) => {
     const d = b.data, now = Date.now()
     const before = db.prepare('select dim, x, z, ts, online from positions where nb=? and user=?').get(id, uid) as { dim: string; x: number; z: number; ts: number; online: number } | undefined
     if (before?.online && now - before.ts < ONLINE_FOR) {   // still playing since the last update: add the time and the distance to today's total
-      const moved = before.dim === d.dim ? Math.min(2000, Math.hypot(d.x - before.x, d.z - before.z)) : 0
-      db.prepare(`insert into play(nb,user,day,ms,dist) values(?,?,?,?,?) on conflict(nb,user,day) do update set ms=ms+excluded.ms, dist=dist+excluded.dist`)
-        .run(id, uid, new Date(now).toISOString().slice(0, 10), now - before.ts, moved)
-    } else if (!before || now - before.ts > AWAY_FOR) {     // back after a while: let the team know, if they want that
-      const { name, title } = whoAndWhere(db, id, uid)
-      for (const { user } of db.prepare('select user from members where nb=? and user<>?').all(id, uid) as { user: string }[]) ctx.notify(user, { title, body: `${name} is playing`, url: `/n/${id}#map` }, 'online')
-    }
+      if (d.play) addPlay(id, uid, now, now - before.ts, before.dim === d.dim ? Math.min(2000, Math.hypot(d.x - before.x, d.z - before.z)) : 0)
+    } else if (!before || now - before.ts > AWAY_FOR) playing(id, uid)
+    lastBeat.set(id + '|' + uid, now)
     db.prepare(`insert into positions(nb,user,dim,x,y,z,yaw,ts,online,mc_name,mc_uuid) values(?,?,?,?,?,?,?,?,1,?,?)
       on conflict(nb,user) do update set dim=excluded.dim, x=excluded.x, y=excluded.y, z=excluded.z, yaw=excluded.yaw, ts=excluded.ts, online=1,
         mc_name=case when excluded.mc_name<>'' then excluded.mc_name else positions.mc_name end, mc_uuid=case when excluded.mc_uuid<>'' then excluded.mc_uuid else positions.mc_uuid end`)

@@ -21,6 +21,22 @@ export function defaultFace(uuid: string): string | null {
   const hash = Number(BigInt.asIntN(32, hilo >> 32n)) ^ Number(BigInt.asIntN(32, hilo))   // java.util.UUID.hashCode()
   return DEFAULT_FACES[(((hash % 18) + 18) % 18) % 9]
 }
+/** A player's face from their real skin: the head front plus its hat layer. Old 64x32 skins fill the hat with solid colour,
+ *  and the game skips a hat with no see-through pixels, so we do too. Fetched once per notebook and player. */
+const faces = new Map<string, Promise<HTMLCanvasElement>>()
+export function skinFace(nb: string, uuid: string): Promise<HTMLCanvasElement> {
+  const key = nb + '/' + uuid
+  if (!faces.has(key)) faces.set(key, apiBytes(`/notebooks/${nb}/skin/${uuid}`).then(b => createImageBitmap(new Blob([b], { type: 'image/png' }))).then(img => {
+    const c = document.createElement('canvas'); c.width = c.height = 8
+    const g = c.getContext('2d')!; g.drawImage(img, 8, 8, 8, 8, 0, 0, 8, 8)
+    const hat = document.createElement('canvas'); hat.width = hat.height = 8
+    const h = hat.getContext('2d')!; h.drawImage(img, 40, 8, 8, 8, 0, 0, 8, 8)
+    const a = h.getImageData(0, 0, 8, 8).data
+    if ([...a.keys()].some(i => i % 4 === 3 && a[i] < 255)) g.drawImage(hat, 0, 0)
+    return c
+  }).catch(e => { faces.delete(key); throw e }))
+  return faces.get(key)!
+}
 export const playerColour = (uid: string) => COLOURS[[...String(uid)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % COLOURS.length]
 
 async function inflate(buf: ArrayBuffer): Promise<Uint8Array> {
@@ -53,16 +69,7 @@ export function MapView({ id, rev, places, role, onPlace, players = [], meId = '
   }
   const facePic = (name: string) => pic('face:' + name, () => new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = `/mc/face/${name}.png` }))
   const iconPic = (name: string) => pic('icon:' + name, () => new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = bad; im.src = `/mc/item/${name}.png` }))
-  // A face: the skin's head front plus its hat layer. Old 64x32 skins fill the hat with solid colour, and the game skips a hat with no see-through pixels, so we do too.
-  const skinPic = (uuid: string) => (uuid ? pic('skin:' + uuid, () => apiBytes(`/notebooks/${id}/skin/${uuid}`).then(b => createImageBitmap(new Blob([b], { type: 'image/png' }))).then(img => {
-    const c = document.createElement('canvas'); c.width = c.height = 8
-    const g = c.getContext('2d')!; g.drawImage(img, 8, 8, 8, 8, 0, 0, 8, 8)
-    const hat = document.createElement('canvas'); hat.width = hat.height = 8
-    const h = hat.getContext('2d')!; h.drawImage(img, 40, 8, 8, 8, 0, 0, 8, 8)
-    const a = h.getImageData(0, 0, 8, 8).data
-    if ([...a.keys()].some(i => i % 4 === 3 && a[i] < 255)) g.drawImage(hat, 0, 0)
-    return c
-  })) : null)
+  const skinPic = (uuid: string) => (uuid ? pic('skin:' + uuid, () => skinFace(id, uuid)) : null)
   const mine = tiles.filter(t => t.dim === dim)
 
   // Start centred on the middle of what has been mapped in this dimension

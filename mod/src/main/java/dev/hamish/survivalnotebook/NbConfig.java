@@ -13,7 +13,9 @@ final class NbConfig {
 	String apiUrl = "", token = "", notebookId = "", notebookTitle = "";
 	String trackedPlace = "", webUrl = "", mmDir = "", mmApp = "";
 	java.util.List<String> mmSeen = new java.util.ArrayList<>();
-	boolean autoSyncGear = true, autoSaveDeaths = true, autoTrackDeath = true, autoRecover = true, compass = true, hudGoals = true, shareStats = true, hud = true, hudMineOnly = true, lightTheme = false, sounds = true, worldNotebooks = true, shareInventory = true, shareMap = true, sharePosition = true, waypoints = true, weeklyRecap = true, minimapPlaces = true;
+	java.util.Map<String, java.util.List<String>> mmRows = new java.util.HashMap<>();   // synced places by row id, to spot ones deleted from the notebook
+	String mmNb = "";
+	boolean autoSyncGear = true, autoSaveDeaths = true, autoTrackDeath = true, autoRecover = true, compass = true, hudGoals = true, shareStats = true, hud = true, hudMineOnly = true, lightTheme = false, sounds = true, worldNotebooks = true, shareInventory = true, shareMap = true, sharePosition = true, sharePlayTime = true, waypoints = true, weeklyRecap = true, minimapPlaces = true;
 	String recapSeen = "";   // the Sunday the weekly recap was last shown in chat
 	java.util.Map<String, String> worlds = new java.util.HashMap<>();
 

@@ -87,9 +87,7 @@ final class PageFarms {
 			if (!NotebookScreen.has(query, Notebook.str(o, "name"), Notebook.str(o, "ttl"), Notebook.memberName(as), placeName(Notebook.str(o, "place")))) continue;
 			all.add(o);
 		}
-		int sx = s.searchRight("farms-q", y, 130, query, v -> { query = v; NotebookScreen.scroll = 0; });
-		s.textRight(all.size() + (all.size() == 1 ? " farm" : " farms"), sx - 6, y + 6, p.mut);
-		int listTop = y + 26, vis = Math.max(1, (s.bottom - listTop) / 24);
+		int listTop = s.searchRow("farms-q", y, 368, 130, all.size() + (all.size() == 1 ? " farm" : " farms"), s.cx, query, v -> { query = v; NotebookScreen.scroll = 0; }), vis = Math.max(1, (s.bottom - listTop) / 24);
 		s.setScroll(all.size(), vis);
 		if (all.isEmpty()) s.text("No farms yet. Paste a YouTube link to name one automatically.", s.cx + 4, listTop + 6, p.mut);
 		int rowW = s.cw - 10;

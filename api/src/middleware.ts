@@ -25,6 +25,7 @@ const MOD_ROUTES: [string, RegExp][] = [
   ['GET', /^\/notebooks\/[\w-]+\/blocks$/], ['GET', /^\/notebooks\/[\w-]+\/map(\/(ow|nether|end)\/-?\d+\/-?\d+)?$/], ['PUT', /^\/notebooks\/[\w-]+\/map\/(ow|nether|end)\/-?\d+\/-?\d+$/],   // schematic block counts, map tiles
   ['GET', /^\/notebooks\/[\w-]+\/recap$/],   // the weekly recap on the mod's Home tab
   ['GET', /^\/notebooks\/[\w-]+\/pos$/], ['PUT', /^\/notebooks\/[\w-]+\/pos$/], ['DELETE', /^\/notebooks\/[\w-]+\/pos(\/me)?$/],   // live player positions
+  ['PUT', /^\/notebooks\/[\w-]+\/play$/],   // play time when position isn't shared
 ]
 // Mod tokens can manage members too (the in-game Members tab).
 const MEMBER_ROUTES: [string, RegExp][] = [['POST', /^\/notebooks\/[\w-]+\/members$/], ['DELETE', /^\/notebooks\/[\w-]+\/members\/[\w-]+$/]]

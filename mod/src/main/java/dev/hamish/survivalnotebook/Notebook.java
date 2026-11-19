@@ -20,6 +20,7 @@ final class Notebook {
 
 	static volatile String status = "Not connected", userId = "", title = "", role = "";
 	static volatile boolean ok, live;
+	static volatile String loadedNb = "";   // the notebook whose data is in sections
 	static volatile JsonObject sections = new JsonObject();
 	static volatile JsonArray members = new JsonArray(), notebooks = new JsonArray(), activity = new JsonArray();
 	static volatile long lastGearSync;
@@ -108,6 +109,7 @@ final class Notebook {
 		title = str(r.getAsJsonObject("notebook"), "title");
 		role = r.get("role").getAsString();
 		sections = r.getAsJsonObject("sections");
+		loadedNb = c.notebookId;
 		members = r.getAsJsonArray("members");
 		try { activity = Api.ok(Api.call("GET", "/notebooks/" + c.notebookId + "/activity", null)).body().getAsJsonArray(); } catch (Api.ApiException ignored) { }
 		ok = true;
@@ -515,6 +517,7 @@ final class Notebook {
 	static void minimapTick() {
 		NbConfig c = NbConfig.get();
 		if (c.mmDir.isBlank() || !canEdit() || mmBusy) return;
+		forgetDeleted(c);
 		mmBusy = true;
 		Api.EXEC.execute(() -> {
 			try {
@@ -535,15 +538,43 @@ final class Notebook {
 		});
 	}
 
+	/**
+	 * A synced place you deleted from the notebook (here or on the website) is deleted from the minimap too, so the next sync
+	 * doesn't bring it back. Tracked by row id, so renaming or moving a place never deletes anything.
+	 */
+	private static void forgetDeleted(NbConfig c) {
+		if (!ok || !c.notebookId.equals(loadedNb)) return;
+		if (!c.notebookId.equals(c.mmNb)) { c.mmNb = c.notebookId; c.mmRows = new java.util.HashMap<>(); }
+		java.util.Map<String, List<String>> now = new java.util.HashMap<>();
+		for (JsonObject o : rows("coords")) {
+			if (!bool(o, "mm")) continue;
+			List<String> keys = new ArrayList<>();
+			for (String d : new String[] {"ow", "nether", "end"}) if (!str(o, d).isBlank()) keys.add(Minimap.key(str(o, "name"), d, str(o, d)));
+			now.put(str(o, "id"), keys);
+		}
+		List<String> gone = new ArrayList<>();
+		for (var e : c.mmRows.entrySet()) if (!now.containsKey(e.getKey())) gone.addAll(e.getValue());
+		boolean changed = !now.equals(c.mmRows);
+		c.mmRows = now;
+		if (!gone.isEmpty()) {
+			c.mmSeen.removeAll(gone);
+			java.nio.file.Path dir = java.nio.file.Path.of(c.mmDir);
+			final String app = c.mmApp;
+			List<String> left = app.equals("JourneyMap") ? JourneyMap.deleteWaypoints(gone) : Xaero.deleteWaypoints(dir, gone);
+			if (!left.isEmpty()) Api.EXEC.execute(() -> Minimap.deleteFromFiles(app, dir, left));
+		}
+		if (changed) NbConfig.save();
+	}
+
 	static void startMinimapSync(Minimap.Source src) {
 		NbConfig c = NbConfig.get();
-		c.mmDir = src.dir().toString(); c.mmApp = src.app(); c.mmSeen = new ArrayList<>(); NbConfig.save();
+		c.mmDir = src.dir().toString(); c.mmApp = src.app(); c.mmSeen = new ArrayList<>(); c.mmRows = new java.util.HashMap<>(); NbConfig.save();
 		mmLast = 0;
 		msg("Syncing places with " + src.app() + " · " + src.world());
 		minimapTick();
 	}
 
-	static void stopMinimapSync() { NbConfig c = NbConfig.get(); c.mmDir = ""; c.mmApp = ""; c.mmSeen = new ArrayList<>(); NbConfig.save(); bump(); }
+	static void stopMinimapSync() { NbConfig c = NbConfig.get(); c.mmDir = ""; c.mmApp = ""; c.mmSeen = new ArrayList<>(); c.mmRows = new java.util.HashMap<>(); NbConfig.save(); bump(); }
 
 	// ---- deaths
 
