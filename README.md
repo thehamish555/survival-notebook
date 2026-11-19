@@ -21,7 +21,8 @@ Filled in by a Fabric mod while you play, and shared with your group on the web.
 <p align="center">
   <a href="https://notebook.hamish555.com"><b>Open the website</b></a> ·
   <a href="https://modrinth.com/mod/survival-notebook"><b>Get the mod</b></a> ·
-  <a href="https://notebook.hamish555.com/changelog"><b>Changelog</b></a> ·
+  <a href="https://notebook.hamish555.com/changelog"><b>Website changelog</b></a> ·
+  <a href="https://modrinth.com/mod/survival-notebook/changelog"><b>Mod changelog</b></a> ·
   <a href="https://github.com/thehamish555/survival-notebook/issues/new/choose"><b>Report a bug</b></a>
 </p>
 
