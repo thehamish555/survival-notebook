@@ -1,0 +1,28 @@
+name: Feature idea
+description: Something that would make the notebook better for your world.
+title: "[Idea] "
+labels: ["enhancement", "needs triage"]
+body:
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where would it go?
+      multiple: true
+      options:
+        - In game (the mod)
+        - On the website
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you'd like, and what it would help you or your team do.
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: How you do it now
+      description: Optional. Your workaround today, if there is one.

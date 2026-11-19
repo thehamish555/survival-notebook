@@ -1,0 +1,60 @@
+name: Bug report
+description: Something in the mod or on the website isn't working right.
+title: "[Bug] "
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting it! The more of this you fill in, the quicker it gets fixed.
+        Please don't paste your mod token or anything from `config/survival-notebook.json`.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - In game (the mod)
+        - On the website
+        - Syncing between the two
+        - With Xaero's Minimap or JourneyMap
+        - In the 3D viewer
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead. Screenshots help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      placeholder: |
+        1. Press N and open Places
+        2. Click ...
+        3. See ...
+  - type: input
+    id: mod
+    attributes:
+      label: Mod version
+      description: Shown at the top of Mod Menu, or in the jar's name.
+      placeholder: 1.7.1
+  - type: input
+    id: mc
+    attributes:
+      label: Minecraft and Fabric Loader versions
+      placeholder: 26.3, Fabric Loader 0.20.1
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device (for website bugs)
+      placeholder: Chrome on Windows, Safari on iPhone
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log
+      description: For crashes or errors in game, paste the relevant part of `logs/latest.log` (or a crash report).
+      render: shell

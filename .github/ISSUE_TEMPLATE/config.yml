@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: The Survival Notebook website
+    url: https://notebook.hamish555.com
+    about: Sign in, open your notebook, and get a token for the mod.
+  - name: Report a security problem
+    url: https://github.com/thehamish555/survival-notebook/security/advisories/new
+    about: Please report security issues privately here, not as a public issue.
